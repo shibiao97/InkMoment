@@ -2547,4 +2547,355 @@ async function bootstrap() {
   showView("landing", false);
   history.replaceState({ view: "landing" }, "", location.pathname);
 }
+
+// =================================================================
+// 相机水印导出弹窗
+// =================================================================
+const WM = {
+  previewIdx: 0,
+  totalWinners: 0,
+  previewSeq: 0,
+  debounceHandle: null,
+  pollHandle: null,
+  isExporting: false,
+  template: "A",          // A/B/C/D/F/G/H
+  showParams: true,       // true=full / false=clean
+  templates: [],          // 从 /api/watermark/templates 取
+};
+
+// 每个样式卡片的预览缩略图（纯 CSS/SVG 模拟，不需要真实生成）
+const WM_THUMB_SVG = {
+  A: `<svg viewBox='0 0 120 60' xmlns='http://www.w3.org/2000/svg'>
+        <rect width='120' height='42' fill='url(#a)'/>
+        <rect y='42' width='120' height='18' fill='#fff'/>
+        <rect x='6' y='48' width='14' height='3' fill='#1d1d1f'/>
+        <rect x='6' y='53' width='20' height='2' fill='#86868b'/>
+        <rect x='52' y='49' width='16' height='5' fill='#1d1d1f'/>
+        <rect x='72' y='48' width='1' height='8' fill='#d2d2d7'/>
+        <rect x='80' y='48' width='22' height='3' fill='#1d1d1f'/>
+        <rect x='80' y='53' width='18' height='2' fill='#86868b'/>
+        <defs><linearGradient id='a' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='#5b8fb9'/><stop offset='1' stop-color='#a3c3d9'/></linearGradient></defs>
+      </svg>`,
+  B: `<svg viewBox='0 0 120 60' xmlns='http://www.w3.org/2000/svg'>
+        <rect width='120' height='60' fill='#fff'/>
+        <rect x='3' y='3' width='114' height='42' fill='url(#b)'/>
+        <rect x='44' y='49' width='14' height='3' fill='#1d1d1f'/>
+        <rect x='60' y='49' width='14' height='3' fill='#1d1d1f'/>
+        <rect x='38' y='54' width='44' height='2' fill='#86868b'/>
+        <defs><linearGradient id='b' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='#6b8e23'/><stop offset='1' stop-color='#a8c47a'/></linearGradient></defs>
+      </svg>`,
+  C: `<svg viewBox='0 0 120 60' xmlns='http://www.w3.org/2000/svg'>
+        <rect width='120' height='60' fill='url(#cbg)' opacity='0.7'/>
+        <rect x='14' y='6' width='92' height='38' fill='url(#cfg)' stroke='#fff' stroke-width='0.5'/>
+        <rect x='38' y='49' width='14' height='3' fill='#fff'/>
+        <rect x='54' y='49' width='14' height='3' fill='#fff'/>
+        <rect x='32' y='54' width='56' height='2' fill='#fff' opacity='0.7'/>
+        <defs>
+          <linearGradient id='cbg' x1='0' y1='0' x2='0' y2='1'><stop offset='0' stop-color='#3a5a7a'/><stop offset='1' stop-color='#1f3a52'/></linearGradient>
+          <linearGradient id='cfg' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='#5b8fb9'/><stop offset='1' stop-color='#a3c3d9'/></linearGradient>
+        </defs>
+      </svg>`,
+  D: `<svg viewBox='0 0 120 60' xmlns='http://www.w3.org/2000/svg'>
+        <rect width='120' height='60' fill='#fff'/>
+        <rect x='4' y='4' width='112' height='40' fill='url(#d)'/>
+        <rect x='44' y='50' width='14' height='3' fill='#1d1d1f'/>
+        <rect x='60' y='50' width='14' height='3' fill='#1d1d1f'/>
+        <rect x='38' y='55' width='44' height='2' fill='#86868b'/>
+        <defs><linearGradient id='d' x1='0' y1='0' x2='1' y2='0'><stop offset='0' stop-color='#c9a07f'/><stop offset='1' stop-color='#8a6a52'/></linearGradient></defs>
+      </svg>`,
+  F: `<svg viewBox='0 0 120 60' xmlns='http://www.w3.org/2000/svg'>
+        <rect width='120' height='60' fill='#fff'/>
+        <rect x='4' y='3' width='112' height='40' fill='url(#f)'/>
+        <rect x='6' y='49' width='6' height='6' fill='#d4a5b8'/>
+        <rect x='13' y='49' width='6' height='6' fill='#a87690'/>
+        <rect x='20' y='49' width='6' height='6' fill='#6c4760'/>
+        <rect x='27' y='49' width='6' height='6' fill='#3d2c3a'/>
+        <rect x='34' y='49' width='6' height='6' fill='#1f1620'/>
+        <rect x='84' y='49' width='14' height='3' fill='#1d1d1f'/>
+        <rect x='100' y='49' width='14' height='3' fill='#1d1d1f'/>
+        <rect x='84' y='54' width='30' height='2' fill='#86868b'/>
+        <defs><linearGradient id='f' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='#e8b8c5'/><stop offset='1' stop-color='#a87690'/></linearGradient></defs>
+      </svg>`,
+  G: `<svg viewBox='0 0 120 60' xmlns='http://www.w3.org/2000/svg'>
+        <rect width='120' height='60' fill='#fff'/>
+        <rect x='3' y='3' width='114' height='54' fill='url(#g)'/>
+        <defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='#7a8a9b'/><stop offset='1' stop-color='#4a5868'/></linearGradient></defs>
+      </svg>`,
+  H: `<svg viewBox='0 0 120 60' xmlns='http://www.w3.org/2000/svg'>
+        <rect width='120' height='30' fill='url(#hsharp)'/>
+        <rect y='30' width='120' height='30' fill='url(#hblur)'/>
+        <rect x='44' y='36' width='32' height='20' rx='2' fill='#1a1a1a'/>
+        <ellipse cx='55' cy='40' rx='4' ry='2.2' fill='#3a3a3a'/>
+        <rect x='48' y='44' width='14' height='9' rx='0.6' fill='url(#hscr)'/>
+        <circle cx='71' cy='49' r='1.8' fill='#2a2a2a'/>
+        <defs>
+          <linearGradient id='hsharp' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='#5b8fb9'/><stop offset='1' stop-color='#a3c3d9'/></linearGradient>
+          <linearGradient id='hblur' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='#7ba2c6'/><stop offset='1' stop-color='#b0cbdc'/></linearGradient>
+          <linearGradient id='hscr' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='#5b8fb9'/><stop offset='1' stop-color='#a3c3d9'/></linearGradient>
+        </defs>
+      </svg>`,
+};
+
+function wmCfg() {
+  return {
+    template: WM.template,
+    show_params: WM.showParams,
+    preview_index: WM.previewIdx,
+  };
+}
+
+async function wmLoadTemplates() {
+  if (WM.templates.length) return WM.templates;
+  try {
+    const res = await fetchJSON("/api/watermark/templates");
+    WM.templates = res.templates || [];
+  } catch (e) {
+    WM.templates = [];
+    toast("加载样式列表失败：" + e.message);
+  }
+  return WM.templates;
+}
+
+function wmRenderTemplatePicker() {
+  const grid = $("wm-template-grid");
+  if (!grid) return;
+  grid.innerHTML = WM.templates.map((t) => `
+    <button type="button" class="wm-tpl-card ${t.id === WM.template ? "active" : ""}"
+            data-tpl="${t.id}">
+      <div class="wm-tpl-thumb">${WM_THUMB_SVG[t.id] || ""}</div>
+      <div class="wm-tpl-info">
+        <div class="name">${t.name}</div>
+        <div class="desc">${t.desc || ""}</div>
+      </div>
+    </button>
+  `).join("");
+  grid.querySelectorAll(".wm-tpl-card").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const id = btn.getAttribute("data-tpl");
+      if (id === WM.template) return;
+      WM.template = id;
+      wmRenderTemplatePicker();
+      wmUpdateVariantSegmented();
+      wmRefreshPreview();
+    });
+  });
+  wmUpdateVariantSegmented();
+}
+
+function wmUpdateVariantSegmented() {
+  const tpl = WM.templates.find((t) => t.id === WM.template);
+  const supportsClean = tpl && tpl.supports_clean;
+  const seg = $("wm-variant-seg");
+  const hint = $("wm-variant-hint");
+  if (!seg) return;
+  // 仅 full 的样式：禁用 clean 按钮并强制 full
+  const cleanBtn = seg.querySelector('[data-variant="clean"]');
+  const fullBtn = seg.querySelector('[data-variant="full"]');
+  if (!supportsClean) {
+    WM.showParams = true;
+    cleanBtn.disabled = true;
+    cleanBtn.classList.remove("active");
+    fullBtn.classList.add("active");
+    if (hint) hint.textContent = "此样式仅一种呈现方式";
+  } else {
+    cleanBtn.disabled = false;
+    if (WM.showParams) {
+      fullBtn.classList.add("active");
+      cleanBtn.classList.remove("active");
+      if (hint) hint.textContent = "完整：品牌 + 机型 + 镜头 + 参数 + 时间";
+    } else {
+      fullBtn.classList.remove("active");
+      cleanBtn.classList.add("active");
+      if (hint) hint.textContent = "极简：只显示品牌 Logo 与机型";
+    }
+  }
+}
+
+function wmShowSpinner(show) {
+  $("wm-preview-spinner").classList.toggle("hidden", !show);
+  if (show) $("wm-preview-img").classList.add("hidden");
+}
+
+function wmFillExif(exif) {
+  const rows = [
+    ["机身", [exif.make, exif.model].filter(Boolean).join(" ")],
+    ["镜头", exif.lens],
+    ["焦距", exif.focal_length],
+    ["光圈", exif.f_number],
+    ["快门", exif.exposure],
+    ["ISO", exif.iso],
+    ["时间", exif.datetime],
+  ];
+  $("wm-exif-list").innerHTML = rows.map(([k, v]) => `
+    <li><span class="k">${k}</span><span class="v ${v ? "" : "empty"}">${v || "未读到"}</span></li>
+  `).join("");
+}
+
+async function wmRefreshPreview() {
+  if (WM.isExporting) return;
+  WM.previewSeq += 1;
+  const mySeq = WM.previewSeq;
+  wmShowSpinner(true);
+  try {
+    const res = await fetchJSON("/api/watermark/preview", {
+      method: "POST",
+      body: JSON.stringify(wmCfg()),
+    });
+    if (mySeq !== WM.previewSeq) return;
+    $("wm-preview-img").src = "data:image/jpeg;base64," + res.image_b64;
+    $("wm-preview-img").classList.remove("hidden");
+    wmShowSpinner(false);
+    WM.totalWinners = res.total_winners || 1;
+    WM.previewIdx = res.preview_index || 0;
+    $("wm-preview-idx").textContent = `${WM.previewIdx + 1} / ${WM.totalWinners}`;
+    $("wm-preview-title").textContent = `预览 · ${res.source_name}`;
+    wmFillExif(res.exif || {});
+  } catch (e) {
+    if (mySeq !== WM.previewSeq) return;
+    wmShowSpinner(false);
+    toast("预览失败：" + e.message);
+  }
+}
+
+function wmRefreshDebounced(delay = 300) {
+  clearTimeout(WM.debounceHandle);
+  WM.debounceHandle = setTimeout(wmRefreshPreview, delay);
+}
+
+async function wmOpen() {
+  $("wm-modal").classList.remove("hidden");
+  WM.previewIdx = 0;
+  WM.isExporting = false;
+  $("wm-progress").classList.add("hidden");
+  $("wm-stop").classList.add("hidden");
+  $("wm-open-out").classList.add("hidden");
+  $("wm-start").classList.remove("hidden");
+  $("wm-start").disabled = false;
+  $("wm-start").textContent = "开始导出";
+  $("wm-cancel").textContent = "关闭";
+  await wmLoadTemplates();
+  if (!WM.templates.find((t) => t.id === WM.template)) {
+    WM.template = (WM.templates[0] && WM.templates[0].id) || "A";
+  }
+  wmRenderTemplatePicker();
+  wmRefreshPreview();
+}
+
+function wmClose() {
+  if (WM.isExporting) {
+    if (!confirm("水印导出正在进行中，确定关闭吗？后台仍会继续。")) return;
+  }
+  $("wm-modal").classList.add("hidden");
+  clearTimeout(WM.debounceHandle);
+  if (WM.pollHandle) { clearTimeout(WM.pollHandle); WM.pollHandle = null; }
+}
+
+async function wmStart() {
+  $("wm-start").disabled = true;
+  $("wm-start").textContent = "启动中…";
+  try {
+    const res = await fetchJSON("/api/watermark/start", {
+      method: "POST",
+      body: JSON.stringify(wmCfg()),
+    });
+    WM.isExporting = true;
+    $("wm-progress").classList.remove("hidden");
+    $("wm-start").classList.add("hidden");
+    $("wm-stop").classList.remove("hidden");
+    $("wm-progress-text").textContent = `开始导出 ${res.total} 张…`;
+    $("wm-progress-fill").style.width = "0%";
+    wmPoll();
+  } catch (e) {
+    $("wm-start").disabled = false;
+    $("wm-start").textContent = "开始导出";
+    toast("启动失败：" + e.message);
+  }
+}
+
+async function wmPoll() {
+  try {
+    const s = await fetchJSON("/api/watermark/status");
+    const done = s.done || 0;
+    const total = s.total || 1;
+    const pct = Math.round(done / total * 100);
+    $("wm-progress-fill").style.width = pct + "%";
+    if (s.status === "running") {
+      $("wm-progress-text").textContent =
+        `处理中 ${done}/${total} · ${s.current || ""}`;
+      WM.pollHandle = setTimeout(wmPoll, 500);
+    } else if (s.status === "done") {
+      WM.isExporting = false;
+      $("wm-progress-text").textContent =
+        `完成 · 成功 ${s.ok} / ${s.total}` +
+        (s.failed_count ? `，失败 ${s.failed_count}` : "") +
+        ` · 用时 ${Math.round(s.elapsed)}s`;
+      $("wm-stop").classList.add("hidden");
+      $("wm-open-out").classList.remove("hidden");
+      $("wm-cancel").textContent = "完成";
+      toast(`水印导出完成（${s.ok} 张）`);
+    } else if (s.status === "cancelled") {
+      WM.isExporting = false;
+      $("wm-progress-text").textContent = `已中止 · 完成 ${s.ok}/${s.total}`;
+      $("wm-stop").classList.add("hidden");
+      $("wm-start").classList.remove("hidden");
+      $("wm-start").disabled = false;
+      $("wm-start").textContent = "重新开始";
+    } else if (s.status === "error") {
+      WM.isExporting = false;
+      $("wm-progress-text").textContent = `出错：${s.error || "未知"}`;
+      $("wm-stop").classList.add("hidden");
+      $("wm-start").classList.remove("hidden");
+      $("wm-start").disabled = false;
+      $("wm-start").textContent = "重新开始";
+    }
+  } catch (e) {
+    WM.pollHandle = setTimeout(wmPoll, 1500);
+  }
+}
+
+async function wmStop() {
+  if (!confirm("中止水印导出？已完成的照片会保留。")) return;
+  try {
+    await fetchJSON("/api/watermark/cancel", { method: "POST", body: JSON.stringify({}) });
+  } catch (e) { toast("中止失败：" + e.message); }
+}
+
+async function wmOpenOut() {
+  try {
+    await fetchJSON("/api/watermark/open_out_dir", { method: "POST", body: JSON.stringify({}) });
+  } catch (e) { toast("打开失败：" + e.message); }
+}
+
+// 绑定事件
+$("btn-watermark").addEventListener("click", wmOpen);
+$("wm-close").addEventListener("click", wmClose);
+$("wm-cancel").addEventListener("click", wmClose);
+$("wm-start").addEventListener("click", wmStart);
+$("wm-stop").addEventListener("click", wmStop);
+$("wm-open-out").addEventListener("click", wmOpenOut);
+$("wm-prev").addEventListener("click", () => {
+  if (WM.totalWinners <= 1) return;
+  WM.previewIdx = (WM.previewIdx - 1 + WM.totalWinners) % WM.totalWinners;
+  wmRefreshPreview();
+});
+$("wm-next").addEventListener("click", () => {
+  if (WM.totalWinners <= 1) return;
+  WM.previewIdx = (WM.previewIdx + 1) % WM.totalWinners;
+  wmRefreshPreview();
+});
+// Segmented control: 完整/极简切换
+$("wm-variant-seg").addEventListener("click", (e) => {
+  const btn = e.target.closest(".wm-seg-btn");
+  if (!btn || btn.disabled) return;
+  const v = btn.getAttribute("data-variant");
+  const newShow = (v === "full");
+  if (newShow === WM.showParams) return;
+  WM.showParams = newShow;
+  wmUpdateVariantSegmented();
+  wmRefreshPreview();
+});
+$("wm-modal").addEventListener("click", (e) => {
+  if (e.target.id === "wm-modal") wmClose();
+});
+
 bootstrap();

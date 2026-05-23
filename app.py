@@ -3508,6 +3508,222 @@ def api_open_folder():
         return jsonify({"error": str(e)}), 500
 
 
+# ============================================================
+# 水印导出：给选出的 winners 加相机水印
+# ============================================================
+
+@dataclass
+class WatermarkJobState:
+    """水印批处理任务的进度。和主 JOB 分开，避免主任务的字段污染。"""
+    status: str = "idle"        # idle | running | done | error | cancelled
+    done: int = 0
+    total: int = 0
+    current: str = ""           # 正在处理的文件名
+    out_dir: str = ""           # 输出目录
+    ok: int = 0
+    failed: list[tuple[str, str]] = field(default_factory=list)
+    error: Optional[str] = None
+    started_at: float = 0.0
+    finished_at: float = 0.0
+    cancel_requested: bool = False
+
+
+WATERMARK_JOB: Optional[WatermarkJobState] = None
+
+
+def _winner_paths() -> list[str]:
+    """收集当前 SESSION 里所有 winner 的实际磁盘路径。"""
+    if SESSION is None:
+        return []
+    paths: list[str] = []
+    for g in SESSION.groups:
+        for w in ([g.winner] if g.winner else []) + list(g.extra_winners):
+            actual = w
+            if not Path(actual).exists():
+                cand = winners_dir(SESSION.folder) / Path(actual).name
+                if cand.exists():
+                    actual = str(cand)
+            if Path(actual).exists():
+                paths.append(actual)
+    return paths
+
+
+@app.route("/api/watermark/templates")
+def api_watermark_templates():
+    """列出可用的水印模板及其子样式。"""
+    from pic_selecter.watermark import list_templates
+    return jsonify({"templates": list_templates()})
+
+
+@app.route("/api/watermark/preview", methods=["POST"])
+def api_watermark_preview():
+    """用第一张 winner 生成一张预览图，base64 返回。"""
+    if SESSION is None:
+        return jsonify({"error": "no session"}), 400
+    winners = _winner_paths()
+    if not winners:
+        return jsonify({"error": "没有 winner 照片可预览"}), 400
+
+    from pic_selecter.watermark import WatermarkConfig, render, parse_exif
+    cfg_dict = request.get_json(silent=True) or {}
+    cfg = WatermarkConfig.from_dict(cfg_dict)
+
+    # 允许前端用 index 指定预览的是第几张（默认第 0 张）
+    try:
+        idx = int(cfg_dict.get("preview_index", 0))
+    except (ValueError, TypeError):
+        idx = 0
+    idx = max(0, min(idx, len(winners) - 1))
+    src = winners[idx]
+
+    try:
+        from PIL import Image
+        exif = parse_exif(Image.open(src))
+        data = render(src, cfg, preview_max_side=1400)
+    except Exception as e:
+        logger.exception("watermark preview failed")
+        return jsonify({"error": f"{type(e).__name__}: {e}"}), 500
+
+    import base64
+    return jsonify({
+        "image_b64": base64.b64encode(data).decode("ascii"),
+        "size_kb": round(len(data) / 1024, 1),
+        "source_name": Path(src).name,
+        "total_winners": len(winners),
+        "preview_index": idx,
+        "exif": {
+            "make": exif.make,
+            "model": exif.model,
+            "lens": exif.lens,
+            "focal_length": exif.focal_length,
+            "f_number": exif.f_number,
+            "exposure": exif.exposure,
+            "iso": exif.iso,
+            "datetime": exif.datetime_str,
+        },
+    })
+
+
+def _run_watermark_job(src_paths: list[str], dst: Path, cfg) -> None:
+    global WATERMARK_JOB
+    job = WATERMARK_JOB
+    assert job is not None
+    from pic_selecter.watermark import batch_export
+
+    def _progress(done: int, total: int, name: str):
+        job.done = done
+        job.total = total
+        job.current = name
+
+    def _cancel():
+        return job.cancel_requested
+
+    try:
+        result = batch_export(src_paths, dst, cfg,
+                              progress_cb=_progress, cancel_check=_cancel)
+        job.ok = result["ok"]
+        job.failed = result["failed"]
+        job.finished_at = time.time()
+        if job.cancel_requested:
+            job.status = "cancelled"
+        else:
+            job.status = "done"
+        logger.info(
+            f"watermark: 完成 ok={result['ok']} failed={len(result['failed'])} "
+            f"out={dst}"
+        )
+    except Exception as e:
+        logger.exception("watermark batch error")
+        job.status = "error"
+        job.error = f"{type(e).__name__}: {e}"
+        job.finished_at = time.time()
+
+
+@app.route("/api/watermark/start", methods=["POST"])
+def api_watermark_start():
+    """启动批量导出。"""
+    global WATERMARK_JOB
+    if SESSION is None:
+        return jsonify({"error": "no session"}), 400
+    if WATERMARK_JOB and WATERMARK_JOB.status == "running":
+        return jsonify({"error": "已有水印任务在跑"}), 409
+
+    winners = _winner_paths()
+    if not winners:
+        return jsonify({"error": "没有 winner 照片可导出"}), 400
+
+    from pic_selecter.watermark import WatermarkConfig
+    cfg_dict = request.get_json(silent=True) or {}
+    cfg = WatermarkConfig.from_dict(cfg_dict)
+
+    # 输出目录：winners/watermarked_YYYYMMDD_HHMMSS
+    stamp = time.strftime("%Y%m%d_%H%M%S")
+    out_dir = winners_dir(SESSION.folder) / f"watermarked_{stamp}"
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    WATERMARK_JOB = WatermarkJobState(
+        status="running",
+        total=len(winners),
+        out_dir=str(out_dir),
+        started_at=time.time(),
+    )
+    threading.Thread(
+        target=_run_watermark_job,
+        args=(winners, out_dir, cfg),
+        daemon=True,
+    ).start()
+    return jsonify({"ok": True, "total": len(winners), "out_dir": str(out_dir)})
+
+
+@app.route("/api/watermark/status")
+def api_watermark_status():
+    if WATERMARK_JOB is None:
+        return jsonify({"status": "idle"})
+    j = WATERMARK_JOB
+    return jsonify({
+        "status": j.status,
+        "done": j.done,
+        "total": j.total,
+        "current": j.current,
+        "out_dir": j.out_dir,
+        "ok": j.ok,
+        "failed_count": len(j.failed),
+        "failed_sample": [
+            {"name": n, "reason": r} for n, r in j.failed[:8]
+        ],
+        "error": j.error,
+        "elapsed": (j.finished_at or time.time()) - (j.started_at or time.time()),
+    })
+
+
+@app.route("/api/watermark/cancel", methods=["POST"])
+def api_watermark_cancel():
+    if WATERMARK_JOB is None or WATERMARK_JOB.status != "running":
+        return jsonify({"ok": False, "error": "no running job"}), 400
+    WATERMARK_JOB.cancel_requested = True
+    return jsonify({"ok": True})
+
+
+@app.route("/api/watermark/open_out_dir", methods=["POST"])
+def api_watermark_open_out_dir():
+    """打开水印输出目录。"""
+    if WATERMARK_JOB is None or not WATERMARK_JOB.out_dir:
+        return jsonify({"error": "no output dir"}), 400
+    target = Path(WATERMARK_JOB.out_dir)
+    if not target.exists():
+        return jsonify({"error": "目录不存在"}), 400
+    try:
+        if sys.platform == "darwin":
+            subprocess.Popen(["open", str(target)])
+        elif sys.platform == "win32":
+            os.startfile(str(target))  # type: ignore
+        else:
+            subprocess.Popen(["xdg-open", str(target)])
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 # ---------------- 入口 ----------------
 
 def main():

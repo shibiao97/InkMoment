@@ -582,6 +582,7 @@
     </div>
     <div class="done-h-right">
       <button id="btn-open-folder" class="btn-ghost">打开文件夹</button>
+      <button id="btn-watermark" class="btn-ghost" title="给胜出照片批量加相机品牌水印">相机水印</button>
       <button id="btn-redo-folder" class="btn-ghost" title="清掉本次结果，重新挑这个文件夹">重做本次</button>
       <button class="btn-ghost btn-go-home" title="回到主页">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -650,6 +651,82 @@
       <summary>无法读取的照片 <span class="dim" id="skipped-count">(0)</span></summary>
       <ul id="skipped-list" class="skip-list"></ul>
     </details>
+  </div>
+
+  <!-- ============ 相机水印导出弹窗 ============ -->
+  <div id="wm-modal" class="wm-modal hidden">
+    <div class="wm-modal-card">
+      <header class="wm-modal-head">
+        <div>
+          <h3>相机品牌水印</h3>
+          <p class="wm-modal-sub" id="wm-sub">为胜出的照片加底部水印条，导出到 winners 子文件夹</p>
+        </div>
+        <button class="wm-close" id="wm-close" aria-label="关闭">×</button>
+      </header>
+
+      <div class="wm-modal-body">
+        <!-- 左侧：配置面板 -->
+        <aside class="wm-options">
+          <div class="wm-section">
+            <div class="wm-section-title">样式</div>
+            <div class="wm-template-grid" id="wm-template-grid">
+              <!-- JS 填充：模板卡片 -->
+            </div>
+          </div>
+
+          <div class="wm-section" id="wm-variant-section">
+            <div class="wm-section-title">详尽程度</div>
+            <div class="wm-segmented" id="wm-variant-seg">
+              <button type="button" class="wm-seg-btn active" data-variant="full">完整信息</button>
+              <button type="button" class="wm-seg-btn" data-variant="clean">极简</button>
+            </div>
+            <p class="wm-section-hint" id="wm-variant-hint">
+              完整：品牌 + 机型 + 镜头 + 参数 + 时间
+            </p>
+          </div>
+
+          <div class="wm-section wm-exif-card" id="wm-exif-card">
+            <div class="wm-section-title">这张照片的 EXIF</div>
+            <ul class="wm-exif-list" id="wm-exif-list">
+              <!-- JS 填充 -->
+            </ul>
+          </div>
+        </aside>
+
+        <!-- 右侧：预览 -->
+        <section class="wm-preview-wrap">
+          <div class="wm-preview-head">
+            <span class="wm-preview-title" id="wm-preview-title">预览</span>
+            <div class="wm-preview-nav">
+              <button id="wm-prev" class="btn-ghost wm-tiny" title="上一张">‹</button>
+              <span id="wm-preview-idx" class="wm-preview-idx">— / —</span>
+              <button id="wm-next" class="btn-ghost wm-tiny" title="下一张">›</button>
+            </div>
+          </div>
+          <div class="wm-preview-frame" id="wm-preview-frame">
+            <div class="wm-preview-spinner" id="wm-preview-spinner">渲染中…</div>
+            <img id="wm-preview-img" alt="" class="wm-preview-img hidden">
+          </div>
+          <p class="wm-preview-hint" id="wm-preview-hint">
+            预览以 1400px 长边渲染，导出时使用原图尺寸
+          </p>
+        </section>
+      </div>
+
+      <!-- 底部：进度条 + 操作按钮 -->
+      <footer class="wm-modal-foot">
+        <div class="wm-progress hidden" id="wm-progress">
+          <div class="wm-progress-bar"><div class="wm-progress-fill" id="wm-progress-fill"></div></div>
+          <div class="wm-progress-text" id="wm-progress-text">准备中…</div>
+        </div>
+        <div class="wm-foot-actions">
+          <button id="wm-cancel" class="btn-ghost">关闭</button>
+          <button id="wm-stop" class="btn-ghost hidden">中止</button>
+          <button id="wm-start" class="btn btn-primary">开始导出</button>
+          <button id="wm-open-out" class="btn btn-primary hidden">打开导出文件夹</button>
+        </div>
+      </footer>
+    </div>
   </div>
 
   <!-- 大图查看 -->
