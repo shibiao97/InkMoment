@@ -2558,8 +2558,7 @@ const WM = {
   debounceHandle: null,
   pollHandle: null,
   isExporting: false,
-  template: "A",          // A/B/C/D/F/G/H
-  showParams: true,       // true=full / false=clean
+  template: "A",          // 见后端 _STYLE_SPECS（含 _full / _clean 后缀）
   templates: [],          // 从 /api/watermark/templates 取
 };
 
@@ -2639,7 +2638,6 @@ const WM_THUMB_SVG = {
 function wmCfg() {
   return {
     template: WM.template,
-    show_params: WM.showParams,
     preview_index: WM.previewIdx,
   };
 }
@@ -2659,56 +2657,29 @@ async function wmLoadTemplates() {
 function wmRenderTemplatePicker() {
   const grid = $("wm-template-grid");
   if (!grid) return;
-  grid.innerHTML = WM.templates.map((t) => `
+  grid.innerHTML = WM.templates.map((t) => {
+    // _full / _clean 复用 base 字母 (B_full → B) 的缩略图
+    const base = t.id.split("_")[0];
+    const svg = WM_THUMB_SVG[t.id] || WM_THUMB_SVG[base] || "";
+    return `
     <button type="button" class="wm-tpl-card ${t.id === WM.template ? "active" : ""}"
             data-tpl="${t.id}">
-      <div class="wm-tpl-thumb">${WM_THUMB_SVG[t.id] || ""}</div>
+      <div class="wm-tpl-thumb">${svg}</div>
       <div class="wm-tpl-info">
         <div class="name">${t.name}</div>
         <div class="desc">${t.desc || ""}</div>
       </div>
-    </button>
-  `).join("");
+    </button>`;
+  }).join("");
   grid.querySelectorAll(".wm-tpl-card").forEach((btn) => {
     btn.addEventListener("click", () => {
       const id = btn.getAttribute("data-tpl");
       if (id === WM.template) return;
       WM.template = id;
       wmRenderTemplatePicker();
-      wmUpdateVariantSegmented();
       wmRefreshPreview();
     });
   });
-  wmUpdateVariantSegmented();
-}
-
-function wmUpdateVariantSegmented() {
-  const tpl = WM.templates.find((t) => t.id === WM.template);
-  const supportsClean = tpl && tpl.supports_clean;
-  const seg = $("wm-variant-seg");
-  const hint = $("wm-variant-hint");
-  if (!seg) return;
-  // 仅 full 的样式：禁用 clean 按钮并强制 full
-  const cleanBtn = seg.querySelector('[data-variant="clean"]');
-  const fullBtn = seg.querySelector('[data-variant="full"]');
-  if (!supportsClean) {
-    WM.showParams = true;
-    cleanBtn.disabled = true;
-    cleanBtn.classList.remove("active");
-    fullBtn.classList.add("active");
-    if (hint) hint.textContent = "此样式仅一种呈现方式";
-  } else {
-    cleanBtn.disabled = false;
-    if (WM.showParams) {
-      fullBtn.classList.add("active");
-      cleanBtn.classList.remove("active");
-      if (hint) hint.textContent = "完整：品牌 + 机型 + 镜头 + 参数 + 时间";
-    } else {
-      fullBtn.classList.remove("active");
-      cleanBtn.classList.add("active");
-      if (hint) hint.textContent = "极简：只显示品牌 Logo 与机型";
-    }
-  }
 }
 
 function wmShowSpinner(show) {
@@ -2881,17 +2852,6 @@ $("wm-prev").addEventListener("click", () => {
 $("wm-next").addEventListener("click", () => {
   if (WM.totalWinners <= 1) return;
   WM.previewIdx = (WM.previewIdx + 1) % WM.totalWinners;
-  wmRefreshPreview();
-});
-// Segmented control: 完整/极简切换
-$("wm-variant-seg").addEventListener("click", (e) => {
-  const btn = e.target.closest(".wm-seg-btn");
-  if (!btn || btn.disabled) return;
-  const v = btn.getAttribute("data-variant");
-  const newShow = (v === "full");
-  if (newShow === WM.showParams) return;
-  WM.showParams = newShow;
-  wmUpdateVariantSegmented();
   wmRefreshPreview();
 });
 $("wm-modal").addEventListener("click", (e) => {

@@ -1,18 +1,20 @@
 """相机水印渲染模块。
 
-7 种样式：
+11 个样式 ID。详尽程度直接拆进样式名里（xx-详尽 / xx-极简），不再单独切换：
 
-  A. fuji_bar         富士官方底栏（仅 full）
-  B. mini_strip       极简底栏
-  C. shadow_card      毛玻璃悬浮卡片
-  D. classic_frame    经典白边相框
-  F. magazine         杂志风（带色卡）
-  G. minimal_border   极简窄白边（仅 full，无任何信息）
-  H. camera_playback  相机回放（上原图、下模糊版 + 居中富士 X-T5，
-                      LCD 屏显示缩略图、取景器小窗口也显示画面；仅 full）
+  A          标准底栏        （只有一个版本）
+  B_full     极简底栏-详尽
+  B_clean    极简底栏-极简
+  C_full     毛玻璃悬浮-详尽
+  C_clean    毛玻璃悬浮-极简
+  D_full     经典白边相框-详尽
+  D_clean    经典白边相框-极简
+  F_full     杂志风-详尽
+  F_clean    杂志风-极简
+  G          极简白边        （无任何信息）
+  H          相机回放        （无任何信息）
 
-样式 A、G、H 没有 clean 变体；其它样式都有 full（带镜头·参数·时间）和
-clean（仅品牌 Logo+机型）两个版本。
+「详尽」= 带镜头·参数·时间；「极简」= 仅品牌 Logo + 机型。
 
 对外接口：
   - WatermarkConfig          前端 JSON → 配置对象
@@ -50,9 +52,11 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 LOGOS_DIR = _PROJECT_ROOT / "assets" / "logos"
 # 样式 H 的相机素材
 CAMERA_BACK_PATH = _PROJECT_ROOT / "assets" / "camera_xt5_back.png"
-# 相机 LCD 屏 / 取景器玻璃在 PNG 中的相对坐标（基于像素分析）
-_CAMERA_SCREEN_RATIO = (0.1566, 0.4206, 0.6109, 0.7955)  # (l, t, r, b)
-_CAMERA_VIEWFINDER_RATIO = (0.385, 0.238, 0.490, 0.318)
+# 相机 LCD 屏 / 取景器玻璃在原 PNG 中的相对坐标（基于像素分析）。
+# 注意：渲染时会先把 PNG 紧裁剪到相机本体 bbox，所以下面的比例会在 _camera_back_rgba
+# 里换算成相对裁剪图像的比例后再用。
+_CAMERA_SCREEN_RATIO_PNG = (0.1566, 0.4206, 0.6109, 0.7955)  # (l, t, r, b)
+_CAMERA_VIEWFINDER_RATIO_PNG = (0.385, 0.238, 0.490, 0.318)
 
 _LOGO_MAP: list[tuple[str, str]] = [
     ("fuji", "fujifilm.png"),
@@ -80,11 +84,10 @@ _LOGO_MAP: list[tuple[str, str]] = [
 class WatermarkConfig:
     """前端 JSON → 这个对象。
 
-    template: A/B/C/D/F/G 之一
-    show_params: True = full 版本（带镜头·参数·时间）; False = clean 版本（仅 Logo+机型）
+    template: 见模块 docstring 的 11 个样式 ID 之一。
+    详尽程度已经编码在样式 ID 里（B_full / B_clean 等），不再额外切换。
     """
     template: str = "A"
-    show_params: bool = True
 
     @classmethod
     def from_dict(cls, d: dict) -> "WatermarkConfig":
@@ -92,15 +95,13 @@ class WatermarkConfig:
         for f in cls.__dataclass_fields__:
             if f in d:
                 kwargs[f] = d[f]
-        if "show_params" in kwargs:
-            kwargs["show_params"] = bool(kwargs["show_params"])
         if "template" in kwargs:
             kwargs["template"] = str(kwargs["template"])
-        # 旧 template 名映射
+        # 旧 template 名 / 旧 base 名 → 新 ID（base 名默认到 _full 变体）
         legacy_map = {
             "classic_white": "A", "fuji_bar": "A",
-            "white_frame": "D", "minimal": "G",
-            "overlay": "C",
+            "white_frame": "D_full", "minimal": "G", "overlay": "C_full",
+            "B": "B_full", "C": "C_full", "D": "D_full", "F": "F_full",
         }
         if kwargs.get("template") in legacy_map:
             kwargs["template"] = legacy_map[kwargs["template"]]
@@ -892,15 +893,19 @@ def _render_G(img: Image.Image, exif: ExifInfo,
 # 样式 H：相机回放（上原图 / 下模糊版 + 居中相机 + 屏幕/取景器内嵌缩略）
 # ============================================================
 
-# 模块级缓存：相机 RGBA 抠完底就不变了，每次渲染重抠浪费
-_CAMERA_RGBA_CACHE: Optional[Image.Image] = None
+# 模块级缓存：(rgba, screen_ratio, viewfinder_ratio)。
+# 抠白 + 紧裁剪后 ratio 也跟着变，一起缓存。
+_CAMERA_RGBA_CACHE: Optional[tuple[Image.Image, tuple, tuple]] = None
 
 
-def _camera_back_rgba() -> Optional[Image.Image]:
-    """加载相机 PNG 并把白底转成透明（含柔和投影过渡）。失败返回 None。
+def _camera_back_rgba() -> Optional[tuple[Image.Image, tuple, tuple]]:
+    """加载相机 PNG，抠白底 + 紧裁剪到相机本体 bbox。
 
-    用 min(R,G,B) 计算"非白程度"：min_rgb=255 → alpha=0；min_rgb≤220 → alpha=255。
-    投影区会自然羽化，相机本体边缘不会硬切。
+    返回 (rgba, screen_ratio, viewfinder_ratio)。两个 ratio 都是相对裁剪后图像
+    归一的 (l, t, r, b)；失败返回 None。
+
+    白底抠法：min(R,G,B) ≥ 245 → alpha=0（硬切，消除半透明白晕）；
+    min(R,G,B) ≤ 220 → alpha=255；之间线性。机身和文字都在 v<100，不会被误伤。
     """
     global _CAMERA_RGBA_CACHE
     if _CAMERA_RGBA_CACHE is not None:
@@ -913,10 +918,27 @@ def _camera_back_rgba() -> Optional[Image.Image]:
     except Exception:
         logger.exception(f"加载 {CAMERA_BACK_PATH} 失败")
         return None
+    W, H = src.size
     r, g, b = src.split()
     min_rgb = ImageChops.darker(ImageChops.darker(r, g), b)
-    alpha = min_rgb.point(lambda v: max(0, min(255, (255 - v) * 8)))
-    _CAMERA_RGBA_CACHE = Image.merge("RGBA", (r, g, b, alpha))
+    # 245 处硬切：v=245→0, v=220→255
+    alpha = min_rgb.point(lambda v: max(0, min(255, int((245 - v) * 10.2))))
+    rgba = Image.merge("RGBA", (r, g, b, alpha))
+    bbox = alpha.getbbox()
+    if bbox is None:
+        return None
+    rgba = rgba.crop(bbox)
+    cw, ch = bbox[2] - bbox[0], bbox[3] - bbox[1]
+    cx0, cy0 = bbox[0], bbox[1]
+
+    def _remap(rt: tuple) -> tuple:
+        l, t, r_, b_ = rt
+        return ((l * W - cx0) / cw, (t * H - cy0) / ch,
+                (r_ * W - cx0) / cw, (b_ * H - cy0) / ch)
+
+    _CAMERA_RGBA_CACHE = (rgba,
+                          _remap(_CAMERA_SCREEN_RATIO_PNG),
+                          _remap(_CAMERA_VIEWFINDER_RATIO_PNG))
     return _CAMERA_RGBA_CACHE
 
 
@@ -975,9 +997,10 @@ def _add_screen_depth(canvas: Image.Image, x0: int, y0: int,
 
 def _paste_viewfinder_inset(canvas: Image.Image, photo: Image.Image,
                             cam_x: int, cam_y: int,
-                            cam_w: int, cam_h: int) -> None:
+                            cam_w: int, cam_h: int,
+                            vf_ratio: tuple) -> None:
     """取景器圆玻璃里嵌入压暗的小照片 + 右上小高光，模拟透过镜筒看到的画面。"""
-    vl, vt, vr, vb = _CAMERA_VIEWFINDER_RATIO
+    vl, vt, vr, vb = vf_ratio
     vx0 = cam_x + int(cam_w * vl)
     vy0 = cam_y + int(cam_h * vt)
     vx1 = cam_x + int(cam_w * vr)
@@ -1019,10 +1042,11 @@ def _paste_viewfinder_inset(canvas: Image.Image, photo: Image.Image,
 def _render_H(img: Image.Image, exif: ExifInfo,
               show_params: bool = True) -> Image.Image:
     _ = exif, show_params
-    camera_rgba = _camera_back_rgba()
-    if camera_rgba is None:
+    cache = _camera_back_rgba()
+    if cache is None:
         # 没有相机素材就退回 G 极简白边，至少不报错
         return _render_G(img, exif, show_params)
+    camera_rgba, screen_ratio, vf_ratio = cache
 
     pw, ph = img.size
     short = min(pw, ph)
@@ -1031,12 +1055,12 @@ def _render_H(img: Image.Image, exif: ExifInfo,
     # 上半部：原图
     canvas.paste(img, (0, 0))
     # 下半部：轻度模糊版
-    blur_radius = max(4, int(short * 0.005))
+    blur_radius = max(6, int(short * 0.008))
     blurred = img.filter(ImageFilter.GaussianBlur(radius=blur_radius))
     canvas.paste(blurred, (0, ph))
 
     cam_w0, cam_h0 = camera_rgba.size
-    target_h = int(ph * 0.78)
+    target_h = int(ph * 0.73)
     target_w = int(target_h * cam_w0 / cam_h0)
     max_w = int(pw * 0.88)
     if target_w > max_w:
@@ -1045,9 +1069,10 @@ def _render_H(img: Image.Image, exif: ExifInfo,
     camera = camera_rgba.resize((target_w, target_h), Image.LANCZOS)
 
     cam_x = (pw - target_w) // 2
-    cam_y = ph + (ph - target_h) // 2 + int(ph * 0.04)
+    # 贴齐画布底部；接触投影会自然延伸到画面外（被裁剪），呈现"坐在画框边缘"的效果
+    cam_y = ph * 2 - target_h
 
-    sl, st, sr, sb = _CAMERA_SCREEN_RATIO
+    sl, st, sr, sb = screen_ratio
     scr_x0 = cam_x + int(target_w * sl)
     scr_y0 = cam_y + int(target_h * st)
     scr_x1 = cam_x + int(target_w * sr)
@@ -1089,7 +1114,8 @@ def _render_H(img: Image.Image, exif: ExifInfo,
     canvas_rgba.paste(preview, (scr_x0, scr_y0))
     _add_screen_depth(canvas_rgba, scr_x0, scr_y0, scr_w, scr_h)
     _paste_viewfinder_inset(canvas_rgba, img,
-                            cam_x, cam_y, target_w, target_h)
+                            cam_x, cam_y, target_w, target_h,
+                            vf_ratio)
 
     return canvas_rgba.convert("RGB")
 
@@ -1098,48 +1124,54 @@ def _render_H(img: Image.Image, exif: ExifInfo,
 # 调度
 # ============================================================
 
-# (renderer, variants 元组：("full",) 或 ("full", "clean"))
-_STYLE_SPECS: dict[str, tuple[Callable, tuple[str, ...]]] = {
-    "A": (_render_A, ("full",)),
-    "B": (_render_B, ("full", "clean")),
-    "C": (_render_C, ("full", "clean")),
-    "D": (_render_D, ("full", "clean")),
-    "F": (_render_F, ("full", "clean")),
-    "G": (_render_G, ("full",)),
-    "H": (_render_H, ("full",)),
+# 每个 ID 对应 (renderer, show_params 绑定值)。详尽与极简拆成不同 ID。
+_STYLE_SPECS: dict[str, tuple[Callable, bool]] = {
+    "A":       (_render_A, True),
+    "B_full":  (_render_B, True),
+    "B_clean": (_render_B, False),
+    "C_full":  (_render_C, True),
+    "C_clean": (_render_C, False),
+    "D_full":  (_render_D, True),
+    "D_clean": (_render_D, False),
+    "F_full":  (_render_F, True),
+    "F_clean": (_render_F, False),
+    "G":       (_render_G, True),   # show_params 被忽略
+    "H":       (_render_H, True),   # show_params 被忽略
 }
 
 # 给前端用的友好元数据
 _STYLE_META = {
-    "A": {"name": "富士底栏", "desc": "白色信息条，左机型/镜头 ｜ 中品牌 Logo ｜ 右参数/时间",
-          "supports_clean": False},
-    "B": {"name": "极简底栏", "desc": "顶/左/右贴边窄白 + 底部居中 Logo + 信息",
-          "supports_clean": True},
-    "C": {"name": "毛玻璃悬浮", "desc": "原图模糊作背景 + 缩小照片悬浮居中带阴影",
-          "supports_clean": True},
-    "D": {"name": "经典白边相框", "desc": "顶/左/右窄白 + 底大白边居中放品牌",
-          "supports_clean": True},
-    "F": {"name": "杂志风", "desc": "左下色卡（从图自动提取）+ 右下品牌信息",
-          "supports_clean": True},
-    "G": {"name": "极简白边", "desc": "照片四周均匀窄白边，无任何文字",
-          "supports_clean": False},
-    "H": {"name": "相机回放", "desc": "上原图 + 下模糊版 + 居中富士 X-T5，LCD 与取景器都显示画面",
-          "supports_clean": False},
+    "A":       {"name": "标准底栏",
+                "desc": "白色信息条，左机型/镜头 ｜ 中品牌 Logo ｜ 右参数/时间"},
+    "B_full":  {"name": "极简底栏-详尽",
+                "desc": "顶/左/右贴边窄白 + 底部居中 Logo + 机型 + 镜头·参数·时间"},
+    "B_clean": {"name": "极简底栏-极简",
+                "desc": "顶/左/右贴边窄白 + 底部居中 Logo + 机型"},
+    "C_full":  {"name": "毛玻璃悬浮-详尽",
+                "desc": "原图模糊作背景 + 缩小照片悬浮居中带阴影 + 镜头·参数·时间"},
+    "C_clean": {"name": "毛玻璃悬浮-极简",
+                "desc": "原图模糊作背景 + 缩小照片悬浮居中带阴影 + 品牌 Logo"},
+    "D_full":  {"name": "经典白边相框-详尽",
+                "desc": "顶/左/右窄白 + 底大白边居中放品牌 + 镜头·参数·时间"},
+    "D_clean": {"name": "经典白边相框-极简",
+                "desc": "顶/左/右窄白 + 底大白边居中放品牌 + 机型"},
+    "F_full":  {"name": "杂志风-详尽",
+                "desc": "左下色卡（从图自动提取）+ 右下品牌 + 镜头·参数·时间"},
+    "F_clean": {"name": "杂志风-极简",
+                "desc": "左下色卡（从图自动提取）+ 右下品牌 + 机型"},
+    "G":       {"name": "极简白边",
+                "desc": "照片四周均匀窄白边，无任何文字"},
+    "H":       {"name": "相机回放",
+                "desc": "上原图 + 下模糊版 + 居中富士 X-T5，LCD 与取景器都显示画面"},
 }
 
 
 def list_templates() -> list[dict]:
     """前端取可用样式列表。"""
     out = []
-    for tid, (_, variants) in _STYLE_SPECS.items():
+    for tid in _STYLE_SPECS:
         meta = _STYLE_META[tid]
-        out.append({
-            "id": tid,
-            "name": meta["name"],
-            "desc": meta["desc"],
-            "supports_clean": meta["supports_clean"],
-            "variants": list(variants),
-        })
+        out.append({"id": tid, "name": meta["name"], "desc": meta["desc"]})
     return out
 
 
@@ -1178,12 +1210,12 @@ def render(img_path: str | Path, cfg: WatermarkConfig,
     spec = _STYLE_SPECS.get(cfg.template)
     if spec is None:
         spec = _STYLE_SPECS["A"]
-    fn, _ = spec
+    fn, show_params = spec
     try:
-        canvas = fn(img, exif, show_params=cfg.show_params)
+        canvas = fn(img, exif, show_params=show_params)
     except Exception:
         logger.exception(f"模板 {cfg.template} 渲染失败，回退 A")
-        canvas = _render_A(img, exif, show_params=cfg.show_params)
+        canvas = _render_A(img, exif, show_params=True)
 
     buf = io.BytesIO()
     exif_bytes = _sanitize_exif_orientation(Image.open(img_path).info.get("exif", b""))
