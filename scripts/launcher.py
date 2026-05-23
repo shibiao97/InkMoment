@@ -61,6 +61,9 @@ CORE_PACKAGES = [
     # RAW 支持（提取 RAW 内嵌的 JPEG 预览图，无需 demosaic）。
     # 任何模式都可能遇到 RAW 文件，所以放 CORE。
     "rawpy>=0.18",
+    # 相机水印导出：把原图的 EXIF orientation 归零，避免再次旋转。
+    # 选完片任何模式都能加水印，所以放 CORE。
+    "piexif>=1.1.3",
 ]
 
 # 每种模式在 CORE 之外额外需要的 pip 包。
