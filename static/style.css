@@ -2534,6 +2534,29 @@ body:has(#view-processing.active) .status-badge {
 }
 
 /* 终端式滚动条：黑底等宽字，新行从下方涌入、整体上滑 */
+.first-run-hint {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid rgba(250, 204, 21, 0.35);
+  background: rgba(250, 204, 21, 0.08);
+  color: #fde68a;
+  font-size: 13px;
+  line-height: 1.55;
+}
+.first-run-hint.hidden { display: none; }
+.first-run-hint-icon { font-size: 16px; line-height: 1.4; flex-shrink: 0; }
+.first-run-hint-text { flex: 1; }
+.first-run-hint-text strong {
+  display: block;
+  color: #fef3c7;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
 .proc-terminal {
   background: #0a0a0a;
   color: #d1d5db;

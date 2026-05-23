@@ -58,3 +58,6 @@ job-*.log
 *.tmp
 *.log
 .tmp_*/
+
+# 内部审计 / 设计文档，不入库
+docs/

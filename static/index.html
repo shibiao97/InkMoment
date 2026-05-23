@@ -246,6 +246,15 @@
       </div>
     </header>
 
+    <!-- 首次运行专家/土豪模式时，本地需要先装一批模型依赖；进度条会卡 0% 一段时间，属于正常 -->
+    <div class="first-run-hint hidden" id="first-run-hint" role="status">
+      <span class="first-run-hint-icon" aria-hidden="true">⏳</span>
+      <div class="first-run-hint-text">
+        <strong>首次运行专家模式</strong>
+        正在终端后台安装本地模型依赖（数百 MB，约 1–5 分钟）。这段时间进度条停在 0% 是正常的，请保留启动该程序的终端窗口，依赖装好后会自动开始分析。
+      </div>
+    </div>
+
     <!-- 终端式滚动日志条（按当前模式渲染信号列：fast=hash/HSV/ORB，expert=DINOv2/CLIP/脸） -->
     <div class="proc-terminal" id="proc-terminal">
       <div class="proc-terminal-track" id="proc-terminal-track"></div>

@@ -694,6 +694,12 @@ function enterProcessing(folder) {
   $("progress-count").textContent = "—";
   $("progress-pct").textContent = "—";
   $("progress-label").textContent = "扫描文件夹…";
+  // 专家/土豪模式首次运行要先装本地依赖，进度条会停一段时间 —— 给个温和的提示
+  const hint = document.getElementById("first-run-hint");
+  if (hint) {
+    const eng = currentEngine();
+    hint.classList.toggle("hidden", !(eng === "expert" || eng === "tycoon"));
+  }
   $("proc-eta").textContent = "";
   $("proc-counter-scanned").textContent = "0";
   $("proc-counter-total").textContent = "—";
@@ -1039,6 +1045,8 @@ async function refreshJob() {
     $("progress-pct").textContent = pct + "%";
     bumpCounter("proc-counter-scanned", j.done);
     bumpCounter("proc-counter-total", j.total);
+    // 真有进度了 = 依赖装完 + 扫描完毕，藏起首次运行提示
+    document.getElementById("first-run-hint")?.classList.add("hidden");
     setStatus(`分析中 · ${j.done.toLocaleString()} / ${j.total.toLocaleString()}`, "busy");
 
     if (j.done >= 5 && j.status !== "done" && j.elapsed > 1) {
