@@ -32,8 +32,7 @@ if not defined UV (
   echo.
   echo [首次准备] 正在下载 uv（Python 工具链，约 30MB）...
   echo   这一步只在第一次运行做，之后秒过。
-  powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-    "irm https://astral.sh/uv/install.ps1 | iex"
+  powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://astral.sh/uv/install.ps1 | iex"
   if errorlevel 1 (
     echo.
     echo [错误] uv 安装失败。
