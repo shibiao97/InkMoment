@@ -40,6 +40,7 @@ from inkmoment.grouper import (
     build_groups,
     group_infos,
 )
+from server.routes.folder import folder_bp
 from server.routes.system import system_bp
 
 try:
@@ -1684,6 +1685,7 @@ def _thumb_cache_key(rel: str, mtime: float, size: int, max_side: int) -> str:
 # ---------------- Flask ----------------
 
 app = Flask(__name__, static_folder="static", static_url_path="/static")
+app.register_blueprint(folder_bp)
 app.register_blueprint(system_bp)
 SESSION: Optional[SessionState] = None
 JOB: Optional[JobState] = None
@@ -3559,160 +3561,6 @@ def api_preview_groups():
         "groups": out,
         "total": len(SESSION.groups),
         "multi": sum(1 for g in SESSION.groups if len(g.images) > 1),
-    })
-
-
-@app.route("/api/browse_folder", methods=["POST"])
-def api_browse_folder():
-    """调起系统原生选文件夹对话框（macOS: osascript / Win: tkinter / Linux: zenity）。"""
-    try:
-        if sys.platform == "darwin":
-            script = (
-                'tell application "System Events" to activate\n'
-                'set chosen to POSIX path of (choose folder with prompt "选择要处理的照片文件夹")\n'
-                'return chosen'
-            )
-            proc = subprocess.run(
-                ["osascript", "-e", script],
-                capture_output=True, text=True, timeout=120,
-            )
-            if proc.returncode != 0:
-                # 用户取消时 osascript 返回非 0 + stderr 含 "User canceled"
-                if "User canceled" in (proc.stderr or "") or "User cancelled" in (proc.stderr or ""):
-                    return jsonify({"ok": True, "cancelled": True})
-                return jsonify({"error": (proc.stderr or "选择失败").strip()}), 500
-            chosen = (proc.stdout or "").strip().rstrip("/")
-            return jsonify({"ok": True, "folder": chosen})
-        elif sys.platform == "win32":
-            # Windows: 通过 tkinter
-            try:
-                import tkinter
-                from tkinter import filedialog
-            except Exception:
-                return jsonify({"error": "系统未安装 tkinter，无法调起选择框"}), 500
-            root = tkinter.Tk()
-            root.withdraw()
-            root.attributes("-topmost", True)
-            chosen = filedialog.askdirectory(title="选择要处理的照片文件夹")
-            root.destroy()
-            if not chosen:
-                return jsonify({"ok": True, "cancelled": True})
-            return jsonify({"ok": True, "folder": chosen})
-        else:
-            # Linux: 尝试 zenity
-            try:
-                proc = subprocess.run(
-                    ["zenity", "--file-selection", "--directory", "--title=选择照片文件夹"],
-                    capture_output=True, text=True, timeout=120,
-                )
-            except FileNotFoundError:
-                return jsonify({"error": "未找到 zenity，请安装：sudo apt install zenity"}), 500
-            if proc.returncode != 0:
-                return jsonify({"ok": True, "cancelled": True})
-            chosen = (proc.stdout or "").strip()
-            return jsonify({"ok": True, "folder": chosen})
-    except subprocess.TimeoutExpired:
-        return jsonify({"error": "选择超时"}), 500
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
-@app.route("/api/peek_folder", methods=["POST"])
-def api_peek_folder():
-    """轻量扫描：仅统计文件数 / 体积 / 时间跨度，不读图像内容。
-
-    专为着陆页"路径选好的瞬间"显示快照设计——必须毫秒级返回。
-    """
-    data = request.get_json(force=True) or {}
-    folder = (data.get("folder") or "").strip()
-    if not folder:
-        return jsonify({"error": "缺少 folder"}), 400
-    p = Path(folder)
-    if not p.exists():
-        return jsonify({"ok": False, "error": "路径不存在"})
-    if not p.is_dir():
-        return jsonify({"ok": False, "error": "不是文件夹"})
-
-    count = 0
-    total_size = 0
-    earliest: Optional[float] = None
-    latest: Optional[float] = None
-    hour_hist = [0] * 24
-    samples_landscape: list[str] = []
-    samples_portrait: list[str] = []
-    try:
-        for entry in os.scandir(p):
-            if not entry.is_file(follow_symlinks=False):
-                continue
-            if Path(entry.name).suffix.lower() not in grouper.IMAGE_EXTS:
-                continue
-            count += 1
-            try:
-                st = entry.stat(follow_symlinks=False)
-            except OSError:
-                continue
-            total_size += st.st_size
-            mt = st.st_mtime
-            if earliest is None or mt < earliest:
-                earliest = mt
-            if latest is None or mt > latest:
-                latest = mt
-            hr = time.localtime(mt).tm_hour
-            hour_hist[hr] += 1
-            # 简单按文件名拿 3 张样本（首 / 中 / 尾），后端不解码
-            if count <= 1 or count == 50 or count == 200:
-                samples_landscape.append(entry.path)
-    except OSError as e:
-        return jsonify({"ok": False, "error": str(e)})
-
-    if count == 0:
-        return jsonify({"ok": True, "count": 0})
-
-    def _half_day_label() -> str:
-        # 按小时分布找拍摄活跃时段
-        morning = sum(hour_hist[6:11])
-        noon = sum(hour_hist[11:14])
-        afternoon = sum(hour_hist[14:17])
-        evening = sum(hour_hist[17:20])
-        night = sum(hour_hist[20:24]) + sum(hour_hist[0:6])
-        parts = [("上午", morning), ("中午", noon), ("下午", afternoon),
-                 ("傍晚", evening), ("夜间", night)]
-        parts.sort(key=lambda x: -x[1])
-        # 取占比 >= 30% 的前两段
-        top = [p for p in parts if p[1] >= count * 0.3]
-        if not top:
-            top = parts[:1]
-        return " · ".join(p[0] for p in top[:2])
-
-    def _fmt_date(ts: Optional[float]) -> str:
-        if ts is None:
-            return ""
-        t = time.localtime(ts)
-        return f"{t.tm_year} 年 {t.tm_mon} 月 {t.tm_mday} 日"
-
-    def _fmt_size(n: int) -> str:
-        if n < 1024 * 1024:
-            return f"{n / 1024:.0f} KB"
-        if n < 1024 * 1024 * 1024:
-            return f"{n / 1024 / 1024:.0f} MB"
-        return f"{n / 1024 / 1024 / 1024:.2f} GB"
-
-    span_days = 1
-    if earliest and latest and latest > earliest:
-        span_days = max(1, int((latest - earliest) / 86400) + 1)
-
-    has_prior = (p / "winners").is_dir() or (p / "losers").is_dir() or state_path(folder).exists()
-
-    return jsonify({
-        "ok": True,
-        "count": count,
-        "size_text": _fmt_size(total_size),
-        "earliest": _fmt_date(earliest),
-        "latest": _fmt_date(latest) if (latest and (latest - (earliest or 0)) > 86400) else "",
-        "span_days": span_days,
-        "active_period": _half_day_label(),
-        "samples": samples_landscape[:3],
-        "has_prior": has_prior,
     })
 
 
