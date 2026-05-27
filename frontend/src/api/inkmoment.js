@@ -52,3 +52,14 @@ export function confirmPrescreen() {
 export function getGroupingProgress(since = 0) {
   return fetchJSON(`/api/grouping_progress?since=${encodeURIComponent(String(since))}`);
 }
+
+export function getPreviewGroups() {
+  return fetchJSON("/api/preview_groups");
+}
+
+export function regroup(payload) {
+  return fetchJSON("/api/regroup", {
+    method: "POST",
+    body: payload,
+  });
+}

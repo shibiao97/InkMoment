@@ -23,12 +23,13 @@ const props = defineProps({
 const emit = defineEmits(["refresh", "back-home", "continue"]);
 
 const canContinue = computed(() => {
-  return ["prescreen", "confirm-prescreen"].includes(props.nextStep.kind);
+  return ["prescreen", "confirm-prescreen", "preview"].includes(props.nextStep.kind);
 });
 
 const primaryLabel = computed(() => {
   if (props.nextStep.kind === "prescreen") return "进入复核";
   if (props.nextStep.kind === "confirm-prescreen") return "进入确认";
+  if (props.nextStep.kind === "preview") return "进入预览";
   if (props.nextStep.kind === "home") return "回首页";
   return "暂回首页";
 });

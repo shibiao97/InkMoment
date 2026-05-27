@@ -5,7 +5,7 @@ import StatusBadge from "../components/StatusBadge.vue";
 import { usePrescreenReview } from "../composables/usePrescreenReview";
 import { useTheme } from "../composables/useTheme";
 
-const emit = defineEmits(["back-home"]);
+const emit = defineEmits(["back-home", "continue-preview"]);
 
 const { theme } = useTheme();
 const {
@@ -137,6 +137,15 @@ onMounted(load);
           全部保留
         </button>
         <button
+          v-if="grouping?.status === 'done' || (confirmResult && !confirmResult.async)"
+          class="btn-primary"
+          type="button"
+          @click="emit('continue-preview')"
+        >
+          进入分组预览
+        </button>
+        <button
+          v-else
           class="btn-primary"
           type="button"
           :disabled="loading || confirming || grouping?.status === 'running'"

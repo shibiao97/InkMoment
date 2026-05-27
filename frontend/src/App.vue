@@ -2,6 +2,7 @@
 import { ref } from "vue";
 import LandingView from "./views/LandingView.vue";
 import PrescreenView from "./views/PrescreenView.vue";
+import PreviewView from "./views/PreviewView.vue";
 import ProcessingView from "./views/ProcessingView.vue";
 
 const currentView = ref("landing");
@@ -19,7 +20,15 @@ function backHome() {
 function continueFromProcessing(kind) {
   if (kind === "prescreen" || kind === "confirm-prescreen") {
     currentView.value = "prescreen";
+    return;
   }
+  if (kind === "preview") {
+    currentView.value = "preview";
+  }
+}
+
+function enterPreview() {
+  currentView.value = "preview";
 }
 </script>
 
@@ -35,6 +44,11 @@ function continueFromProcessing(kind) {
     @continue="continueFromProcessing"
   />
   <PrescreenView
+    v-else-if="currentView === 'prescreen'"
+    @back-home="backHome"
+    @continue-preview="enterPreview"
+  />
+  <PreviewView
     v-else
     @back-home="backHome"
   />

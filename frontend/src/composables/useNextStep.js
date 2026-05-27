@@ -29,7 +29,7 @@ function resolveNextStep(status) {
     return {
       kind: "prescreen",
       title: "进入初筛复核",
-      description: `${status.prescreen_pending_count} 张照片建议放手，后续会迁移复核列表。`,
+      description: `${status.prescreen_pending_count} 张照片建议放手，可以先检查是否有误伤。`,
     };
   }
 
@@ -52,7 +52,7 @@ function resolveNextStep(status) {
   return {
     kind: "preview",
     title: "进入分组预览",
-    description: `${status.total_groups} 个分组，其中 ${status.multi_groups} 组需要人工确认。`,
+    description: `${status.total_groups} 个分组，其中 ${status.multi_groups} 组需要人工确认，可以先检查分组质量。`,
   };
 }
 
