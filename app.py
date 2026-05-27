@@ -59,7 +59,10 @@ from server.services.job_runner_service import (
     write_job_header,
     write_status_footer,
 )
-from server.services.selection_service import current_group_payload
+from server.services.selection_service import (
+    current_group_payload,
+    skip_group_payload,
+)
 from server.services.start_service import (
     active_job_error,
     build_pending_job,
@@ -2358,18 +2361,6 @@ def _undo_group_payload() -> tuple[dict, int]:
         return {"undone": True, **payload}, status
 
 
-def _skip_group_payload() -> tuple[dict, int]:
-    if SESSION is None:
-        return {"error": "no session"}, 400
-    with LOCK:
-        if SESSION.current_group < len(SESSION.groups):
-            g = SESSION.groups.pop(SESSION.current_group)
-            SESSION.groups.append(g)
-        SESSION.undo_stack = []
-        save_state(SESSION)
-        return _current_group_payload_locked()
-
-
 def _reopen_group_payload(data: dict) -> tuple[dict, int]:
     """跨组反悔：按 group_id 找到一个已 finished 的组，把它的 winners/losers
     物理还原回根目录，重置决策状态，把用户带回擂台从头挑这一组。"""
@@ -2408,7 +2399,14 @@ app.register_blueprint(create_selection_blueprint(
     _choose_group_payload,
     _kick_group_payload,
     _undo_group_payload,
-    _skip_group_payload,
+    lambda: skip_group_payload(
+        lambda: SESSION,
+        LOCK,
+        _skip_finished_locked,
+        _validate_current_pair_locked,
+        _serialize_group,
+        save_state,
+    ),
     _reopen_group_payload,
 ))
 
