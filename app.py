@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Callable, Optional
 
 from flask import Flask, jsonify, request, send_from_directory
+from werkzeug.serving import make_server
 
 from inkmoment import grouper
 from inkmoment.grouper import (
@@ -2023,18 +2024,47 @@ app = create_app()
 
 def main():
     parser = argparse.ArgumentParser(description="本地照片擂台选片工具")
+    parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=5057)
     parser.add_argument("--no-browser", action="store_true")
+    parser.add_argument(
+        "--json-ready",
+        action="store_true",
+        help="Print one JSON line with host, port, url, and health_url after binding.",
+    )
     args = parser.parse_args()
 
     setup_logger(None)
-    url = f"http://localhost:{args.port}"
-    print(f"\n启动于 {url}")
+    server = make_server(args.host, args.port, app)
+    actual_port = server.server_port
+    display_host = "localhost" if args.host in {"127.0.0.1", "0.0.0.0"} else args.host
+    url = f"http://{display_host}:{actual_port}"
+    connect_host = "127.0.0.1" if args.host == "0.0.0.0" else args.host
+    health_url = f"http://{connect_host}:{actual_port}/api/health"
+    ready_payload = {
+        "event": "ready",
+        "service": "inkmoment",
+        "host": args.host,
+        "port": actual_port,
+        "url": url,
+        "health_url": health_url,
+        "pid": os.getpid(),
+    }
+    if args.json_ready:
+        print(json.dumps(ready_payload, ensure_ascii=False), flush=True)
+    else:
+        print(f"\n启动于 {url}", flush=True)
     if SCRIPT_TOKEN:
-        print(f"（脚本访问 token 已启用：X-Token: {SCRIPT_TOKEN[:8]}...）")
+        print(f"（脚本访问 token 已启用：X-Token: {SCRIPT_TOKEN[:8]}...）", flush=True)
     if not args.no_browser:
         threading.Timer(0.8, lambda: webbrowser.open(url)).start()
-    app.run(host="127.0.0.1", port=args.port, debug=False)
+
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        server.server_close()
 
 
 if __name__ == "__main__":
