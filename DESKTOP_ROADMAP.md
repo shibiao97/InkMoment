@@ -116,7 +116,7 @@ server/
 - 已迁移图片读取路由 `server.routes.image`，覆盖 `/api/image` 与 `/api/image_original`。
 - 已迁移缩略图/原图响应、RAW 内嵌预览读取、占位图响应、路径安全校验和图片缓存头到 `server.services.image_service`。
 - 已迁移选片路由 `server.routes.selection`，覆盖 `/api/group`、`/api/choose`、`/api/kick`、`/api/undo`、`/api/skip_group` 与 `/api/reopen_group`。
-- 已迁移当前选片组读取入口和 `/api/skip_group` 状态变更到 `server.services.selection_service`；组序列化、坏图预检和其他选片写操作状态机暂留 `app.py` 并通过回调注入。
+- 已迁移当前选片组读取入口、`/api/skip_group` 状态变更和 `/api/undo` 快照恢复到 `server.services.selection_service`；组序列化、坏图预检和其他选片写操作状态机暂留 `app.py` 并通过回调注入。
 - 已迁移水印路由 `server.routes.watermark`，覆盖 `/api/watermark/templates`、`/api/watermark/preview`、`/api/watermark/start`、`/api/watermark/status`、`/api/watermark/cancel` 与 `/api/watermark/open_out_dir`。
 - 已迁移水印预览、批量导出、状态查询、取消和打开输出目录的 payload/state 编排到 `server.services.watermark_service`；`app.py` 仅持有 `WATERMARK_JOB` 并注入当前 `SESSION`、输出目录和 logger。
 - `app.py` 直接路由已收敛到 `/`；仍保留全局状态、后台任务线程和部分业务 helper，后续重点是继续下沉选片/结果恢复等状态机。
