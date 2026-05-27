@@ -100,8 +100,8 @@ server/
 - 已迁移模型服务配置读写、base URL 归一化、Key 脱敏、模型列表探测、环境诊断和启动期配置加载到 `server.services.llm_service`。
 - 已迁移会话状态路由 `server.routes.session`，覆盖 `/api/status` 与 `/api/reset_session`。
 - 已迁移会话状态汇总和回首页重置逻辑到 `server.services.session_service`；`SESSION` 和 `LAST_INFOS` 仍由 `app.py` 持有并通过回调注入。
-- 已迁移分组预览路由 `server.routes.grouping`，覆盖 `/api/grouping_progress`、`/api/regroup` 与 `/api/preview_groups`。
-- 已迁移分组进度响应、重新分组和预览组序列化到 `server.services.grouping_service`；`/api/confirm_prescreen` 的异步线程启动逻辑暂留 `app.py`。
+- 已迁移分组路由 `server.routes.grouping`，覆盖 `/api/grouping_progress`、`/api/regroup`、`/api/preview_groups` 与 `/api/confirm_prescreen`。
+- 已迁移分组进度响应、重新分组和预览组序列化到 `server.services.grouping_service`；`/api/confirm_prescreen` 的异步线程启动逻辑暂留 `app.py` 并通过回调注入。
 - 已迁移结果路由 `server.routes.results`，覆盖 `/api/winners`、`/api/auto_rejected` 与 `/api/restore_rejected`。
 - 已迁移胜出照片列表和自动放手照片列表序列化到 `server.services.result_service`；`/api/restore_rejected` 的文件搬运与状态回写逻辑暂留 `app.py` 并通过回调注入。
 - 已迁移图片读取路由 `server.routes.image`，覆盖 `/api/image` 与 `/api/image_original`。
@@ -140,9 +140,8 @@ server/
 建议顺序：
 
 1. 抽离 `/api/restore_rejected` 到结果/初筛领域，保留文件还原 helper 通过回调注入。
-2. 抽离 `/api/confirm_prescreen` 到初筛领域，异步线程启动逻辑先留在 `app.py` service helper。
-3. 抽离 `/api/watermark/*` 到 `server.routes.watermark` 与 `server.services.watermark_service`。
-4. 最后处理 `/api/start`，把 job 创建、线程启动和 session 写入收敛成一个可被 CLI/Tauri 复用的 service。
+2. 抽离 `/api/watermark/*` 到 `server.routes.watermark` 与 `server.services.watermark_service`。
+3. 最后处理 `/api/start`，把 job 创建、线程启动和 session 写入收敛成一个可被 CLI/Tauri 复用的 service。
 
 完成标准：
 

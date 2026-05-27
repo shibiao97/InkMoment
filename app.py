@@ -1504,6 +1504,7 @@ app.register_blueprint(create_grouping_blueprint(
         "threshold_far": THRESHOLD_FAR,
         "near_seconds": NEAR_SECONDS,
     },
+    lambda: _confirm_prescreen_payload(),
 ))
 app.register_blueprint(create_image_blueprint(
     lambda: SESSION.folder if SESSION is not None else None,
@@ -2725,20 +2726,19 @@ def _run_grouping_async(accepted_infos, old_session_snapshot):
         _GROUPING["status"] = "error"
 
 
-@app.route("/api/confirm_prescreen", methods=["POST"])
-def api_confirm_prescreen():
+def _confirm_prescreen_payload() -> tuple[dict, int]:
     global SESSION
     if SESSION is None:
-        return jsonify({"error": "no session"}), 400
+        return {"error": "no session"}, 400
     with LOCK:
         if SESSION.groups:
             SESSION.prescreen_reviewed = True
             save_state(SESSION)
-            return jsonify({"ok": True, "async": False})
+            return {"ok": True, "async": False}, 200
 
         infos = _infos_from_memory_or_cache(SESSION.folder)
         if not infos:
-            return jsonify({"error": "缓存丢失，请重新开始"}), 400
+            return {"error": "缓存丢失，请重新开始"}, 400
         restored = set(SESSION.prescreen_restored)
         rejected = set(SESSION.prescreen_rejected)
         accepted_infos = [
@@ -2776,7 +2776,7 @@ def api_confirm_prescreen():
         daemon=True,
     )
     t.start()
-    return jsonify({"ok": True, "async": True, "all_paths": all_paths})
+    return {"ok": True, "async": True, "all_paths": all_paths}, 200
 
 
 # ============================================================

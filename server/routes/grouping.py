@@ -15,6 +15,7 @@ def create_grouping_blueprint(
     group_infos_fn,
     build_session_fn,
     thresholds,
+    confirm_prescreen,
 ):
     grouping_bp = Blueprint("grouping", __name__)
 
@@ -44,5 +45,10 @@ def create_grouping_blueprint(
     @grouping_bp.route("/api/preview_groups")
     def api_preview_groups():
         return jsonify(serialize_preview_groups(get_session()))
+
+    @grouping_bp.route("/api/confirm_prescreen", methods=["POST"])
+    def api_confirm_prescreen():
+        payload, status = confirm_prescreen()
+        return jsonify(payload), status
 
     return grouping_bp
