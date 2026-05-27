@@ -261,6 +261,23 @@ input:disabled {
   background: #97a493;
 }
 
+.btn-ghost {
+  padding: 9px 14px;
+  color: #303b33;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid #d1ddcc;
+  border-radius: 10px;
+}
+
+.btn-ghost:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.btn-ghost:disabled {
+  color: #97a493;
+  background: rgba(255, 255, 255, 0.4);
+}
+
 .folder-snapshot {
   margin: 12px 0 4px;
   padding: 16px;
@@ -388,6 +405,195 @@ input:disabled {
   color: #477453;
 }
 
+.processing-shell {
+  max-width: 1100px;
+}
+
+.processing-topbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 28px 0 24px;
+}
+
+.processing-topbar h1 {
+  margin: 0;
+  color: #1f2922;
+  font-size: clamp(30px, 4vw, 52px);
+  line-height: 1.08;
+}
+
+.processing-folder {
+  max-width: 680px;
+  margin: 12px 0 0;
+  color: #607063;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.processing-actions {
+  display: inline-flex;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.progress-panel,
+.event-panel,
+.error-panel {
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid #dbe6d4;
+  border-radius: 14px;
+  box-shadow: 0 12px 30px rgba(31, 41, 34, 0.06);
+}
+
+.progress-panel {
+  padding: 18px;
+}
+
+.progress-head,
+.panel-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  color: #607063;
+  font-size: 13px;
+}
+
+.progress-bar {
+  height: 10px;
+  margin: 16px 0 18px;
+  overflow: hidden;
+  background: #edf3e1;
+  border-radius: 999px;
+}
+
+.progress-fill {
+  height: 100%;
+  min-width: 8px;
+  background: linear-gradient(90deg, #78a881, #d6b85f);
+  border-radius: inherit;
+  transition: width 0.24s ease;
+}
+
+.progress-bar.indeterminate .progress-fill {
+  animation: progress-scan 1.4s ease-in-out infinite alternate;
+}
+
+@keyframes progress-scan {
+  from { transform: translateX(-38%); }
+  to { transform: translateX(188%); }
+}
+
+.progress-counters {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.progress-counters div {
+  padding: 14px;
+  background: #fbfcf4;
+  border: 1px solid #edf3e1;
+  border-radius: 12px;
+}
+
+.progress-counters strong {
+  display: block;
+  color: #1f2922;
+  font-size: 28px;
+  line-height: 1;
+}
+
+.progress-counters span {
+  display: block;
+  margin-top: 7px;
+  color: #607063;
+  font-size: 12px;
+}
+
+.error-panel {
+  margin-top: 14px;
+  padding: 16px;
+  color: #8e4e4b;
+  background: #fff5f3;
+  border-color: #f0cbc5;
+}
+
+.error-panel p {
+  margin: 6px 0 0;
+}
+
+.event-panel {
+  margin-top: 14px;
+  padding: 18px;
+}
+
+.panel-head h2 {
+  margin: 0;
+  color: #303b33;
+  font-size: 16px;
+}
+
+.event-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.event-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(120px, 0.7fr) minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  padding: 10px 12px;
+  color: #303b33;
+  background: #fbfcf4;
+  border: 1px solid #edf3e1;
+  border-radius: 10px;
+  font-size: 13px;
+}
+
+.event-row.reject {
+  background: #fff9ec;
+  border-color: #f1e8c8;
+}
+
+.event-row.fail {
+  background: #fff5f3;
+  border-color: #f0cbc5;
+}
+
+.event-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.event-verdict {
+  color: #477453;
+  font-weight: 700;
+}
+
+.event-row.reject .event-verdict {
+  color: #a27930;
+}
+
+.event-row.fail .event-verdict {
+  color: #8e4e4b;
+}
+
+.event-reason,
+.empty-events {
+  color: #607063;
+}
+
+.empty-events {
+  margin: 14px 0 0;
+}
+
 @media (max-width: 760px) {
   .app-shell {
     width: min(100% - 28px, 1040px);
@@ -395,7 +601,9 @@ input:disabled {
   }
 
   .topbar,
-  .top-actions {
+  .top-actions,
+  .processing-topbar,
+  .processing-actions {
     align-items: flex-start;
     flex-direction: column;
   }
@@ -405,7 +613,9 @@ input:disabled {
   }
 
   .engine-switch,
-  .snap-row {
+  .snap-row,
+  .progress-counters,
+  .event-row {
     grid-template-columns: 1fr;
   }
 

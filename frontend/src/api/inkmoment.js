@@ -17,3 +17,13 @@ export function startJob(payload) {
     body: payload,
   });
 }
+
+export function getJob(since = 0) {
+  return fetchJSON(`/api/job?since=${encodeURIComponent(String(since))}`);
+}
+
+export function cancelJob() {
+  return fetchJSON("/api/cancel_job", {
+    method: "POST",
+  });
+}

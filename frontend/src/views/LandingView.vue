@@ -9,6 +9,8 @@ import { useBranding } from "../composables/useBranding";
 import { useFolderPeek } from "../composables/useFolderPeek";
 import { useTheme } from "../composables/useTheme";
 
+const emit = defineEmits(["job-started"]);
+
 const { branding, loadingBranding } = useBranding();
 const { themes, selectedTheme, theme } = useTheme();
 
@@ -65,6 +67,7 @@ async function handleStart() {
     };
     await startJob(payload);
     lastStartPayload.value = payload;
+    emit("job-started", payload);
   } catch (error) {
     startError.value = error.message || "启动失败";
   } finally {
