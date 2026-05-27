@@ -329,10 +329,6 @@ def setup_logger(folder: Optional[str]) -> None:
 # 文件名：<folder>/_inkmoment/jobs/<YYYYMMDD-HHMMSS>-<engine>.log
 # 路径暴露给 UI 让用户能在 done 页面下载这个文件。
 
-JOB_LOG: Optional["JobLogger"] = None
-_JOB_LOG_LOCK = threading.Lock()
-
-
 class JobLogger:
     """一次任务一个日志文件。线程安全。"""
 
@@ -460,34 +456,60 @@ class JobLogger:
                 pass
 
 
+def _new_grouping_state() -> dict:
+    return {
+        "status": "idle",     # idle | running | done | error
+        "groups": [],         # 逐个追加的组信息 [{id, size, samples, ...}]
+        "all_paths": [],      # 全部照片路径（strip 用）
+        "total": 0,
+        "multi": 0,
+        "error": None,
+    }
+
+
+@dataclass
+class AppRuntime:
+    """Mutable process state for the local Flask runtime."""
+
+    session: Optional[SessionState] = None
+    job: Optional[JobState] = None
+    job_log: Optional["JobLogger"] = None
+    last_infos: Optional[list[ImageInfo]] = None
+    watermark_job: Optional[WatermarkJobState] = None
+    grouping: dict = field(default_factory=_new_grouping_state)
+    lock: object = field(default_factory=threading.Lock)
+    job_log_lock: object = field(default_factory=threading.Lock)
+
+
+RUNTIME = AppRuntime()
+
+
 def _open_job_log(folder: str, engine: str, llm_model: Optional[str]) -> Optional[JobLogger]:
     """开启一次任务的专属日志。失败不致命。"""
-    global JOB_LOG
-    with _JOB_LOG_LOCK:
+    with RUNTIME.job_log_lock:
         # 关掉上一次（如果还在）
-        if JOB_LOG is not None:
+        if RUNTIME.job_log is not None:
             try:
-                JOB_LOG.close()
+                RUNTIME.job_log.close()
             except Exception:
                 pass
-            JOB_LOG = None
+            RUNTIME.job_log = None
         try:
-            JOB_LOG = JobLogger(folder, engine, llm_model)
-            return JOB_LOG
+            RUNTIME.job_log = JobLogger(folder, engine, llm_model)
+            return RUNTIME.job_log
         except Exception as e:
             logger.warning(f"per-job log 初始化失败: {e}")
             return None
 
 
 def _close_job_log() -> None:
-    global JOB_LOG
-    with _JOB_LOG_LOCK:
-        if JOB_LOG is not None:
+    with RUNTIME.job_log_lock:
+        if RUNTIME.job_log is not None:
             try:
-                JOB_LOG.close()
+                RUNTIME.job_log.close()
             except Exception:
                 pass
-            JOB_LOG = None
+            RUNTIME.job_log = None
 
 
 # ---------------- State 持久化 + 迁移 ----------------
@@ -797,9 +819,9 @@ def _prescreen_rejections(infos: list[ImageInfo]) -> tuple[list[str], dict[str, 
 
 
 def _infos_from_memory_or_cache(folder: str) -> list[ImageInfo]:
-    if LAST_INFOS:
-        return LAST_INFOS
-    # 缓存已禁用：LAST_INFOS 没有就空列表（用户需要重新 /api/start）
+    if RUNTIME.last_infos:
+        return RUNTIME.last_infos
+    # 缓存已禁用：runtime.last_infos 没有就空列表（用户需要重新 /api/start）
     return []
 
 
@@ -1407,43 +1429,24 @@ def reopen_group(group: GroupState, folder: str, mode: str,
 
 
 def _clear_session_state() -> None:
-    global SESSION, LAST_INFOS
-    with LOCK:
-        SESSION = None
-        LAST_INFOS = None
+    with RUNTIME.lock:
+        RUNTIME.session = None
+        RUNTIME.last_infos = None
 
 
 def _set_session_state(session: SessionState, infos: Optional[list[ImageInfo]] = None) -> None:
-    global SESSION, LAST_INFOS
-    with LOCK:
-        SESSION = session
+    with RUNTIME.lock:
+        RUNTIME.session = session
         if infos is not None:
-            LAST_INFOS = infos
-
-
-SESSION: Optional[SessionState] = None
-JOB: Optional[JobState] = None
-LOCK = threading.Lock()
-# Phase 4 预览阶段保留的 infos（任务完成后可重新分组而不重哈希）
-LAST_INFOS: Optional[list[ImageInfo]] = None
-
-# 异步分组进度（confirm_prescreen 启动后台线程，前端轮询进度）
-_GROUPING: dict = {
-    "status": "idle",     # idle | running | done | error
-    "groups": [],         # 逐个追加的组信息 [{id, size, samples, ...}]
-    "all_paths": [],      # 全部照片路径（strip 用）
-    "total": 0,
-    "multi": 0,
-    "error": None,
-}
+            RUNTIME.last_infos = infos
 
 
 def _serialize_group(g: GroupState, idx: int) -> dict:
-    return serialize_group(SESSION, g, idx)
+    return serialize_group(RUNTIME.session, g, idx)
 
 
 def _job_event(name: str, path: str, info, reason) -> None:
-    """每过一张图 grouper 调一次：把简要事件塞进 JOB.recent_events 给前端流式 log。
+    """每过一张图 grouper 调一次：把简要事件塞进 runtime.job.recent_events 给前端流式 log。
 
     事件 schema：
         {
@@ -1457,13 +1460,14 @@ def _job_event(name: str, path: str, info, reason) -> None:
     expert 信号列：dino / 美学三联 (NIMA·MUSIQ·CLIP) / face
     tycoon 信号列：dino / LLM 判定·理由 / face
     """
-    if JOB is None:
+    job = RUNTIME.job
+    if job is None:
         return
     q = (info.quality if info is not None else None) or {}
     auto_reject = bool(q.get("auto_reject"))
     rej_reason = q.get("reject_reason") if auto_reject else None
     exif = (info.exif_summary if info is not None else None) or {}
-    engine = JOB.engine
+    engine = job.engine
 
     if info is None:
         signals = [
@@ -1531,9 +1535,9 @@ def _job_event(name: str, path: str, info, reason) -> None:
     else:
         verdict = "通过"
 
-    JOB.event_seq += 1
+    job.event_seq += 1
     item = {
-        "seq": JOB.event_seq,
+        "seq": job.event_seq,
         "name": name,
         "path": path,
         "engine": engine,
@@ -1546,9 +1550,9 @@ def _job_event(name: str, path: str, info, reason) -> None:
         "signals": signals,
         "verdict": verdict,
     }
-    JOB.recent_events.append(item)
-    if len(JOB.recent_events) > 60:
-        JOB.recent_events = JOB.recent_events[-60:]
+    job.recent_events.append(item)
+    if len(job.recent_events) > 60:
+        job.recent_events = job.recent_events[-60:]
 
     # 详细 per-image 日志，写入 log.txt 用于复盘分析
     if info is None:
@@ -1594,8 +1598,8 @@ def _job_event(name: str, path: str, info, reason) -> None:
         )
 
     # 也写到 per-job log（如果开了）
-    if JOB_LOG is not None:
-        JOB_LOG.log_image(
+    if RUNTIME.job_log is not None:
+        RUNTIME.job_log.log_image(
             name=name,
             engine=engine,
             ok=(info is not None) and (not auto_reject),
@@ -1614,15 +1618,16 @@ def _job_event(name: str, path: str, info, reason) -> None:
 
 
 def _job_progress(done: int, total: int, label: str) -> None:
-    if JOB is None:
+    job = RUNTIME.job
+    if job is None:
         return
-    JOB.done = done
-    JOB.total = total
-    JOB.label = label
+    job.done = done
+    job.total = total
+    job.label = label
 
 
 def _cancel_check() -> bool:
-    return JOB is not None and JOB.cancel_requested
+    return RUNTIME.job is not None and RUNTIME.job.cancel_requested
 
 
 def _record_skipped(folder: str, items: list[tuple[str, str]]) -> None:
@@ -1743,11 +1748,10 @@ def _run_job(folder: str, dry_run: bool, mode: str, wipe_cache: bool,
              prescreen_enabled: bool, prescreen_strength: str,
              face_aware: bool = True, engine: str = "fast",
              llm_model: Optional[str] = None) -> None:
-    global SESSION, LAST_INFOS
-    job = JOB
+    job = RUNTIME.job
     assert job is not None
     # 一次性运行：每次 start 都清掉旧的 state.json / winners / losers / 缩略图盘缓存。
-    LAST_INFOS = None
+    RUNTIME.last_infos = None
     config = JobRunConfig(
         folder=folder,
         dry_run=dry_run,
@@ -1803,7 +1807,6 @@ def _run_job(folder: str, dry_run: bool, mode: str, wipe_cache: bool,
 
 
 def _start_job_payload(data: dict) -> tuple[dict, int]:
-    global JOB, SESSION
     start_request, error_payload, error_status = parse_start_request(
         data,
         {
@@ -1815,15 +1818,15 @@ def _start_job_payload(data: dict) -> tuple[dict, int]:
     if start_request is None:
         return error_payload, error_status
 
-    with LOCK:
-        error_payload, error_status = active_job_error(JOB)
+    with RUNTIME.lock:
+        error_payload, error_status = active_job_error(RUNTIME.job)
         if error_payload is not None:
             return error_payload, error_status
 
         # 一次性运行：始终全新开始，不读旧 state，不复用缓存。
         # 旧的 state.json / winners / losers 由 _run_job 里的 _wipe_caches 清掉。
-        JOB = build_pending_job(JobState, start_request)
-        SESSION = None
+        RUNTIME.job = build_pending_job(JobState, start_request)
+        RUNTIME.session = None
 
     t = threading.Thread(
         target=_run_job,
@@ -1835,12 +1838,11 @@ def _start_job_payload(data: dict) -> tuple[dict, int]:
 
 
 def _run_grouping_async(accepted_infos, old_session_snapshot):
-    """后台线程：运行分组 → 逐个推送到 _GROUPING → 构建 session。
+    """后台线程：运行分组 → 逐个推送到 runtime.grouping → 构建 session。
 
-    所有 session 数据从 old_session_snapshot 读取，不依赖全局 SESSION
-    （分组期间用户可能已启动新任务，SESSION 可能被置 None 或替换）。
+    所有 session 数据从 old_session_snapshot 读取，不依赖 runtime.session
+    （分组期间用户可能已启动新任务，runtime.session 可能被置 None 或替换）。
     """
-    global SESSION
     snap = old_session_snapshot
     try:
         raw_groups = group_infos(
@@ -1851,7 +1853,7 @@ def _run_grouping_async(accepted_infos, old_session_snapshot):
             engine=snap["engine"],
         )
 
-        with LOCK:
+        with RUNTIME.lock:
             new_session = build_session_from_groups(
                 snap["folder"],
                 snap["dry_run"],
@@ -1887,7 +1889,7 @@ def _run_grouping_async(accepted_infos, old_session_snapshot):
             new_session.prescreen_reviewed = True
             apply_pending_groups(new_session)
             save_state(new_session)
-            SESSION = new_session
+            RUNTIME.session = new_session
 
         multi_groups = [g for g in new_session.groups if len(g.images) > 1]
         multi_groups.sort(key=lambda g: group_earliest_dt(new_session, g) or "9999")
@@ -1897,7 +1899,7 @@ def _run_grouping_async(accepted_infos, old_session_snapshot):
             if best and best in ordered:
                 ordered.remove(best)
                 ordered.insert(0, best)
-            _GROUPING["groups"].append({
+            RUNTIME.grouping["groups"].append({
                 "id": g.id,
                 "size": len(g.images),
                 "samples": ordered[:4],
@@ -1905,57 +1907,60 @@ def _run_grouping_async(accepted_infos, old_session_snapshot):
             })
             time.sleep(0.05)
 
-        _GROUPING["total"] = len(new_session.groups)
-        _GROUPING["multi"] = len(multi_groups)
-        _GROUPING["status"] = "done"
+        RUNTIME.grouping["total"] = len(new_session.groups)
+        RUNTIME.grouping["multi"] = len(multi_groups)
+        RUNTIME.grouping["status"] = "done"
     except Exception as e:
         logger.error(f"异步分组失败: {e}", exc_info=True)
-        _GROUPING["error"] = str(e)
-        _GROUPING["status"] = "error"
+        RUNTIME.grouping["error"] = str(e)
+        RUNTIME.grouping["status"] = "error"
 
 
 def _confirm_prescreen_payload() -> tuple[dict, int]:
-    global SESSION
-    if SESSION is None:
+    session = RUNTIME.session
+    if session is None:
         return {"error": "no session"}, 400
-    with LOCK:
-        if SESSION.groups:
-            SESSION.prescreen_reviewed = True
-            save_state(SESSION)
+    with RUNTIME.lock:
+        session = RUNTIME.session
+        if session is None:
+            return {"error": "no session"}, 400
+        if session.groups:
+            session.prescreen_reviewed = True
+            save_state(session)
             return {"ok": True, "async": False}, 200
 
-        infos = _infos_from_memory_or_cache(SESSION.folder)
+        infos = _infos_from_memory_or_cache(session.folder)
         if not infos:
             return {"error": "缓存丢失，请重新开始"}, 400
-        restored = set(SESSION.prescreen_restored)
-        rejected = set(SESSION.prescreen_rejected)
+        restored = set(session.prescreen_restored)
+        rejected = set(session.prescreen_rejected)
         accepted_infos = [
             info for info in infos
             if info.path not in rejected or info.path in restored
         ]
         all_paths = [info.path for info in accepted_infos]
 
-        _GROUPING["status"] = "running"
-        _GROUPING["groups"] = []
-        _GROUPING["all_paths"] = all_paths
-        _GROUPING["total"] = 0
-        _GROUPING["multi"] = 0
-        _GROUPING["error"] = None
+        RUNTIME.grouping["status"] = "running"
+        RUNTIME.grouping["groups"] = []
+        RUNTIME.grouping["all_paths"] = all_paths
+        RUNTIME.grouping["total"] = 0
+        RUNTIME.grouping["multi"] = 0
+        RUNTIME.grouping["error"] = None
 
         snapshot = {
-            "threshold_near": SESSION.threshold_near,
-            "threshold_far": SESSION.threshold_far,
-            "near_seconds": SESSION.near_seconds,
-            "engine": SESSION.engine,
-            "folder": SESSION.folder,
-            "dry_run": SESSION.dry_run,
-            "mode": SESSION.mode,
-            "prescreen_enabled": SESSION.prescreen_enabled,
-            "prescreen_strength": SESSION.prescreen_strength,
-            "prescreen_rejected": list(SESSION.prescreen_rejected),
-            "prescreen_reject_reasons": dict(SESSION.prescreen_reject_reasons),
-            "prescreen_restored": list(SESSION.prescreen_restored),
-            "meta": dict(SESSION.meta),
+            "threshold_near": session.threshold_near,
+            "threshold_far": session.threshold_far,
+            "near_seconds": session.near_seconds,
+            "engine": session.engine,
+            "folder": session.folder,
+            "dry_run": session.dry_run,
+            "mode": session.mode,
+            "prescreen_enabled": session.prescreen_enabled,
+            "prescreen_strength": session.prescreen_strength,
+            "prescreen_rejected": list(session.prescreen_rejected),
+            "prescreen_reject_reasons": dict(session.prescreen_reject_reasons),
+            "prescreen_restored": list(session.prescreen_restored),
+            "meta": dict(session.meta),
         }
 
     t = threading.Thread(
@@ -1967,16 +1972,8 @@ def _confirm_prescreen_payload() -> tuple[dict, int]:
     return {"ok": True, "async": True, "all_paths": all_paths}, 200
 
 
-# ============================================================
-# 水印导出：给选出的 winners 加相机水印
-# ============================================================
-
-WATERMARK_JOB: Optional[WatermarkJobState] = None
-
-
 def _set_watermark_job(job: WatermarkJobState) -> None:
-    global WATERMARK_JOB
-    WATERMARK_JOB = job
+    RUNTIME.watermark_job = job
 
 
 # ---------------- Flask app factory ----------------
@@ -2054,21 +2051,21 @@ def create_app() -> Flask:
         return send_from_directory(flask_app.static_folder, "index.html")
 
     flask_app.register_blueprint(create_folder_blueprint(
-        lambda: SESSION,
+        lambda: RUNTIME.session,
         pic_dir,
         skipped_log_path,
     ))
     flask_app.register_blueprint(create_job_blueprint(
-        lambda: JOB,
-        lambda: JOB_LOG,
-        lambda: SESSION,
+        lambda: RUNTIME.job,
+        lambda: RUNTIME.job_log,
+        lambda: RUNTIME.session,
         lambda folder: pic_dir(folder) / "jobs",
     ))
     flask_app.register_blueprint(create_grouping_blueprint(
-        lambda: SESSION,
+        lambda: RUNTIME.session,
         _set_session_state,
-        lambda: LAST_INFOS,
-        lambda: _GROUPING,
+        lambda: RUNTIME.last_infos,
+        lambda: RUNTIME.grouping,
         group_infos,
         build_session_from_groups,
         {
@@ -2079,17 +2076,17 @@ def create_app() -> Flask:
         lambda: _confirm_prescreen_payload(),
     ))
     flask_app.register_blueprint(create_image_blueprint(
-        lambda: SESSION.folder if SESSION is not None else None,
+        lambda: RUNTIME.session.folder if RUNTIME.session is not None else None,
     ))
     flask_app.register_blueprint(llm_bp)
     flask_app.register_blueprint(create_results_blueprint(
-        lambda: SESSION,
+        lambda: RUNTIME.session,
         winners_dir,
         losers_dir,
         lambda data: restore_rejected_payload(
             data,
-            lambda: SESSION,
-            LOCK,
+            lambda: RUNTIME.session,
+            RUNTIME.lock,
             winners_dir,
             losers_dir,
             _unique_target,
@@ -2098,10 +2095,10 @@ def create_app() -> Flask:
         ),
     ))
     flask_app.register_blueprint(create_session_blueprint(
-        lambda: SESSION,
+        lambda: RUNTIME.session,
         _clear_session_state,
-        lambda: JOB,
-        lambda: JOB_LOG,
+        lambda: RUNTIME.job,
+        lambda: RUNTIME.job_log,
         _infos_from_memory_or_cache,
     ))
     flask_app.register_blueprint(system_bp)
@@ -2110,22 +2107,22 @@ def create_app() -> Flask:
     ))
     flask_app.register_blueprint(create_watermark_blueprint(
         watermark_templates_payload,
-        lambda data: watermark_preview_payload(data, SESSION, winners_dir, logger),
+        lambda data: watermark_preview_payload(data, RUNTIME.session, winners_dir, logger),
         lambda data: watermark_start_payload(
             data,
-            SESSION,
-            WATERMARK_JOB,
+            RUNTIME.session,
+            RUNTIME.watermark_job,
             _set_watermark_job,
             winners_dir,
             logger,
         ),
-        lambda: watermark_status_payload(WATERMARK_JOB),
-        lambda: watermark_cancel_payload(WATERMARK_JOB),
-        lambda: watermark_open_out_dir_payload(WATERMARK_JOB),
+        lambda: watermark_status_payload(RUNTIME.watermark_job),
+        lambda: watermark_cancel_payload(RUNTIME.watermark_job),
+        lambda: watermark_open_out_dir_payload(RUNTIME.watermark_job),
     ))
     selection_handlers = create_selection_handlers(
-        get_session=lambda: SESSION,
-        lock=LOCK,
+        get_session=lambda: RUNTIME.session,
+        lock=RUNTIME.lock,
         serialize_group_callback=_serialize_group,
         group_from_dict=_group_from_dict,
         apply_group_callback=apply_group,

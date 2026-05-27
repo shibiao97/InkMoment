@@ -96,29 +96,30 @@ server/
 - 已迁移原生文件夹选择、轻量目录快照、无法读取日志查询和打开当前会话目录到 `server.services.folder_service`。
 - 已迁移任务状态路由 `server.routes.job`，覆盖 `/api/job`、`/api/cancel_job` 与 `/api/job_log`。
 - 已迁移任务启动路由 `server.routes.start`，覆盖 `/api/start`。
-- 已迁移 `/api/start` 请求解析、默认值归一、参数校验和 pending `JobState` 构造到 `server.services.start_service`；后台线程 `_run_job`、`SESSION`、`JOB`、`LAST_INFOS` 和任务日志写入暂留 `app.py`。
+- 已迁移 `/api/start` 请求解析、默认值归一、参数校验和 pending `JobState` 构造到 `server.services.start_service`；后台线程 `_run_job` 与运行态装配暂留 `app.py`。
 - 已迁移 `_run_job` 的状态生命周期变更到 `server.services.job_runner_service`，覆盖 checking、hashing、prescreen done、grouping、done、cancelled 与 error 状态。
 - 已迁移 `_run_job` 的图片扫描阶段到 `server.services.job_runner_service.run_info_scan`，封装 `compute_infos` 调用、扫描阶段标签、取消检查和 skipped 写入。
 - 已迁移 `_run_job` 的初筛结果准备到 `server.services.job_runner_service.prepare_prescreen_result`，封装自动淘汰统计、初筛日志汇总和 prescreen session 构建。
 - 已迁移 `_run_job` 的非初筛分组结果准备到 `server.services.job_runner_service.prepare_grouping_result`，封装分组、session 构建、prescreen reviewed 标记和状态保存。
 - 已迁移 `_run_job` 的 per-job 日志 header、CHECK event 和 footer 写入到 `server.services.job_runner_service`，`app.py` 只保留 log 文件打开/关闭。
 - 已迁移 `_run_job` 的 runner 资源 setup/teardown 编排到 `server.services.job_runner_service`，封装缓存清理、logger 初始化和 job log 打开/关闭调用顺序。
-- 已收敛 `_run_job` 的 `SESSION`/`LAST_INFOS` 发布到 `_set_session_state(session, infos)`，保持锁内写入一致。
+- 已收敛 `_run_job` 的 session/infos 发布到 `_set_session_state(session, infos)`，保持锁内写入一致。
 - 已抽取 `_run_job` 的运行配置、回调集合和主执行流程到 `server.services.job_runner_service`，`app.py` 仅负责构造 `JobRunConfig`、注入全局状态回调并处理异常收口。
 - 已迁移模型服务配置路由 `server.routes.llm`，覆盖 `/api/ark_key`、`/api/llm_models`、`/api/llm_concurrency` 与 `/api/diagnostics`。
 - 已迁移模型服务配置读写、base URL 归一化、Key 脱敏、模型列表探测、环境诊断和启动期配置加载到 `server.services.llm_service`。
 - 已迁移会话状态路由 `server.routes.session`，覆盖 `/api/status` 与 `/api/reset_session`。
-- 已迁移会话状态汇总和回首页重置逻辑到 `server.services.session_service`；`SESSION` 和 `LAST_INFOS` 仍由 `app.py` 持有并通过回调注入。
+- 已迁移会话状态汇总和回首页重置逻辑到 `server.services.session_service`；session 和 last infos 仍由 `app.py` runtime 持有并通过回调注入。
 - 已迁移分组路由 `server.routes.grouping`，覆盖 `/api/grouping_progress`、`/api/regroup`、`/api/preview_groups` 与 `/api/confirm_prescreen`。
 - 已迁移分组进度响应、重新分组和预览组序列化到 `server.services.grouping_service`，预览组复用 `server.services.selection_service` 的质量候选/时间排序 helper；`/api/confirm_prescreen` 的异步线程启动逻辑暂留 `app.py` 并通过回调注入。
 - 已迁移结果路由 `server.routes.results`，覆盖 `/api/winners`、`/api/auto_rejected` 与 `/api/restore_rejected`。
-- 已迁移胜出照片列表、自动放手照片列表序列化和 `/api/restore_rejected` 的文件搬运/状态回写逻辑到 `server.services.result_service`；`SESSION`、锁、目录工厂和状态保存仍由 `app.py` 回调注入。
+- 已迁移胜出照片列表、自动放手照片列表序列化和 `/api/restore_rejected` 的文件搬运/状态回写逻辑到 `server.services.result_service`；session、锁、目录工厂和状态保存仍由 `app.py` runtime 回调注入。
 - 已迁移图片读取路由 `server.routes.image`，覆盖 `/api/image` 与 `/api/image_original`。
 - 已迁移缩略图/原图响应、RAW 内嵌预览读取、占位图响应、路径安全校验和图片缓存头到 `server.services.image_service`。
 - 已迁移选片路由 `server.routes.selection`，覆盖 `/api/group`、`/api/choose`、`/api/kick`、`/api/undo`、`/api/skip_group` 与 `/api/reopen_group`；路由层仅负责 request/jsonify，业务 handler 由 `server.services.selection_service.create_selection_handlers` 组装。
 - 已迁移当前选片组读取入口、组响应序列化、跳过已完成组 helper、派发前坏图预检编排、解码可用性判断、擂台状态推进 helper、undo 快照记录、用户偏好统计、完成组落盘/应用编排、`/api/choose` 擂台选择推进、`/api/kick` 单侧淘汰、`/api/skip_group` 状态变更、`/api/undo` 快照恢复和 `/api/reopen_group` 跨组反悔编排到 `server.services.selection_service`；skipped 记录和底层文件应用/还原 helper 暂留 `app.py` 并通过回调注入。
 - 已迁移水印路由 `server.routes.watermark`，覆盖 `/api/watermark/templates`、`/api/watermark/preview`、`/api/watermark/start`、`/api/watermark/status`、`/api/watermark/cancel` 与 `/api/watermark/open_out_dir`。
-- 已迁移水印预览、批量导出、状态查询、取消和打开输出目录的 payload/state 编排到 `server.services.watermark_service`；`app.py` 仅持有 `WATERMARK_JOB` 并注入当前 `SESSION`、输出目录和 logger。
+- 已迁移水印预览、批量导出、状态查询、取消和打开输出目录的 payload/state 编排到 `server.services.watermark_service`；`app.py` 通过 `AppRuntime` 注入当前 session、watermark job、输出目录和 logger。
+- 已新增 `AppRuntime` 容器，收敛 session、job、job log、last infos、watermark job、grouping progress 和相关锁，为 sidecar 生命周期管理预留明确状态边界。
 - `app.py` 直接路由已收敛到 `/`；仍保留全局状态、后台任务线程和部分业务 helper，后续重点是继续下沉选片/结果恢复等状态机。
 
 ### Phase 4: Tauri 桌面壳
@@ -152,7 +153,7 @@ server/
 Task:
 
 - [x] 增加 `create_app()` 工厂，集中注册 Flask hook 与 blueprint。
-- [ ] 把 `SESSION`、`JOB`、`LAST_INFOS`、`WATERMARK_JOB` 等全局运行态收敛成显式 runtime 容器。
+- [x] 把 `SESSION`、`JOB`、`LAST_INFOS`、`WATERMARK_JOB` 等全局运行态收敛成显式 runtime 容器。
 - [ ] 把 `_run_grouping_async` 和 confirm prescreen 后续状态机下沉到 service。
 - [ ] 给 sidecar 增加健康检查接口或启动探活约定。
 - [ ] 增加面向 sidecar 的启动参数：动态端口、禁用浏览器、结构化启动日志。
