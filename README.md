@@ -89,6 +89,26 @@ python app.py --port 8080 --no-browser
 > pip install --force-reinstall --no-deps "opencv-contrib-python>=4.9"
 > ```
 
+### 前端迁移开发（Vue 3 + Vite）
+
+项目正在向桌面级应用演进，新的 Vue 前端骨架位于 `frontend/`。当前它不会替换现有 `static/index.html`，只作为后续组件化迁移入口。
+
+```bash
+# 安装前端依赖
+npm install
+
+# 终端 1：启动 Flask API
+python app.py --no-browser
+
+# 终端 2：启动 Vue dev server（/api 会代理到 127.0.0.1:5057）
+npm run frontend:dev
+
+# 构建 Vue 前端到 static/vue/
+npm run frontend:build
+```
+
+桌面化路线见 `DESKTOP_ROADMAP.md`。
+
 ---
 
 ## 选片工作流

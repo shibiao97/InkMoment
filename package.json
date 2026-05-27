@@ -1,0 +1,12 @@
+{
+  "name": "inkmoment",
+  "private": true,
+  "workspaces": [
+    "frontend"
+  ],
+  "scripts": {
+    "frontend:dev": "npm --workspace frontend run dev",
+    "frontend:build": "npm --workspace frontend run build",
+    "frontend:preview": "npm --workspace frontend run preview"
+  }
+}
