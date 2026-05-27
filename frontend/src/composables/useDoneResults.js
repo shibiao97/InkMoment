@@ -1,5 +1,5 @@
 import { computed, ref } from "vue";
-import { getSkipped, getStatus, getWinners, openFolder } from "../api/inkmoment";
+import { getSkipped, getStatus, getWinners, openFolder, reopenGroup } from "../api/inkmoment";
 
 function groupBySize(winners) {
   const buckets = new Map();
@@ -17,6 +17,7 @@ export function useDoneResults() {
   const skipped = ref([]);
   const loading = ref(false);
   const opening = ref(false);
+  const reopeningGroupId = ref("");
   const error = ref("");
 
   const total = computed(() => {
@@ -51,7 +52,7 @@ export function useDoneResults() {
 
   const statusState = computed(() => {
     if (error.value) return "error";
-    if (loading.value || opening.value) return "busy";
+    if (loading.value || opening.value || reopeningGroupId.value) return "busy";
     return "done";
   });
 
@@ -88,6 +89,21 @@ export function useDoneResults() {
     }
   }
 
+  async function reopenWinnerGroup(groupId) {
+    if (!groupId) return false;
+    reopeningGroupId.value = groupId;
+    error.value = "";
+    try {
+      await reopenGroup(groupId);
+      return true;
+    } catch (err) {
+      error.value = err.message || "重新打开该组失败";
+      return false;
+    } finally {
+      reopeningGroupId.value = "";
+    }
+  }
+
   return {
     status,
     winners,
@@ -102,8 +118,10 @@ export function useDoneResults() {
     statusState,
     loading,
     opening,
+    reopeningGroupId,
     error,
     load,
     openOutputFolder,
+    reopenWinnerGroup,
   };
 }

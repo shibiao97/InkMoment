@@ -52,11 +52,11 @@
 - 已新增 `PrescreenView` 和 `usePrescreenReview()`，接入 `/api/auto_rejected`、`/api/restore_rejected`、`/api/confirm_prescreen` 与 `/api/grouping_progress`，支持查看自动放手照片、按原因筛选、单张/全部恢复、确认后轮询异步分组状态。
 - 已新增 `PreviewView` 和 `usePreviewGroups()`，接入 `/api/preview_groups` 与 `/api/regroup`，支持按拍摄时间章节查看连拍分组、标记 AI 候选、调整阈值后重新分组。
 - 已新增 `ArenaView` 和 `useArenaGroup()`，接入 `/api/group`、`/api/choose`、`/api/skip_group` 与 `/api/undo`，支持双图选择、都留/都放手、跳过本组、撤销、快捷键、缩放查看和组内缩略条。
-- 已新增 `DoneView` 和 `useDoneResults()`，接入 `/api/status`、`/api/winners`、`/api/skipped` 与 `/api/open_folder`，支持基础结果统计、胜出照片网格、输出目录路径和无法读取列表。
+- 已新增 `DoneView` 和 `useDoneResults()`，接入 `/api/status`、`/api/winners`、`/api/skipped`、`/api/open_folder` 与 `/api/reopen_group`，支持基础结果统计、胜出照片网格、输出目录路径、无法读取列表和跨组反悔重选入口。
 - 已新增 `useWatermarkExport()` 并在 Vue 完成页接入 `/api/watermark/*`，支持水印模板、预览、EXIF 展示、批量导出、状态轮询、中止和打开水印输出目录。
 - Vue 开发联调需要通过 `INKMOMENT_DEV_ORIGINS=http://127.0.0.1:5173` 显式允许 Vite 开发源访问 Flask API。
 - 土豪模式的模型服务地址/API Key 管理已迁移到 Vue 首页，接入 `/api/ark_key`、`/api/llm_models`、`/api/llm_concurrency` 与 `/api/diagnostics`，可保存配置、刷新模型并选择视觉模型启动任务。
-- ProcessingView 目前是基础进度页，PrescreenView 是基础复核页，PreviewView 是基础分组预览页，ArenaView 已覆盖常用双图选片、快捷键和缩放查看，DoneView 已覆盖基础完成结果与水印导出；照片墙动画、重做流程、单图组处理细节和跨组反悔入口仍需继续迁移。
+- ProcessingView 目前是基础进度页，PrescreenView 是基础复核页，PreviewView 是基础分组预览页，ArenaView 已覆盖常用双图选片、快捷键和缩放查看，DoneView 已覆盖基础完成结果、水印导出和跨组反悔入口；照片墙动画、重做流程和单图组处理细节仍需继续迁移。
 
 ### Phase 3: Flask 后端模块化
 
@@ -195,7 +195,7 @@ Task:
 Task:
 
 - [x] 迁移土豪模式配置 UI，接入 `/api/ark_key`、`/api/llm_models`、`/api/llm_concurrency` 与 `/api/diagnostics`。
-- [ ] 补齐 ArenaView 高级交互：快捷键与缩放查看已完成；继续补单图组处理和跨组反悔入口。
+- [ ] 补齐 ArenaView 高级交互：快捷键、缩放查看和跨组反悔入口已完成；继续补单图组处理细节。
 - [x] 迁移水印导出流程，接入 `/api/watermark/*`。
 - [ ] 统一长任务 loading、错误提示、取消和回首页重置。
 
@@ -246,7 +246,7 @@ Task:
 建议顺序：
 
 1. 迁移土豪模式的模型服务配置 UI，接入现有 `/api/ark_key`、`/api/llm_models`、`/api/llm_concurrency` 与 `/api/diagnostics`。
-2. 补齐 ArenaView 的高级交互：快捷键提示和缩放查看已完成；继续补单图组处理、跨组反悔入口。
+2. 补齐 ArenaView 的高级交互：快捷键提示、缩放查看和跨组反悔入口已完成；继续补单图组处理细节。
 3. 迁移水印结果流程，接入 `/api/watermark/*`。已完成基础模板选择、预览、导出、轮询和打开目录。
 4. 统一错误提示、任务取消、回首页重置和长任务 loading 状态。
 

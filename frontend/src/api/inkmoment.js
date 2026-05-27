@@ -87,6 +87,13 @@ export function undoGroup() {
   });
 }
 
+export function reopenGroup(groupId) {
+  return fetchJSON("/api/reopen_group", {
+    method: "POST",
+    body: { group_id: groupId },
+  });
+}
+
 export function getWinners() {
   return fetchJSON("/api/winners");
 }

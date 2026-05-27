@@ -22,9 +22,11 @@ const {
   statusState,
   loading,
   opening,
+  reopeningGroupId,
   error,
   load,
   openOutputFolder,
+  reopenWinnerGroup,
 } = useDoneResults();
 const watermark = useWatermarkExport();
 
@@ -70,6 +72,13 @@ async function loadPage() {
   await load();
   if (canWatermark.value) {
     await watermark.initialize();
+  }
+}
+
+async function reopenGroupFromWinner(groupId) {
+  const reopened = await reopenWinnerGroup(groupId);
+  if (reopened) {
+    emit("continue-arena");
   }
 }
 
@@ -279,6 +288,15 @@ onMounted(loadPage);
           <article v-for="item in section.items" :key="item.path" class="done-card">
             <img :src="imageUrl(item.path, 520)" :alt="item.name" loading="lazy">
             <span>{{ item.group_size > 1 ? `从 ${item.group_size} 张里` : "独张" }}</span>
+            <button
+              v-if="item.group_id && item.group_size > 1"
+              class="done-card-reopen"
+              type="button"
+              :disabled="Boolean(reopeningGroupId)"
+              @click="reopenGroupFromWinner(item.group_id)"
+            >
+              {{ reopeningGroupId === item.group_id ? "打开中" : "重选" }}
+            </button>
           </article>
         </div>
       </div>

@@ -1779,6 +1779,24 @@ input:disabled {
   white-space: nowrap;
 }
 
+.done-card-reopen {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  padding: 6px 9px;
+  color: #1f2922;
+  background: rgba(255, 255, 255, 0.86);
+  border: 1px solid rgba(219, 230, 212, 0.92);
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.done-card-reopen:disabled {
+  cursor: wait;
+  opacity: 0.68;
+}
+
 .done-skipped {
   margin-top: 18px;
   color: #607063;
