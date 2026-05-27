@@ -115,7 +115,7 @@ server/
 - 已迁移胜出照片列表、自动放手照片列表序列化和 `/api/restore_rejected` 的文件搬运/状态回写逻辑到 `server.services.result_service`；`SESSION`、锁、目录工厂和状态保存仍由 `app.py` 回调注入。
 - 已迁移图片读取路由 `server.routes.image`，覆盖 `/api/image` 与 `/api/image_original`。
 - 已迁移缩略图/原图响应、RAW 内嵌预览读取、占位图响应、路径安全校验和图片缓存头到 `server.services.image_service`。
-- 已迁移选片路由 `server.routes.selection`，覆盖 `/api/group`、`/api/choose`、`/api/kick`、`/api/undo`、`/api/skip_group` 与 `/api/reopen_group`。
+- 已迁移选片路由 `server.routes.selection`，覆盖 `/api/group`、`/api/choose`、`/api/kick`、`/api/undo`、`/api/skip_group` 与 `/api/reopen_group`；路由层仅负责 request/jsonify，业务 handler 由 `server.services.selection_service.create_selection_handlers` 组装。
 - 已迁移当前选片组读取入口、组响应序列化、跳过已完成组 helper、派发前坏图预检编排、解码可用性判断、擂台状态推进 helper、undo 快照记录、用户偏好统计、完成组落盘/应用编排、`/api/choose` 擂台选择推进、`/api/kick` 单侧淘汰、`/api/skip_group` 状态变更、`/api/undo` 快照恢复和 `/api/reopen_group` 跨组反悔编排到 `server.services.selection_service`；skipped 记录和底层文件应用/还原 helper 暂留 `app.py` 并通过回调注入。
 - 已迁移水印路由 `server.routes.watermark`，覆盖 `/api/watermark/templates`、`/api/watermark/preview`、`/api/watermark/start`、`/api/watermark/status`、`/api/watermark/cancel` 与 `/api/watermark/open_out_dir`。
 - 已迁移水印预览、批量导出、状态查询、取消和打开输出目录的 payload/state 编排到 `server.services.watermark_service`；`app.py` 仅持有 `WATERMARK_JOB` 并注入当前 `SESSION`、输出目录和 logger。

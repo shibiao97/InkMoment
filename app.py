@@ -59,23 +59,10 @@ from server.services.job_runner_service import (
     write_status_footer,
 )
 from server.services.selection_service import (
-    advance,
-    choose_group_payload,
-    current_group_payload,
-    decode_ok,
-    finalize_current_group,
+    create_selection_handlers,
     group_best_path,
     group_earliest_dt,
-    kick_side,
-    kick_group_payload,
-    push_undo_snapshot,
-    record_preference,
-    reopen_group_payload,
     serialize_group,
-    skip_finished_groups,
-    skip_group_payload,
-    undo_group_payload,
-    validate_current_pair,
 )
 from server.services.start_service import (
     active_job_error,
@@ -1987,100 +1974,18 @@ def _start_job_payload(data: dict) -> tuple[dict, int]:
     return {"ok": True}, 200
 
 
-def _skip_finished_locked() -> None:
-    skip_finished_groups(SESSION)
-
-
-def _validate_current_pair_locked() -> None:
-    validate_current_pair(
-        SESSION,
-        decode_ok,
-        _record_skipped,
-        apply_group,
-        save_state,
-    )
-
-
-def _current_group_payload_locked() -> tuple[dict, int]:
-    return current_group_payload(
-        SESSION,
-        _skip_finished_locked,
-        _validate_current_pair_locked,
-        _serialize_group,
-    )
-
-
-def _push_undo_locked() -> None:
-    push_undo_snapshot(SESSION)
-
-
-def _finalize_group_locked() -> None:
-    finalize_current_group(SESSION, apply_group, save_state, logger.warning)
-
-
-def _record_preference(left_path: Optional[str], right_path: Optional[str],
-                        loser_side: str) -> None:
-    record_preference(SESSION, left_path, right_path, loser_side)
-
-
-app.register_blueprint(create_selection_blueprint(
-    lambda: SESSION,
-    LOCK,
-    _skip_finished_locked,
-    _validate_current_pair_locked,
-    _serialize_group,
-    lambda data: choose_group_payload(
-        data,
-        lambda: SESSION,
-        LOCK,
-        _skip_finished_locked,
-        _validate_current_pair_locked,
-        _serialize_group,
-        _push_undo_locked,
-        _finalize_group_locked,
-        advance,
-        _record_preference,
-    ),
-    lambda data: kick_group_payload(
-        data,
-        lambda: SESSION,
-        LOCK,
-        _skip_finished_locked,
-        _validate_current_pair_locked,
-        _serialize_group,
-        _push_undo_locked,
-        _finalize_group_locked,
-        kick_side,
-    ),
-    lambda: undo_group_payload(
-        lambda: SESSION,
-        LOCK,
-        _skip_finished_locked,
-        _validate_current_pair_locked,
-        _serialize_group,
-        _group_from_dict,
-        save_state,
-    ),
-    lambda: skip_group_payload(
-        lambda: SESSION,
-        LOCK,
-        _skip_finished_locked,
-        _validate_current_pair_locked,
-        _serialize_group,
-        save_state,
-    ),
-    lambda data: reopen_group_payload(
-        data,
-        lambda: SESSION,
-        LOCK,
-        _skip_finished_locked,
-        _validate_current_pair_locked,
-        _serialize_group,
-        reopen_group,
-        save_state,
-        logger.warning,
-    ),
-))
+selection_handlers = create_selection_handlers(
+    get_session=lambda: SESSION,
+    lock=LOCK,
+    serialize_group_callback=_serialize_group,
+    group_from_dict=_group_from_dict,
+    apply_group_callback=apply_group,
+    reopen_group_callback=reopen_group,
+    record_skipped_callback=_record_skipped,
+    save_state=save_state,
+    log_warning=logger.warning,
+)
+app.register_blueprint(create_selection_blueprint(selection_handlers))
 
 
 def _run_grouping_async(accepted_infos, old_session_snapshot):
