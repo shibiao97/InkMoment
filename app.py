@@ -55,9 +55,9 @@ from server.services.job_runner_service import (
     mark_job_error,
     mark_job_grouping,
     mark_job_grouping_done,
-    mark_job_hashing,
     mark_job_prescreen_done,
     mark_job_started,
+    run_info_scan,
 )
 from server.services.selection_service import current_group_payload
 from server.services.start_service import (
@@ -2053,20 +2053,20 @@ def _run_job(folder: str, dry_run: bool, mode: str, wipe_cache: bool,
         _require_engine(engine)
         if jlog: jlog.event("CHECK", "依赖校验通过")
 
-        mark_job_hashing(job, engine, llm_model)
-        infos, skipped = grouper.compute_infos(
+        infos, skipped = run_info_scan(
+            job,
+            grouper.compute_infos,
             folder,
-            progress=_job_progress,
-            cancel_check=_cancel_check,
-            strength=prescreen_strength if prescreen_enabled else "standard",
-            face_aware=face_aware and prescreen_enabled and engine == "expert",
-            event_cb=_job_event,
-            engine=engine,
-            llm_model=llm_model,
+            prescreen_enabled,
+            prescreen_strength,
+            face_aware,
+            engine,
+            llm_model,
+            _job_progress,
+            _cancel_check,
+            _job_event,
+            CancelledError,
         )
-        if _cancel_check():
-            raise CancelledError()
-        job.skipped = list(skipped)
         _record_skipped(folder, skipped)
 
         if prescreen_enabled:

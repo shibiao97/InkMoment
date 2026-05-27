@@ -21,6 +21,37 @@ def mark_job_hashing(job, engine: str, llm_model: Optional[str]) -> None:
         job.label = "扫描与计算 pHash + DINOv2 + NIMA/MUSIQ/CLIP + 人脸嵌入..."
 
 
+def run_info_scan(
+    job,
+    compute_infos: Callable,
+    folder: str,
+    prescreen_enabled: bool,
+    prescreen_strength: str,
+    face_aware: bool,
+    engine: str,
+    llm_model: Optional[str],
+    progress: Callable,
+    cancel_check: Callable,
+    event_cb: Callable,
+    cancelled_error,
+):
+    mark_job_hashing(job, engine, llm_model)
+    infos, skipped = compute_infos(
+        folder,
+        progress=progress,
+        cancel_check=cancel_check,
+        strength=prescreen_strength if prescreen_enabled else "standard",
+        face_aware=face_aware and prescreen_enabled and engine == "expert",
+        event_cb=event_cb,
+        engine=engine,
+        llm_model=llm_model,
+    )
+    if cancel_check():
+        raise cancelled_error()
+    job.skipped = list(skipped)
+    return infos, skipped
+
+
 def mark_job_prescreen_done(
     job,
     infos_count: int,

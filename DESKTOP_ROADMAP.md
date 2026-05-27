@@ -98,6 +98,7 @@ server/
 - 已迁移任务启动路由 `server.routes.start`，覆盖 `/api/start`。
 - 已迁移 `/api/start` 请求解析、默认值归一、参数校验和 pending `JobState` 构造到 `server.services.start_service`；后台线程 `_run_job`、`SESSION`、`JOB`、`LAST_INFOS` 和任务日志写入暂留 `app.py`。
 - 已迁移 `_run_job` 的状态生命周期变更到 `server.services.job_runner_service`，覆盖 checking、hashing、prescreen done、grouping、done、cancelled 与 error 状态。
+- 已迁移 `_run_job` 的图片扫描阶段到 `server.services.job_runner_service.run_info_scan`，封装 `compute_infos` 调用、扫描阶段标签、取消检查和 skipped 写入。
 - 已迁移模型服务配置路由 `server.routes.llm`，覆盖 `/api/ark_key`、`/api/llm_models`、`/api/llm_concurrency` 与 `/api/diagnostics`。
 - 已迁移模型服务配置读写、base URL 归一化、Key 脱敏、模型列表探测、环境诊断和启动期配置加载到 `server.services.llm_service`。
 - 已迁移会话状态路由 `server.routes.session`，覆盖 `/api/status` 与 `/api/reset_session`。
