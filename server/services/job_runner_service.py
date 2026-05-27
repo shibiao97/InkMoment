@@ -9,17 +9,51 @@ class JobRunnerResources:
     job_log: object | None
 
 
+@dataclass(frozen=True)
+class JobRunConfig:
+    folder: str
+    dry_run: bool
+    mode: str
+    wipe_cache: bool
+    threshold_near: int
+    threshold_far: int
+    near_seconds: int
+    prescreen_enabled: bool
+    prescreen_strength: str
+    face_aware: bool
+    engine: str
+    llm_model: Optional[str]
+
+
+@dataclass(frozen=True)
+class JobRunnerCallbacks:
+    require_engine: Callable
+    compute_infos: Callable
+    record_skipped: Callable
+    prescreen_rejections: Callable
+    build_prescreen_session: Callable
+    group_infos: Callable
+    build_session_from_groups: Callable
+    save_state: Callable
+    cancel_check: Callable
+    progress: Callable
+    event_cb: Callable
+    publish_session: Callable
+    logger: object
+    cancelled_error: Callable
+
+
 def setup_job_runner_resources(
-    folder: str,
-    engine: str,
-    llm_model: Optional[str],
+    config: JobRunConfig,
     wipe_caches: Callable,
     setup_logger: Callable,
     open_job_log: Callable,
 ) -> JobRunnerResources:
-    wipe_caches(folder)
-    setup_logger(folder)
-    return JobRunnerResources(job_log=open_job_log(folder, engine, llm_model))
+    wipe_caches(config.folder)
+    setup_logger(config.folder)
+    return JobRunnerResources(
+        job_log=open_job_log(config.folder, config.engine, config.llm_model)
+    )
 
 
 def teardown_job_runner_resources(resources: JobRunnerResources, close_job_log: Callable) -> None:
@@ -28,31 +62,21 @@ def teardown_job_runner_resources(resources: JobRunnerResources, close_job_log: 
 
 def write_job_header(
     job_log,
-    folder: str,
-    engine: str,
-    mode: str,
-    dry_run: bool,
-    prescreen_enabled: bool,
-    prescreen_strength: str,
-    face_aware: bool,
-    llm_model: Optional[str],
-    threshold_near: int,
-    threshold_far: int,
-    near_seconds: int,
+    config: JobRunConfig,
 ) -> None:
     if job_log is None:
         return
     job_log.header(
-        folder=folder,
-        engine=engine,
-        mode=mode,
-        dry_run=dry_run,
-        prescreen=f"{prescreen_enabled}/{prescreen_strength}",
-        face_aware=face_aware,
-        llm_model=llm_model or "(none)",
-        threshold_near=threshold_near,
-        threshold_far=threshold_far,
-        near_seconds=near_seconds,
+        folder=config.folder,
+        engine=config.engine,
+        mode=config.mode,
+        dry_run=config.dry_run,
+        prescreen=f"{config.prescreen_enabled}/{config.prescreen_strength}",
+        face_aware=config.face_aware,
+        llm_model=config.llm_model or "(none)",
+        threshold_near=config.threshold_near,
+        threshold_far=config.threshold_far,
+        near_seconds=config.near_seconds,
     )
 
 
@@ -124,27 +148,26 @@ def mark_job_hashing(job, engine: str, llm_model: Optional[str]) -> None:
 def run_info_scan(
     job,
     compute_infos: Callable,
-    folder: str,
-    prescreen_enabled: bool,
-    prescreen_strength: str,
-    face_aware: bool,
-    engine: str,
-    llm_model: Optional[str],
+    config: JobRunConfig,
     progress: Callable,
     cancel_check: Callable,
     event_cb: Callable,
     cancelled_error,
 ):
-    mark_job_hashing(job, engine, llm_model)
+    mark_job_hashing(job, config.engine, config.llm_model)
     infos, skipped = compute_infos(
-        folder,
+        config.folder,
         progress=progress,
         cancel_check=cancel_check,
-        strength=prescreen_strength if prescreen_enabled else "standard",
-        face_aware=face_aware and prescreen_enabled and engine == "expert",
+        strength=config.prescreen_strength if config.prescreen_enabled else "standard",
+        face_aware=(
+            config.face_aware
+            and config.prescreen_enabled
+            and config.engine == "expert"
+        ),
         event_cb=event_cb,
-        engine=engine,
-        llm_model=llm_model,
+        engine=config.engine,
+        llm_model=config.llm_model,
     )
     if cancel_check():
         raise cancelled_error()
@@ -169,15 +192,7 @@ def mark_job_prescreen_done(
 
 def prepare_prescreen_result(
     infos,
-    folder: str,
-    dry_run: bool,
-    mode: str,
-    threshold_near: int,
-    threshold_far: int,
-    near_seconds: int,
-    prescreen_enabled: bool,
-    prescreen_strength: str,
-    engine: str,
+    config: JobRunConfig,
     prescreen_rejections: Callable,
     build_prescreen_session: Callable,
     logger,
@@ -185,22 +200,22 @@ def prepare_prescreen_result(
     rejected, reasons = prescreen_rejections(infos)
     reason_counts = Counter(reasons.values())
     logger.info(
-        f"[{engine}] 初筛汇总：共 {len(infos)} 张，自动 reject {len(rejected)} 张"
+        f"[{config.engine}] 初筛汇总：共 {len(infos)} 张，自动 reject {len(rejected)} 张"
     )
     for reason, count in reason_counts.most_common():
-        logger.info(f"[{engine}]   · {reason}: {count} 张")
+        logger.info(f"[{config.engine}]   · {reason}: {count} 张")
 
     session = build_prescreen_session(
-        folder,
-        dry_run,
-        mode,
+        config.folder,
+        config.dry_run,
+        config.mode,
         infos,
-        threshold_near,
-        threshold_far,
-        near_seconds,
-        prescreen_enabled,
-        prescreen_strength,
-        engine=engine,
+        config.threshold_near,
+        config.threshold_far,
+        config.near_seconds,
+        config.prescreen_enabled,
+        config.prescreen_strength,
+        engine=config.engine,
     )
     return session, rejected
 
@@ -213,15 +228,7 @@ def mark_job_grouping(job) -> None:
 def prepare_grouping_result(
     job,
     infos,
-    folder: str,
-    dry_run: bool,
-    mode: str,
-    threshold_near: int,
-    threshold_far: int,
-    near_seconds: int,
-    prescreen_enabled: bool,
-    prescreen_strength: str,
-    engine: str,
+    config: JobRunConfig,
     group_infos: Callable,
     build_session_from_groups: Callable,
     save_state: Callable,
@@ -229,29 +236,89 @@ def prepare_grouping_result(
     mark_job_grouping(job)
     raw_groups = group_infos(
         infos,
-        threshold_near=threshold_near,
-        threshold_far=threshold_far,
-        near_seconds=near_seconds,
-        engine=engine,
+        threshold_near=config.threshold_near,
+        threshold_far=config.threshold_far,
+        near_seconds=config.near_seconds,
+        engine=config.engine,
     )
     session = build_session_from_groups(
-        folder,
-        dry_run,
-        mode,
+        config.folder,
+        config.dry_run,
+        config.mode,
         raw_groups,
         infos,
-        threshold_near,
-        threshold_far,
-        near_seconds,
+        config.threshold_near,
+        config.threshold_far,
+        config.near_seconds,
         prescreen_enabled=False,
-        prescreen_strength=prescreen_strength,
-        engine=engine,
+        prescreen_strength=config.prescreen_strength,
+        engine=config.engine,
     )
-    session.prescreen_enabled = prescreen_enabled
-    session.prescreen_strength = prescreen_strength
+    session.prescreen_enabled = config.prescreen_enabled
+    session.prescreen_strength = config.prescreen_strength
     session.prescreen_reviewed = True
     save_state(session)
     return session
+
+
+def run_job_pipeline(
+    job,
+    config: JobRunConfig,
+    job_log,
+    callbacks: JobRunnerCallbacks,
+) -> None:
+    mark_job_started(job)
+
+    # 启动期能力硬校验：缺一即报错，避免进入不可完成的任务状态。
+    mark_job_checking(job, config.engine)
+    write_job_event(job_log, "CHECK", f"engine={config.engine} 依赖校验中…")
+    callbacks.logger.info(
+        f"[{config.engine}] 启动任务：folder={config.folder} "
+        f"prescreen={config.prescreen_enabled}/{config.prescreen_strength} "
+        f"mode={config.mode}"
+    )
+    callbacks.require_engine(config.engine)
+    write_job_event(job_log, "CHECK", "依赖校验通过")
+
+    infos, skipped = run_info_scan(
+        job,
+        callbacks.compute_infos,
+        config,
+        callbacks.progress,
+        callbacks.cancel_check,
+        callbacks.event_cb,
+        callbacks.cancelled_error,
+    )
+    callbacks.record_skipped(config.folder, skipped)
+
+    if config.prescreen_enabled:
+        session, rejected = prepare_prescreen_result(
+            infos,
+            config,
+            callbacks.prescreen_rejections,
+            callbacks.build_prescreen_session,
+            callbacks.logger,
+        )
+        if callbacks.cancel_check() or job.status == "cancelled":
+            raise callbacks.cancelled_error()
+        callbacks.publish_session(session, infos)
+        mark_job_prescreen_done(job, len(infos), len(rejected))
+        write_prescreen_footer(job_log, len(infos), len(rejected), job.label)
+        return
+
+    session = prepare_grouping_result(
+        job,
+        infos,
+        config,
+        callbacks.group_infos,
+        callbacks.build_session_from_groups,
+        callbacks.save_state,
+    )
+    if callbacks.cancel_check() or job.status == "cancelled":
+        raise callbacks.cancelled_error()
+    callbacks.publish_session(session, infos)
+    mark_job_grouping_done(job, len(session.groups), len(skipped))
+    write_grouping_footer(job_log, len(session.groups), len(skipped), job.label)
 
 
 def mark_job_grouping_done(

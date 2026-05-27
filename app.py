@@ -50,21 +50,14 @@ from server.routes.system import system_bp
 from server.routes.watermark import create_watermark_blueprint
 from server.services.llm_service import load_llm_config_from_file
 from server.services.job_runner_service import (
+    JobRunConfig,
+    JobRunnerCallbacks,
     mark_job_cancelled,
-    mark_job_checking,
     mark_job_error,
-    mark_job_grouping_done,
-    mark_job_prescreen_done,
-    mark_job_started,
-    prepare_grouping_result,
-    prepare_prescreen_result,
-    run_info_scan,
+    run_job_pipeline,
     setup_job_runner_resources,
     teardown_job_runner_resources,
-    write_grouping_footer,
-    write_job_event,
     write_job_header,
-    write_prescreen_footer,
     write_status_footer,
 )
 from server.services.selection_service import current_group_payload
@@ -2036,100 +2029,47 @@ def _run_job(folder: str, dry_run: bool, mode: str, wipe_cache: bool,
     assert job is not None
     # 一次性运行：每次 start 都清掉旧的 state.json / winners / losers / 缩略图盘缓存。
     LAST_INFOS = None
+    config = JobRunConfig(
+        folder=folder,
+        dry_run=dry_run,
+        mode=mode,
+        wipe_cache=wipe_cache,
+        threshold_near=threshold_near,
+        threshold_far=threshold_far,
+        near_seconds=near_seconds,
+        prescreen_enabled=prescreen_enabled,
+        prescreen_strength=prescreen_strength,
+        face_aware=face_aware,
+        engine=engine,
+        llm_model=llm_model,
+    )
+    callbacks = JobRunnerCallbacks(
+        require_engine=_require_engine,
+        compute_infos=grouper.compute_infos,
+        record_skipped=_record_skipped,
+        prescreen_rejections=_prescreen_rejections,
+        build_prescreen_session=build_prescreen_session_from_infos,
+        group_infos=group_infos,
+        build_session_from_groups=build_session_from_groups,
+        save_state=save_state,
+        cancel_check=_cancel_check,
+        progress=_job_progress,
+        event_cb=_job_event,
+        publish_session=_set_session_state,
+        logger=logger,
+        cancelled_error=CancelledError,
+    )
     # 单任务日志（每次 /api/start 一个文件，便于复盘单次运行的数据）
     resources = setup_job_runner_resources(
-        folder,
-        engine,
-        llm_model,
+        config,
         _wipe_caches,
         setup_logger,
         _open_job_log,
     )
     jlog = resources.job_log
-    write_job_header(
-        jlog,
-        folder,
-        engine,
-        mode,
-        dry_run,
-        prescreen_enabled,
-        prescreen_strength,
-        face_aware,
-        llm_model,
-        threshold_near,
-        threshold_far,
-        near_seconds,
-    )
+    write_job_header(jlog, config)
     try:
-        mark_job_started(job)
-
-        # ---- 启动期能力硬校验：缺一即报错，不进入"假装在跑"的状态 ----
-        mark_job_checking(job, engine)
-        write_job_event(jlog, "CHECK", f"engine={engine} 依赖校验中…")
-        logger.info(f"[{engine}] 启动任务：folder={folder} prescreen={prescreen_enabled}/{prescreen_strength} mode={mode}")
-        _require_engine(engine)
-        write_job_event(jlog, "CHECK", "依赖校验通过")
-
-        infos, skipped = run_info_scan(
-            job,
-            grouper.compute_infos,
-            folder,
-            prescreen_enabled,
-            prescreen_strength,
-            face_aware,
-            engine,
-            llm_model,
-            _job_progress,
-            _cancel_check,
-            _job_event,
-            CancelledError,
-        )
-        _record_skipped(folder, skipped)
-
-        if prescreen_enabled:
-            sess, rejected = prepare_prescreen_result(
-                infos,
-                folder,
-                dry_run,
-                mode,
-                threshold_near,
-                threshold_far,
-                near_seconds,
-                prescreen_enabled,
-                prescreen_strength,
-                engine,
-                _prescreen_rejections,
-                build_prescreen_session_from_infos,
-                logger,
-            )
-            if _cancel_check() or job.status == "cancelled":
-                raise CancelledError()
-            _set_session_state(sess, infos)
-            mark_job_prescreen_done(job, len(infos), len(rejected))
-            write_prescreen_footer(jlog, len(infos), len(rejected), job.label)
-            return
-
-        sess = prepare_grouping_result(
-            job,
-            infos,
-            folder,
-            dry_run,
-            mode,
-            threshold_near,
-            threshold_far,
-            near_seconds,
-            prescreen_enabled,
-            prescreen_strength,
-            engine,
-            group_infos,
-            build_session_from_groups,
-            save_state,
-        )
-        if _cancel_check() or job.status == "cancelled":
-            raise CancelledError()
-        _set_session_state(sess, infos)
-        mark_job_grouping_done(job, len(sess.groups), len(skipped))
-        write_grouping_footer(jlog, len(sess.groups), len(skipped), job.label)
+        run_job_pipeline(job, config, jlog, callbacks)
     except CancelledError:
         # 状态可能已由 api_cancel_job 提前置位
         mark_job_cancelled(job)
