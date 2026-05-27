@@ -87,6 +87,13 @@ server/
 - 路由按领域拆分，现有 `/api/*` 路径保持兼容。
 - 任务状态、文件操作、水印导出等副作用集中在 service 层。
 
+当前进展：
+
+- 已建立 `server/routes/` 与 `server/services/` 骨架。
+- 已迁移低风险系统路由 `server.routes.system`，覆盖 `/api/branding` 与 `/api/capabilities`。
+- 已迁移品牌配置读取到 `server.services.branding_service`，初筛能力探测到 `server.services.capability_service`。
+- `app.py` 仍保留大部分全局状态和业务路由，后续建议继续按 folder/job/image/selection/result 逐块拆分。
+
 ### Phase 4: Tauri 桌面壳
 
 建议方案：

@@ -40,6 +40,7 @@ from inkmoment.grouper import (
     build_groups,
     group_infos,
 )
+from server.routes.system import system_bp
 
 try:
     from pillow_heif import register_heif_opener
@@ -327,16 +328,6 @@ logger = logging.getLogger("inkmoment")
 CONFIG_DIR = Path.home() / ".config" / "inkmoment"
 ARK_KEY_FILE = CONFIG_DIR / "ark_key"
 LLM_CONFIG_FILE = CONFIG_DIR / "llm_config.json"
-BRANDING_FILE = Path(__file__).resolve().parent / "branding.json"
-
-DEFAULT_BRANDING = {
-    "app_name": "影刻",
-    "title_suffix": "InkMoment",
-    "tagline": "本地运行 · 不上传",
-    "hero_eyebrow": "在一摞照片里，留下那一刻",
-    "hero_title": "让 AI 替你过一遍，由你做最后的决定。",
-    "hero_subtitle": "先按相似度自动成组、淘汰明显失败片，剩下的两两摆上擂台，由你裁决。",
-}
 
 
 def _mask_key(k: str) -> str:
@@ -447,20 +438,6 @@ def _save_ark_key_to_file(key: str) -> None:
         os.chmod(ARK_KEY_FILE, 0o600)
     except OSError:
         pass  # Windows 没 chmod，不致命
-
-
-def _load_branding() -> dict:
-    data = dict(DEFAULT_BRANDING)
-    try:
-        if BRANDING_FILE.exists():
-            custom = json.loads(BRANDING_FILE.read_text(encoding="utf-8"))
-            if isinstance(custom, dict):
-                for key, value in custom.items():
-                    if isinstance(value, str) and value.strip():
-                        data[key] = value.strip()
-    except Exception as e:
-        logger.warning(f"读取品牌配置失败: {e}")
-    return data
 
 
 # 启动期：从文件载入模型服务配置（env var 优先）
@@ -1707,6 +1684,7 @@ def _thumb_cache_key(rel: str, mtime: float, size: int, max_side: int) -> str:
 # ---------------- Flask ----------------
 
 app = Flask(__name__, static_folder="static", static_url_path="/static")
+app.register_blueprint(system_bp)
 SESSION: Optional[SessionState] = None
 JOB: Optional[JobState] = None
 LOCK = threading.Lock()
@@ -2334,12 +2312,6 @@ def _run_job(folder: str, dry_run: bool, mode: str, wipe_cache: bool,
 @app.route("/")
 def index():
     return send_from_directory(app.static_folder, "index.html")
-
-
-@app.route("/api/branding", methods=["GET"])
-def api_branding():
-    """返回二开品牌配置。"""
-    return jsonify(_load_branding())
 
 
 @app.route("/api/ark_key", methods=["GET"])
@@ -3588,17 +3560,6 @@ def api_preview_groups():
         "total": len(SESSION.groups),
         "multi": sum(1 for g in SESSION.groups if len(g.images) > 1),
     })
-
-
-@app.route("/api/capabilities")
-def api_capabilities():
-    """前端用：探测当前后端可用的初筛能力。"""
-    try:
-        from inkmoment.quality import has_face_support
-        face = bool(has_face_support())
-    except Exception:
-        face = False
-    return jsonify({"face_aware": face})
 
 
 @app.route("/api/browse_folder", methods=["POST"])
