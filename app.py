@@ -1421,79 +1421,6 @@ def _set_session_state(session: SessionState, infos: Optional[list[ImageInfo]] =
             LAST_INFOS = infos
 
 
-# ---------------- Flask ----------------
-
-app = Flask(__name__, static_folder="static", static_url_path="/static")
-app.register_blueprint(create_folder_blueprint(
-    lambda: SESSION,
-    pic_dir,
-    skipped_log_path,
-))
-app.register_blueprint(create_job_blueprint(
-    lambda: JOB,
-    lambda: JOB_LOG,
-    lambda: SESSION,
-    lambda folder: pic_dir(folder) / "jobs",
-))
-app.register_blueprint(create_grouping_blueprint(
-    lambda: SESSION,
-    _set_session_state,
-    lambda: LAST_INFOS,
-    lambda: _GROUPING,
-    group_infos,
-    build_session_from_groups,
-    {
-        "threshold_near": THRESHOLD_NEAR,
-        "threshold_far": THRESHOLD_FAR,
-        "near_seconds": NEAR_SECONDS,
-    },
-    lambda: _confirm_prescreen_payload(),
-))
-app.register_blueprint(create_image_blueprint(
-    lambda: SESSION.folder if SESSION is not None else None,
-))
-app.register_blueprint(llm_bp)
-app.register_blueprint(create_results_blueprint(
-    lambda: SESSION,
-    winners_dir,
-    losers_dir,
-    lambda data: restore_rejected_payload(
-        data,
-        lambda: SESSION,
-        LOCK,
-        winners_dir,
-        losers_dir,
-        _unique_target,
-        save_state,
-        logger,
-    ),
-))
-app.register_blueprint(create_session_blueprint(
-    lambda: SESSION,
-    _clear_session_state,
-    lambda: JOB,
-    lambda: JOB_LOG,
-    _infos_from_memory_or_cache,
-))
-app.register_blueprint(system_bp)
-app.register_blueprint(create_start_blueprint(
-    lambda data: _start_job_payload(data),
-))
-app.register_blueprint(create_watermark_blueprint(
-    watermark_templates_payload,
-    lambda data: watermark_preview_payload(data, SESSION, winners_dir, logger),
-    lambda data: watermark_start_payload(
-        data,
-        SESSION,
-        WATERMARK_JOB,
-        _set_watermark_job,
-        winners_dir,
-        logger,
-    ),
-    lambda: watermark_status_payload(WATERMARK_JOB),
-    lambda: watermark_cancel_payload(WATERMARK_JOB),
-    lambda: watermark_open_out_dir_payload(WATERMARK_JOB),
-))
 SESSION: Optional[SessionState] = None
 JOB: Optional[JobState] = None
 LOCK = threading.Lock()
@@ -1509,66 +1436,6 @@ _GROUPING: dict = {
     "multi": 0,
     "error": None,
 }
-
-
-@app.after_request
-def _no_cache_static(resp):
-    """前端三件套不让浏览器缓存，避免 token bug 这种"304 拿旧版"的坑。"""
-    if request.path == "/" or request.path.startswith("/static/"):
-        resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
-        resp.headers["Pragma"] = "no-cache"
-        resp.headers["Expires"] = "0"
-    return resp
-
-
-@app.before_request
-def _security_check():
-    """本地访问保护：依赖浏览器 Origin/Referer 检查，挡 DNS rebinding 与外部脚本。
-
-    放行规则（任一满足即放行）：
-    - 静态资源 / 首页
-    - Origin/Referer 在 allowed_origins 内
-    - 配置了 SCRIPT_TOKEN 且请求带正确 token
-    - 没有 Origin 也没有 Referer 的纯 GET（如用户复制图片 URL 到新 tab）
-    """
-    if request.path == "/" or request.path.startswith("/static/"):
-        return None
-
-    host = request.host
-    port = host.rsplit(":", 1)[-1] if ":" in host else ""
-    allowed_origins = set()
-    if port:
-        allowed_origins |= {f"http://127.0.0.1:{port}", f"http://localhost:{port}"}
-    allowed_origins.add(f"http://{host}")
-    allowed_origins |= DEV_ORIGINS
-
-    origin = request.headers.get("Origin", "")
-    referer = request.headers.get("Referer", "")
-
-    if origin:
-        if origin in allowed_origins:
-            return None
-        return jsonify({"error": "forbidden origin"}), 403
-
-    if referer:
-        try:
-            from urllib.parse import urlparse
-            u = urlparse(referer)
-            if f"{u.scheme}://{u.netloc}" in allowed_origins:
-                return None
-        except Exception:
-            pass
-        return jsonify({"error": "forbidden referer"}), 403
-
-    # 没 Origin / Referer：脚本访问。允许 GET 只读，拒绝修改请求。
-    if SCRIPT_TOKEN:
-        tok = request.headers.get("X-Token") or request.args.get("token")
-        if tok == SCRIPT_TOKEN:
-            return None
-
-    if request.method == "GET":
-        return None
-    return jsonify({"error": "POST 需要浏览器 Origin 或 X-Token"}), 403
 
 
 def _serialize_group(g: GroupState, idx: int) -> dict:
@@ -1935,13 +1802,6 @@ def _run_job(folder: str, dry_run: bool, mode: str, wipe_cache: bool,
         teardown_job_runner_resources(resources, _close_job_log)
 
 
-# ---------------- API ----------------
-
-@app.route("/")
-def index():
-    return send_from_directory(app.static_folder, "index.html")
-
-
 def _start_job_payload(data: dict) -> tuple[dict, int]:
     global JOB, SESSION
     start_request, error_payload, error_status = parse_start_request(
@@ -1972,20 +1832,6 @@ def _start_job_payload(data: dict) -> tuple[dict, int]:
     )
     t.start()
     return {"ok": True}, 200
-
-
-selection_handlers = create_selection_handlers(
-    get_session=lambda: SESSION,
-    lock=LOCK,
-    serialize_group_callback=_serialize_group,
-    group_from_dict=_group_from_dict,
-    apply_group_callback=apply_group,
-    reopen_group_callback=reopen_group,
-    record_skipped_callback=_record_skipped,
-    save_state=save_state,
-    log_warning=logger.warning,
-)
-app.register_blueprint(create_selection_blueprint(selection_handlers))
 
 
 def _run_grouping_async(accepted_infos, old_session_snapshot):
@@ -2131,6 +1977,168 @@ WATERMARK_JOB: Optional[WatermarkJobState] = None
 def _set_watermark_job(job: WatermarkJobState) -> None:
     global WATERMARK_JOB
     WATERMARK_JOB = job
+
+
+# ---------------- Flask app factory ----------------
+
+def _no_cache_static(resp):
+    """前端三件套不让浏览器缓存，避免 token bug 这种"304 拿旧版"的坑。"""
+    if request.path == "/" or request.path.startswith("/static/"):
+        resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        resp.headers["Pragma"] = "no-cache"
+        resp.headers["Expires"] = "0"
+    return resp
+
+
+def _security_check():
+    """本地访问保护：依赖浏览器 Origin/Referer 检查，挡 DNS rebinding 与外部脚本。
+
+    放行规则（任一满足即放行）：
+    - 静态资源 / 首页
+    - Origin/Referer 在 allowed_origins 内
+    - 配置了 SCRIPT_TOKEN 且请求带正确 token
+    - 没有 Origin 也没有 Referer 的纯 GET（如用户复制图片 URL 到新 tab）
+    """
+    if request.path == "/" or request.path.startswith("/static/"):
+        return None
+
+    host = request.host
+    port = host.rsplit(":", 1)[-1] if ":" in host else ""
+    allowed_origins = set()
+    if port:
+        allowed_origins |= {f"http://127.0.0.1:{port}", f"http://localhost:{port}"}
+    allowed_origins.add(f"http://{host}")
+    allowed_origins |= DEV_ORIGINS
+
+    origin = request.headers.get("Origin", "")
+    referer = request.headers.get("Referer", "")
+
+    if origin:
+        if origin in allowed_origins:
+            return None
+        return jsonify({"error": "forbidden origin"}), 403
+
+    if referer:
+        try:
+            from urllib.parse import urlparse
+            u = urlparse(referer)
+            if f"{u.scheme}://{u.netloc}" in allowed_origins:
+                return None
+        except Exception:
+            pass
+        return jsonify({"error": "forbidden referer"}), 403
+
+    # 没 Origin / Referer：脚本访问。允许 GET 只读，拒绝修改请求。
+    if SCRIPT_TOKEN:
+        tok = request.headers.get("X-Token") or request.args.get("token")
+        if tok == SCRIPT_TOKEN:
+            return None
+
+    if request.method == "GET":
+        return None
+    return jsonify({"error": "POST 需要浏览器 Origin 或 X-Token"}), 403
+
+
+def create_app() -> Flask:
+    """Build the Flask app without starting the server.
+
+    Tauri sidecar packaging and tests both need an importable app factory so they
+    can control process lifetime, port allocation, and health checks.
+    """
+    flask_app = Flask(__name__, static_folder="static", static_url_path="/static")
+    flask_app.after_request(_no_cache_static)
+    flask_app.before_request(_security_check)
+
+    @flask_app.route("/")
+    def index():
+        return send_from_directory(flask_app.static_folder, "index.html")
+
+    flask_app.register_blueprint(create_folder_blueprint(
+        lambda: SESSION,
+        pic_dir,
+        skipped_log_path,
+    ))
+    flask_app.register_blueprint(create_job_blueprint(
+        lambda: JOB,
+        lambda: JOB_LOG,
+        lambda: SESSION,
+        lambda folder: pic_dir(folder) / "jobs",
+    ))
+    flask_app.register_blueprint(create_grouping_blueprint(
+        lambda: SESSION,
+        _set_session_state,
+        lambda: LAST_INFOS,
+        lambda: _GROUPING,
+        group_infos,
+        build_session_from_groups,
+        {
+            "threshold_near": THRESHOLD_NEAR,
+            "threshold_far": THRESHOLD_FAR,
+            "near_seconds": NEAR_SECONDS,
+        },
+        lambda: _confirm_prescreen_payload(),
+    ))
+    flask_app.register_blueprint(create_image_blueprint(
+        lambda: SESSION.folder if SESSION is not None else None,
+    ))
+    flask_app.register_blueprint(llm_bp)
+    flask_app.register_blueprint(create_results_blueprint(
+        lambda: SESSION,
+        winners_dir,
+        losers_dir,
+        lambda data: restore_rejected_payload(
+            data,
+            lambda: SESSION,
+            LOCK,
+            winners_dir,
+            losers_dir,
+            _unique_target,
+            save_state,
+            logger,
+        ),
+    ))
+    flask_app.register_blueprint(create_session_blueprint(
+        lambda: SESSION,
+        _clear_session_state,
+        lambda: JOB,
+        lambda: JOB_LOG,
+        _infos_from_memory_or_cache,
+    ))
+    flask_app.register_blueprint(system_bp)
+    flask_app.register_blueprint(create_start_blueprint(
+        lambda data: _start_job_payload(data),
+    ))
+    flask_app.register_blueprint(create_watermark_blueprint(
+        watermark_templates_payload,
+        lambda data: watermark_preview_payload(data, SESSION, winners_dir, logger),
+        lambda data: watermark_start_payload(
+            data,
+            SESSION,
+            WATERMARK_JOB,
+            _set_watermark_job,
+            winners_dir,
+            logger,
+        ),
+        lambda: watermark_status_payload(WATERMARK_JOB),
+        lambda: watermark_cancel_payload(WATERMARK_JOB),
+        lambda: watermark_open_out_dir_payload(WATERMARK_JOB),
+    ))
+    selection_handlers = create_selection_handlers(
+        get_session=lambda: SESSION,
+        lock=LOCK,
+        serialize_group_callback=_serialize_group,
+        group_from_dict=_group_from_dict,
+        apply_group_callback=apply_group,
+        reopen_group_callback=reopen_group,
+        record_skipped_callback=_record_skipped,
+        save_state=save_state,
+        log_warning=logger.warning,
+    )
+    flask_app.register_blueprint(create_selection_blueprint(selection_handlers))
+    return flask_app
+
+
+app = create_app()
 
 
 # ---------------- 入口 ----------------

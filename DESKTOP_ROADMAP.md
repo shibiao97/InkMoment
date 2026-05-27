@@ -141,6 +141,61 @@ server/
 - 现在不迁 FastAPI。Flask 对本地单机工具足够，当前收益更高的是模块化。
 - 现在不直接引入 Tauri。先稳定 Vue 与 API 边界，避免三条技术线同时变动。
 - 构建产物先放 `static/vue/`，后续再决定是否替换根入口。
+- 桌面壳路线锁定为 Tauri 2 + Vue 3 + Python sidecar：Tauri 负责窗口、权限和进程生命周期；Flask 只作为本地 API 进程存在；图像算法继续留在 Python 包内。
+
+## 桌面化开发迭代计划
+
+### Milestone 1: Sidecar-ready 后端
+
+目标：让后端可以被 CLI、测试和未来 Tauri 以同一套入口启动，减少 import-time 副作用。
+
+Task:
+
+- [x] 增加 `create_app()` 工厂，集中注册 Flask hook 与 blueprint。
+- [ ] 把 `SESSION`、`JOB`、`LAST_INFOS`、`WATERMARK_JOB` 等全局运行态收敛成显式 runtime 容器。
+- [ ] 把 `_run_grouping_async` 和 confirm prescreen 后续状态机下沉到 service。
+- [ ] 给 sidecar 增加健康检查接口或启动探活约定。
+- [ ] 增加面向 sidecar 的启动参数：动态端口、禁用浏览器、结构化启动日志。
+
+验收：
+
+- `python app.py --port <port> --no-browser` 行为保持兼容。
+- Flask test client 可以通过 `create_app()` 构造应用实例。
+- `/api/branding`、`/api/start`、`/api/job`、`/api/group` 等核心 API smoke 通过。
+
+### Milestone 2: Vue 主流程补齐
+
+目标：让 Vue 入口覆盖日常桌面使用链路，原生 `static/` 页面只作为回退。
+
+Task:
+
+- [ ] 迁移土豪模式配置 UI，接入 `/api/ark_key`、`/api/llm_models`、`/api/llm_concurrency` 与 `/api/diagnostics`。
+- [ ] 补齐 ArenaView 高级交互：快捷键、缩放、单图组处理、跨组反悔入口。
+- [ ] 迁移水印导出流程，接入 `/api/watermark/*`。
+- [ ] 统一长任务 loading、错误提示、取消和回首页重置。
+
+验收：
+
+- Vue 入口可以完成选择文件夹、分析、初筛、分组预览、选片、完成页和水印导出。
+- Vite dev 与 Flask API 联调稳定。
+- `npm run frontend:build` 产物可用于后续桌面壳加载。
+
+### Milestone 3: Tauri 壳最小闭环
+
+目标：先验证桌面窗口能加载 Vue，不在同一轮引入完整打包复杂度。
+
+Task:
+
+- [ ] 新增 `src-tauri/`，加载 Vue build。
+- [ ] 配置窗口、权限和资源路径。
+- [ ] 打通 Tauri 启动 Python sidecar、动态端口注入和健康检查。
+- [ ] 退出应用时释放 sidecar，后端异常时 UI 展示可理解错误。
+
+验收：
+
+- macOS 本机可通过 Tauri 启动窗口。
+- Tauri 能启动并探活 Python 后端。
+- 桌面版主流程至少完成一次本地手工验证。
 
 ## 接下来开发顺序
 
