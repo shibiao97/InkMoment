@@ -1,7 +1,9 @@
 <script setup>
-import { computed, onMounted } from "vue";
+import { computed, onMounted, watch } from "vue";
+import NextStepPanel from "../components/NextStepPanel.vue";
 import StatusBadge from "../components/StatusBadge.vue";
 import { useJobPolling } from "../composables/useJobPolling";
+import { useNextStep } from "../composables/useNextStep";
 
 const props = defineProps({
   startedPayload: {
@@ -22,6 +24,14 @@ const {
   start,
   requestCancel,
 } = useJobPolling();
+
+const {
+  status,
+  nextStep,
+  loading: loadingNextStep,
+  error: nextStepError,
+  refreshStatus,
+} = useNextStep();
 
 const statusLabel = computed(() => {
   if (job.value?.status === "done") return "分析完成";
@@ -61,6 +71,13 @@ const skippedCount = computed(() => job.value?.skipped_count || 0);
 async function cancel() {
   await requestCancel();
 }
+
+watch(
+  () => job.value?.status,
+  (value) => {
+    if (value === "done") refreshStatus();
+  },
+);
 
 onMounted(start);
 </script>
@@ -120,6 +137,16 @@ onMounted(start);
       <strong>{{ job?.error_info?.title || "处理失败" }}</strong>
       <p>{{ job?.error_info?.message || job?.error || error }}</p>
     </section>
+
+    <NextStepPanel
+      v-if="job?.status === 'done'"
+      :next-step="nextStep"
+      :status="status"
+      :loading="loadingNextStep"
+      :error="nextStepError"
+      @refresh="refreshStatus"
+      @back-home="emit('back-home')"
+    />
 
     <section class="event-panel">
       <div class="panel-head">

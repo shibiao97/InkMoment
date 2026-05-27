@@ -27,3 +27,7 @@ export function cancelJob() {
     method: "POST",
   });
 }
+
+export function getStatus() {
+  return fetchJSON("/api/status");
+}
