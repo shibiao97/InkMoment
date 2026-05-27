@@ -1497,10 +1497,12 @@ def _clear_session_state() -> None:
         LAST_INFOS = None
 
 
-def _set_session_state(session: SessionState) -> None:
-    global SESSION
+def _set_session_state(session: SessionState, infos: Optional[list[ImageInfo]] = None) -> None:
+    global SESSION, LAST_INFOS
     with LOCK:
         SESSION = session
+        if infos is not None:
+            LAST_INFOS = infos
 
 
 # ---------------- Flask ----------------
@@ -2102,9 +2104,7 @@ def _run_job(folder: str, dry_run: bool, mode: str, wipe_cache: bool,
             )
             if _cancel_check() or job.status == "cancelled":
                 raise CancelledError()
-            with LOCK:
-                SESSION = sess
-                LAST_INFOS = infos
+            _set_session_state(sess, infos)
             mark_job_prescreen_done(job, len(infos), len(rejected))
             write_prescreen_footer(jlog, len(infos), len(rejected), job.label)
             return
@@ -2127,9 +2127,7 @@ def _run_job(folder: str, dry_run: bool, mode: str, wipe_cache: bool,
         )
         if _cancel_check() or job.status == "cancelled":
             raise CancelledError()
-        with LOCK:
-            SESSION = sess
-            LAST_INFOS = infos
+        _set_session_state(sess, infos)
         mark_job_grouping_done(job, len(sess.groups), len(skipped))
         write_grouping_footer(jlog, len(sess.groups), len(skipped), job.label)
     except CancelledError:
