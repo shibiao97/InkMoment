@@ -90,7 +90,7 @@ server/
 当前进展：
 
 - 已建立 `server/routes/` 与 `server/services/` 骨架。
-- 已迁移低风险系统路由 `server.routes.system`，覆盖 `/api/branding` 与 `/api/capabilities`。
+- 已迁移低风险系统路由 `server.routes.system`，覆盖 `/api/health`、`/api/branding` 与 `/api/capabilities`。
 - 已迁移品牌配置读取到 `server.services.branding_service`，初筛能力探测到 `server.services.capability_service`。
 - 已迁移低风险文件夹路由 `server.routes.folder`，覆盖 `/api/browse_folder`、`/api/peek_folder`、`/api/skipped` 与 `/api/open_folder`。
 - 已迁移原生文件夹选择、轻量目录快照、无法读取日志查询和打开当前会话目录到 `server.services.folder_service`。
@@ -120,6 +120,7 @@ server/
 - 已迁移水印路由 `server.routes.watermark`，覆盖 `/api/watermark/templates`、`/api/watermark/preview`、`/api/watermark/start`、`/api/watermark/status`、`/api/watermark/cancel` 与 `/api/watermark/open_out_dir`。
 - 已迁移水印预览、批量导出、状态查询、取消和打开输出目录的 payload/state 编排到 `server.services.watermark_service`；`app.py` 通过 `AppRuntime` 注入当前 session、watermark job、输出目录和 logger。
 - 已新增 `AppRuntime` 容器，收敛 session、job、job log、last infos、watermark job、grouping progress 和相关锁，为 sidecar 生命周期管理预留明确状态边界。
+- 已新增 `/api/health` 轻量探活接口，返回 ready 状态、进程 pid、uptime、当前 job/session 摘要，供未来 Tauri sidecar 启动轮询。
 - `app.py` 直接路由已收敛到 `/`；仍保留全局状态、后台任务线程和部分业务 helper，后续重点是继续下沉选片/结果恢复等状态机。
 
 ### Phase 4: Tauri 桌面壳
@@ -155,7 +156,7 @@ Task:
 - [x] 增加 `create_app()` 工厂，集中注册 Flask hook 与 blueprint。
 - [x] 把 `SESSION`、`JOB`、`LAST_INFOS`、`WATERMARK_JOB` 等全局运行态收敛成显式 runtime 容器。
 - [x] 把 `_run_grouping_async` 和 confirm prescreen 后续状态机下沉到 service。
-- [ ] 给 sidecar 增加健康检查接口或启动探活约定。
+- [x] 给 sidecar 增加健康检查接口或启动探活约定。
 - [ ] 增加面向 sidecar 的启动参数：动态端口、禁用浏览器、结构化启动日志。
 
 验收：

@@ -44,7 +44,7 @@ from server.routes.results import create_results_blueprint
 from server.routes.selection import create_selection_blueprint
 from server.routes.session import create_session_blueprint
 from server.routes.start import create_start_blueprint
-from server.routes.system import system_bp
+from server.routes.system import create_system_blueprint
 from server.routes.watermark import create_watermark_blueprint
 from server.services.llm_service import load_llm_config_from_file
 from server.services.job_runner_service import (
@@ -1979,7 +1979,10 @@ def create_app() -> Flask:
         lambda: RUNTIME.job_log,
         _infos_from_memory_or_cache,
     ))
-    flask_app.register_blueprint(system_bp)
+    flask_app.register_blueprint(create_system_blueprint(
+        lambda: RUNTIME.job,
+        lambda: RUNTIME.session,
+    ))
     flask_app.register_blueprint(create_start_blueprint(
         lambda data: _start_job_payload(data),
     ))
