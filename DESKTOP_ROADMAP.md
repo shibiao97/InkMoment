@@ -96,6 +96,8 @@ server/
 - 已迁移原生文件夹选择和轻量目录快照到 `server.services.folder_service`；`/api/open_folder` 因依赖当前 `SESSION` 暂留 `app.py`。
 - 已迁移任务状态路由 `server.routes.job`，覆盖 `/api/job` 与 `/api/cancel_job`。
 - 已迁移任务状态序列化和取消逻辑到 `server.services.job_service`；`/api/start` 因依赖线程启动、`SESSION`、`LAST_INFOS` 和任务日志暂留 `app.py`。
+- 已迁移模型服务配置路由 `server.routes.llm`，覆盖 `/api/ark_key`、`/api/llm_models`、`/api/llm_concurrency` 与 `/api/diagnostics`。
+- 已迁移模型服务配置读写、base URL 归一化、Key 脱敏、模型列表探测、环境诊断和启动期配置加载到 `server.services.llm_service`。
 - `app.py` 仍保留大部分全局状态和业务路由，后续建议继续按 folder/job/image/selection/result 逐块拆分。
 
 ### Phase 4: Tauri 桌面壳

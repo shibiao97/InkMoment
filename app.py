@@ -25,7 +25,6 @@ from dataclasses import asdict, dataclass, field
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Callable, Optional
-from urllib.parse import urlparse
 
 from flask import Flask, Response, abort, jsonify, request, send_file, send_from_directory
 from PIL import Image, ImageOps
@@ -42,7 +41,9 @@ from inkmoment.grouper import (
 )
 from server.routes.folder import folder_bp
 from server.routes.job import create_job_blueprint
+from server.routes.llm import llm_bp
 from server.routes.system import system_bp
+from server.services.llm_service import load_llm_config_from_file
 
 try:
     from pillow_heif import register_heif_opener
@@ -243,57 +244,6 @@ def _classify_job_error(exc: BaseException) -> dict:
     }
 
 
-def _check_importable(module: str) -> bool:
-    try:
-        __import__(module)
-        return True
-    except Exception:
-        return False
-
-
-def _opencv_conflicts() -> list[str]:
-    try:
-        import importlib.metadata as metadata
-        names = {"opencv-python", "opencv-python-headless"}
-        return [
-            name for name in names
-            if any((dist.metadata["Name"] or "").lower() == name
-                   for dist in metadata.distributions())
-        ]
-    except Exception:
-        return []
-
-
-def _diagnostics_payload() -> dict:
-    modules = [
-        "flask", "PIL", "cv2", "numpy", "torch", "torchvision",
-        "transformers", "insightface", "onnxruntime", "openai", "pyiqa", "timm",
-    ]
-    module_status = {module: _check_importable(module) for module in modules}
-    try:
-        from inkmoment import vision
-        model_status = {
-            "dinov2": vision.hf_model_cache_status(),
-        }
-        capabilities = vision.capabilities()
-    except Exception as e:
-        model_status = {"dinov2": {"cached": False, "missing": [], "error": str(e)}}
-        capabilities = {}
-    base_url, base_url_source = _effective_llm_base_url()
-    return {
-        "python": sys.executable,
-        "modules": module_status,
-        "capabilities": capabilities,
-        "models": model_status,
-        "opencv_conflicts": _opencv_conflicts(),
-        "llm": {
-            "configured": bool(os.environ.get("ARK_API_KEY")),
-            "base_url": base_url,
-            "base_url_source": base_url_source,
-        },
-    }
-
-
 # ---------------- 路径 / 日志 ----------------
 
 def winners_dir(folder: str) -> Path:
@@ -323,127 +273,8 @@ def state_path(folder: str) -> Path:
 logger = logging.getLogger("inkmoment")
 
 
-# ---------------- 模型服务配置持久化 ----------------
-#
-# 限制：Python 子进程没法回写父 shell 的环境变量（OS 决定的）。
-# 折中方案：UI 录入 → 写本地配置文件 + 立即设到 os.environ → 当前进程生效。
-CONFIG_DIR = Path.home() / ".config" / "inkmoment"
-ARK_KEY_FILE = CONFIG_DIR / "ark_key"
-LLM_CONFIG_FILE = CONFIG_DIR / "llm_config.json"
-
-
-def _mask_key(k: str) -> str:
-    """脱敏显示：只露后 4 位。"""
-    if not k:
-        return ""
-    if len(k) <= 4:
-        return "*" * len(k)
-    return "*" * (len(k) - 4) + k[-4:]
-
-
-def _default_llm_base_url() -> str:
-    from inkmoment import llm_judge
-    return llm_judge.DEFAULT_BASE_URL
-
-
-def _normalize_llm_base_url(value: str | None) -> str:
-    raw = (value or "").strip()
-    if not raw:
-        return _default_llm_base_url()
-    raw = raw.rstrip("/")
-    parsed = urlparse(raw)
-    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-        raise ValueError("模型服务地址必须是完整的 http(s) URL，例如 https://api.openai.com 或 https://api.openai.com/v1")
-    if parsed.path in {"", "/"}:
-        raw = raw + "/v1"
-    return raw
-
-
-def _read_llm_config() -> dict:
-    try:
-        if LLM_CONFIG_FILE.exists():
-            data = json.loads(LLM_CONFIG_FILE.read_text(encoding="utf-8"))
-            return data if isinstance(data, dict) else {}
-    except Exception as e:
-        logger.warning(f"读取模型服务配置失败: {e}")
-    return {}
-
-
-def _save_llm_config(*, base_url: str) -> None:
-    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    LLM_CONFIG_FILE.write_text(
-        json.dumps({"base_url": base_url}, indent=2, ensure_ascii=False),
-        encoding="utf-8",
-    )
-
-
-def _effective_llm_base_url() -> tuple[str, str]:
-    env_url = os.environ.get("ARK_BASE_URL")
-    if env_url:
-        try:
-            normalized_env_url = _normalize_llm_base_url(env_url)
-        except ValueError:
-            normalized_env_url = env_url.strip().rstrip("/")
-        cfg_url = (_read_llm_config().get("base_url") or "").strip()
-        try:
-            normalized_cfg_url = _normalize_llm_base_url(cfg_url) if cfg_url else ""
-        except ValueError:
-            normalized_cfg_url = cfg_url.rstrip("/")
-        source = "file" if normalized_cfg_url and normalized_cfg_url == normalized_env_url else "env"
-        return normalized_env_url, source
-    cfg_url = (_read_llm_config().get("base_url") or "").strip()
-    if cfg_url:
-        try:
-            return _normalize_llm_base_url(cfg_url), "file"
-        except ValueError:
-            logger.warning("模型服务配置中的 base_url 非法，已回退默认值")
-    return _default_llm_base_url(), "default"
-
-
-def _reset_llm_client_cache() -> None:
-    try:
-        from inkmoment import llm_judge
-        llm_judge._CLIENT = None
-        llm_judge._MODELS_CACHE = {"at": 0.0, "data": None}
-        llm_judge._MODEL_PROBE_CACHE = {}
-    except Exception:
-        pass
-
-
-def _load_llm_config_from_file() -> None:
-    """启动时调；env var 优先，其次本地配置文件。"""
-    if not os.environ.get("ARK_BASE_URL"):
-        cfg_url = (_read_llm_config().get("base_url") or "").strip()
-        if cfg_url:
-            try:
-                os.environ["ARK_BASE_URL"] = _normalize_llm_base_url(cfg_url)
-                logger.info(f"已从 {LLM_CONFIG_FILE} 载入 ARK_BASE_URL")
-            except ValueError as e:
-                logger.warning(f"模型服务地址配置无效: {e}")
-    if os.environ.get("ARK_API_KEY"):
-        return
-    try:
-        if ARK_KEY_FILE.exists():
-            key = ARK_KEY_FILE.read_text(encoding="utf-8").strip()
-            if key:
-                os.environ["ARK_API_KEY"] = key
-                logger.info(f"已从 {ARK_KEY_FILE} 载入 ARK_API_KEY")
-    except OSError as e:
-        logger.warning(f"读取 ARK key 文件失败: {e}")
-
-
-def _save_ark_key_to_file(key: str) -> None:
-    """写到 ~/.config/inkmoment/ark_key，0600 权限。"""
-    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    ARK_KEY_FILE.write_text(key, encoding="utf-8")
-    try:
-        os.chmod(ARK_KEY_FILE, 0o600)
-    except OSError:
-        pass  # Windows 没 chmod，不致命
-
-
 # 启动期：从文件载入模型服务配置（env var 优先）
-_load_llm_config_from_file()
+load_llm_config_from_file()
 
 
 def setup_logger(folder: Optional[str]) -> None:
@@ -1688,6 +1519,7 @@ def _thumb_cache_key(rel: str, mtime: float, size: int, max_side: int) -> str:
 app = Flask(__name__, static_folder="static", static_url_path="/static")
 app.register_blueprint(folder_bp)
 app.register_blueprint(create_job_blueprint(lambda: JOB, lambda: JOB_LOG))
+app.register_blueprint(llm_bp)
 app.register_blueprint(system_bp)
 SESSION: Optional[SessionState] = None
 JOB: Optional[JobState] = None
@@ -2318,124 +2150,6 @@ def index():
     return send_from_directory(app.static_folder, "index.html")
 
 
-@app.route("/api/ark_key", methods=["GET"])
-def api_ark_key_status():
-    """返回模型服务 Key 和 URL 当前状态。"""
-    key = os.environ.get("ARK_API_KEY", "")
-    base_url, base_url_source = _effective_llm_base_url()
-    payload = {
-        "configured": bool(key),
-        "base_url": base_url,
-        "base_url_source": base_url_source,
-        "default_base_url": _default_llm_base_url(),
-    }
-    if not key:
-        return jsonify({**payload, "source": None, "masked": None})
-    # source: env 表示来自用户 export；file 表示我们存的；优先级 env > file
-    source = "file" if ARK_KEY_FILE.exists() and ARK_KEY_FILE.read_text(encoding="utf-8").strip() == key else "env"
-    return jsonify({**payload,
-        "source": source,
-        "masked": _mask_key(key),
-    })
-
-
-@app.route("/api/ark_key", methods=["POST"])
-def api_ark_key_set():
-    """前端录入模型服务 URL + API Key，并测试连通性。
-    失败（包括模型服务拒绝认证）→ 返回错误，不保存到文件。"""
-    data = request.get_json(force=True) or {}
-    key = (data.get("key") or "").strip()
-    base_url_raw = (data.get("base_url") or "").strip()
-    if not key:
-        return jsonify({"error": "key 不能为空"}), 400
-    try:
-        base_url = _normalize_llm_base_url(base_url_raw)
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 400
-    # 先临时设 os.environ 测试一下；通过了再写文件
-    prev = os.environ.get("ARK_API_KEY")
-    prev_base_url = os.environ.get("ARK_BASE_URL")
-    os.environ["ARK_API_KEY"] = key
-    os.environ["ARK_BASE_URL"] = base_url
-    try:
-        from inkmoment import llm_judge
-        _reset_llm_client_cache()
-        models = llm_judge.list_models()
-        if not models:
-            raise RuntimeError("模型服务未返回可用模型，请检查服务地址、Key 或模型权限")
-    except Exception as e:
-        # 回滚
-        if prev is None:
-            os.environ.pop("ARK_API_KEY", None)
-        else:
-            os.environ["ARK_API_KEY"] = prev
-        if prev_base_url is None:
-            os.environ.pop("ARK_BASE_URL", None)
-        else:
-            os.environ["ARK_BASE_URL"] = prev_base_url
-        _reset_llm_client_cache()
-        return jsonify({"error": f"验证失败：{type(e).__name__}: {e}"}), 400
-    # 通过 → 写文件
-    try:
-        _save_llm_config(base_url=base_url)
-        _save_ark_key_to_file(key)
-    except OSError as e:
-        return jsonify({"error": f"配置已生效但持久化失败：{e}", "masked": _mask_key(key)}), 200
-    logger.info(f"模型服务配置已更新，base_url={base_url}，{len(models)} 个模型可见")
-    return jsonify({
-        "ok": True,
-        "masked": _mask_key(key),
-        "base_url": base_url,
-        "model_count": len(models),
-    })
-
-
-@app.route("/api/ark_key", methods=["DELETE"])
-def api_ark_key_clear():
-    """清除 API Key：删本地文件 + 从 os.environ 移除。"""
-    os.environ.pop("ARK_API_KEY", None)
-    try:
-        if ARK_KEY_FILE.exists():
-            ARK_KEY_FILE.unlink()
-    except OSError as e:
-        return jsonify({"error": f"删除 key 文件失败: {e}"}), 500
-    _reset_llm_client_cache()
-    return jsonify({"ok": True})
-
-
-@app.route("/api/llm_models", methods=["GET"])
-def api_llm_models():
-    """土豪模式：检查当前模型服务中哪些模型实际可用于视觉调用。"""
-    if not os.getenv("ARK_API_KEY"):
-        return jsonify({"error": "未配置模型服务 API Key（请在土豪模式卡片下方点击设置）",
-                        "models": []}), 412
-    try:
-        from inkmoment import llm_judge
-        force = request.args.get("force") in {"1", "true", "yes"}
-        if force:
-            llm_judge._MODELS_CACHE = {"at": 0.0, "data": None}
-        models = llm_judge.list_models()
-        available, unavailable = llm_judge.filter_available_models(models, force=force)
-    except Exception as e:
-        return jsonify({"error": str(e), "models": []}), 502
-    base_url, _source = _effective_llm_base_url()
-    return jsonify({
-        "models": available,
-        "base_url": base_url,
-        "checked": True,
-        "total_models": len(models),
-        "available_count": len(available),
-        "unavailable_count": len(unavailable),
-        "unavailable": unavailable[:20],
-    })
-
-
-@app.route("/api/diagnostics", methods=["GET"])
-def api_diagnostics():
-    """本地运行环境诊断：不触发模型服务调用，不产生费用。"""
-    return jsonify(_diagnostics_payload())
-
-
 @app.route("/api/job_log", methods=["GET"])
 def api_job_log():
     """列出当前 SESSION 文件夹下所有 per-job 日志，按时间倒序。
@@ -2470,17 +2184,6 @@ def api_job_log():
             } for f in files[:50]
         ],
     })
-
-
-@app.route("/api/llm_concurrency", methods=["GET"])
-def api_llm_concurrency():
-    """诊断：返回当前自适应限速器允许的并发数。
-    任务跑的时候可以轮询这个看 limiter 有没有因为 429 被压低。"""
-    try:
-        from inkmoment import llm_judge
-        return jsonify({"limit": llm_judge.current_concurrency()})
-    except Exception as e:
-        return jsonify({"error": str(e), "limit": None}), 500
 
 
 @app.route("/api/start", methods=["POST"])
