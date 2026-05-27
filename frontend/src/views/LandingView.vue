@@ -7,6 +7,7 @@ import ThemePicker from "../components/ThemePicker.vue";
 import StatusBadge from "../components/StatusBadge.vue";
 import { useBranding } from "../composables/useBranding";
 import { useFolderPeek } from "../composables/useFolderPeek";
+import { useLlmConfig } from "../composables/useLlmConfig";
 import { useTheme } from "../composables/useTheme";
 
 const emit = defineEmits(["job-started"]);
@@ -26,6 +27,7 @@ const nearMinutes = ref(5);
 const startError = ref("");
 const isStarting = ref(false);
 const lastStartPayload = ref(null);
+const showLlmConfig = ref(false);
 
 const {
   snapshot,
@@ -33,7 +35,29 @@ const {
   statusState,
 } = useFolderPeek(folder);
 
+const {
+  status: llmStatus,
+  models: llmModels,
+  selectedModel: selectedLlmModel,
+  concurrency: llmConcurrency,
+  diagnostics: llmDiagnostics,
+  baseUrlInput: llmBaseUrlInput,
+  keyInput: llmKeyInput,
+  loading: llmLoading,
+  checkingModels,
+  saving: llmSaving,
+  error: llmError,
+  message: llmMessage,
+  configured: llmConfigured,
+  modelReady: llmModelReady,
+  refresh: refreshLlm,
+  saveConfig: saveLlmConfig,
+  clearConfig: clearLlmConfig,
+  refreshModels,
+} = useLlmConfig();
 const faceAwareDisabled = computed(() => !prescreenEnabled.value || engine.value === "fast");
+const llmPanelVisible = computed(() => engine.value === "tycoon" || showLlmConfig.value);
+const tycoonReady = computed(() => engine.value !== "tycoon" || llmModelReady.value);
 
 async function handleStart() {
   startError.value = "";
@@ -44,8 +68,9 @@ async function handleStart() {
     return;
   }
 
-  if (engine.value === "tycoon") {
-    startError.value = "Vue 迁移版暂未接入土豪模式模型配置，请先使用原页面。";
+  if (engine.value === "tycoon" && !llmModelReady.value) {
+    showLlmConfig.value = true;
+    startError.value = "请先配置模型服务，并选择一个可用视觉模型";
     return;
   }
 
@@ -63,7 +88,7 @@ async function handleStart() {
       prescreen_enabled: prescreenEnabled.value,
       prescreen_strength: prescreenStrength.value,
       face_aware: engine.value === "expert" && faceAware.value,
-      llm_model: "",
+      llm_model: engine.value === "tycoon" ? selectedLlmModel.value : "",
     };
     await startJob(payload);
     lastStartPayload.value = payload;
@@ -101,6 +126,86 @@ async function handleStart() {
     <form class="start-form" @submit.prevent="handleStart">
       <EngineSwitch v-model="engine" />
 
+      <section v-if="llmPanelVisible" class="llm-panel">
+        <div class="llm-head">
+          <div>
+            <div class="option-label">模型服务</div>
+            <h2>土豪模式配置</h2>
+          </div>
+          <button class="btn-ghost" type="button" :disabled="llmLoading" @click="refreshLlm({ forceModels: true })">
+            {{ llmLoading ? "检查中" : "刷新状态" }}
+          </button>
+        </div>
+
+        <div class="llm-status-grid">
+          <div>
+            <span>Key</span>
+            <strong>{{ llmConfigured ? llmStatus?.masked || "已配置" : "未配置" }}</strong>
+          </div>
+          <div>
+            <span>并发</span>
+            <strong>{{ llmConcurrency?.limit ?? "—" }}</strong>
+          </div>
+          <div>
+            <span>可用模型</span>
+            <strong>{{ llmModels.length }}</strong>
+          </div>
+        </div>
+
+        <div class="llm-config-grid">
+          <label>
+            <span>服务地址</span>
+            <input
+              v-model="llmBaseUrlInput"
+              type="url"
+              placeholder="https://api.openai.com/v1"
+              spellcheck="false"
+            >
+          </label>
+          <label>
+            <span>API Key</span>
+            <input
+              v-model="llmKeyInput"
+              type="password"
+              placeholder="粘贴新的 Key 后保存"
+              autocomplete="off"
+              spellcheck="false"
+            >
+          </label>
+        </div>
+
+        <div class="llm-actions">
+          <button class="btn-primary" type="button" :disabled="llmSaving || !llmKeyInput.trim()" @click="saveLlmConfig">
+            {{ llmSaving ? "保存中" : "保存并验证" }}
+          </button>
+          <button class="btn-ghost" type="button" :disabled="checkingModels || !llmConfigured" @click="refreshModels">
+            {{ checkingModels ? "刷新中" : "刷新模型" }}
+          </button>
+          <button class="btn-ghost" type="button" :disabled="llmSaving || !llmConfigured" @click="clearLlmConfig">
+            清除 Key
+          </button>
+        </div>
+
+        <label class="llm-model-select">
+          <span>视觉模型</span>
+          <select v-model="selectedLlmModel" :disabled="!llmModels.length">
+            <option value="">请选择模型</option>
+            <option v-for="model in llmModels" :key="model" :value="model">
+              {{ model }}
+            </option>
+          </select>
+        </label>
+
+        <p v-if="llmStatus?.base_url" class="llm-note">
+          当前地址：{{ llmStatus.base_url }} · 来源：{{ llmStatus.base_url_source || "default" }}
+        </p>
+        <p v-if="llmDiagnostics?.llm" class="llm-note">
+          诊断：{{ llmDiagnostics.llm.configured ? "已读取到 Key" : "未读取到 Key" }}
+        </p>
+        <p v-if="llmMessage" class="start-note">{{ llmMessage }}</p>
+        <p v-if="llmError" class="form-error">{{ llmError }}</p>
+      </section>
+
       <label class="field-label" for="folder-input">照片文件夹</label>
       <div class="field-row">
         <input
@@ -111,7 +216,7 @@ async function handleStart() {
           spellcheck="false"
           required
         >
-        <button class="btn-primary" type="submit" :disabled="isStarting">
+        <button class="btn-primary" type="submit" :disabled="isStarting || !tycoonReady">
           {{ isStarting ? "启动中" : "开始" }}
         </button>
       </div>

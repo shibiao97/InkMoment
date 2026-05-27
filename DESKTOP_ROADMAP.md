@@ -54,7 +54,7 @@
 - 已新增 `ArenaView` 和 `useArenaGroup()`，接入 `/api/group`、`/api/choose`、`/api/skip_group` 与 `/api/undo`，支持基础双图选择、都留/都放手、跳过本组、撤销和组内缩略条。
 - 已新增 `DoneView` 和 `useDoneResults()`，接入 `/api/status`、`/api/winners`、`/api/skipped` 与 `/api/open_folder`，支持基础结果统计、胜出照片网格、输出目录路径和无法读取列表。
 - Vue 开发联调需要通过 `INKMOMENT_DEV_ORIGINS=http://127.0.0.1:5173` 显式允许 Vite 开发源访问 Flask API。
-- 土豪模式的模型服务地址/API Key 管理尚未迁移，Vue 入口暂时禁用土豪模式并提示使用原页面。
+- 土豪模式的模型服务地址/API Key 管理已迁移到 Vue 首页，接入 `/api/ark_key`、`/api/llm_models`、`/api/llm_concurrency` 与 `/api/diagnostics`，可保存配置、刷新模型并选择视觉模型启动任务。
 - ProcessingView 目前是基础进度页，PrescreenView 是基础复核页，PreviewView 是基础分组预览页，ArenaView 是基础双图选片页，DoneView 是基础完成页；照片墙动画、高级选片交互、水印和重做流程仍由原生 `static/` 页面承载。
 
 ### Phase 3: Flask 后端模块化
@@ -173,7 +173,7 @@ Task:
 
 Task:
 
-- [ ] 迁移土豪模式配置 UI，接入 `/api/ark_key`、`/api/llm_models`、`/api/llm_concurrency` 与 `/api/diagnostics`。
+- [x] 迁移土豪模式配置 UI，接入 `/api/ark_key`、`/api/llm_models`、`/api/llm_concurrency` 与 `/api/diagnostics`。
 - [ ] 补齐 ArenaView 高级交互：快捷键、缩放、单图组处理、跨组反悔入口。
 - [ ] 迁移水印导出流程，接入 `/api/watermark/*`。
 - [ ] 统一长任务 loading、错误提示、取消和回首页重置。

@@ -101,3 +101,33 @@ export function openFolder(payload = {}) {
     body: payload,
   });
 }
+
+export function getArkKeyStatus() {
+  return fetchJSON("/api/ark_key");
+}
+
+export function saveArkKey(payload) {
+  return fetchJSON("/api/ark_key", {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export function clearArkKey() {
+  return fetchJSON("/api/ark_key", {
+    method: "DELETE",
+  });
+}
+
+export function getLlmModels(force = false) {
+  const params = force ? "?force=1" : "";
+  return fetchJSON(`/api/llm_models${params}`);
+}
+
+export function getLlmConcurrency() {
+  return fetchJSON("/api/llm_concurrency");
+}
+
+export function getDiagnostics() {
+  return fetchJSON("/api/diagnostics");
+}

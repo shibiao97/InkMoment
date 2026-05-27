@@ -15,8 +15,7 @@ const engines = [
   {
     id: "tycoon",
     title: "土豪模式 ¥",
-    description: "兼容 OpenAI 协议的大模型直接判定 · 模型配置将在后续迁移",
-    disabled: true,
+    description: "兼容 OpenAI 协议的大模型直接判定 · 适合少量高价值精修筛选",
   },
 ];
 </script>
