@@ -47,6 +47,7 @@ from server.routes.selection import create_selection_blueprint
 from server.routes.session import create_session_blueprint
 from server.routes.system import system_bp
 from server.services.llm_service import load_llm_config_from_file
+from server.services.selection_service import current_group_payload
 
 try:
     from pillow_heif import register_heif_opener
@@ -2284,25 +2285,13 @@ def _decode_ok(path: str) -> bool:
         return False
 
 
-def _current_group_response():
-    if SESSION is None:
-        return jsonify({"error": "no session"}), 400
-    with LOCK:
-        _skip_finished_locked()
-        _validate_current_pair_locked()
-        if SESSION.current_group >= len(SESSION.groups):
-            return jsonify({"done": True})
-        g = SESSION.groups[SESSION.current_group]
-        return jsonify({"done": False, "group": _serialize_group(g, SESSION.current_group)})
-
-
-app.register_blueprint(create_selection_blueprint(
-    lambda: SESSION,
-    LOCK,
-    _skip_finished_locked,
-    _validate_current_pair_locked,
-    _serialize_group,
-))
+def _current_group_payload_locked() -> tuple[dict, int]:
+    return current_group_payload(
+        SESSION,
+        _skip_finished_locked,
+        _validate_current_pair_locked,
+        _serialize_group,
+    )
 
 
 def _push_undo_locked() -> None:
@@ -2378,18 +2367,16 @@ def _record_preference(left_path: Optional[str], right_path: Optional[str],
             SESSION.pref_brighter_passed += 1
 
 
-@app.route("/api/choose", methods=["POST"])
-def api_choose():
+def _choose_group_payload(data: dict) -> tuple[dict, int]:
     if SESSION is None:
-        return jsonify({"error": "no session"}), 400
-    data = request.get_json(force=True)
+        return {"error": "no session"}, 400
     side = data.get("loser")
     if side not in ("left", "right", "both", "neither"):
-        return jsonify({"error": "invalid loser"}), 400
+        return {"error": "invalid loser"}, 400
     with LOCK:
         _skip_finished_locked()
         if SESSION.current_group >= len(SESSION.groups):
-            return jsonify({"done": True})
+            return {"done": True}, 200
         _push_undo_locked()
         g = SESSION.groups[SESSION.current_group]
         # 在 advance 之前记下 left/right（advance 后会改）
@@ -2398,88 +2385,74 @@ def api_choose():
         advance(g, side)
         _record_preference(left_before, right_before, side)
         _finalize_group_locked()
-    return _current_group_response()
+        return _current_group_payload_locked()
 
 
-@app.route("/api/kick", methods=["POST"])
-def api_kick():
+def _kick_group_payload(data: dict) -> tuple[dict, int]:
     if SESSION is None:
-        return jsonify({"error": "no session"}), 400
-    data = request.get_json(force=True)
+        return {"error": "no session"}, 400
     side = data.get("side")
     if side not in ("left", "right"):
-        return jsonify({"error": "invalid side"}), 400
+        return {"error": "invalid side"}, 400
     with LOCK:
         _skip_finished_locked()
         if SESSION.current_group >= len(SESSION.groups):
-            return jsonify({"done": True})
+            return {"done": True}, 200
         _push_undo_locked()
         g = SESSION.groups[SESSION.current_group]
         if not kick_side(g, side):
             SESSION.undo_stack.pop()
-            return jsonify({"error": "no image on side"}), 400
+            return {"error": "no image on side"}, 400
         _finalize_group_locked()
-    return _current_group_response()
+        return _current_group_payload_locked()
 
 
-@app.route("/api/undo", methods=["POST"])
-def api_undo():
+def _undo_group_payload() -> tuple[dict, int]:
     if SESSION is None:
-        return jsonify({"error": "no session"}), 400
+        return {"error": "no session"}, 400
     with LOCK:
         if not SESSION.undo_stack:
-            return jsonify({"undone": False, **_payload_group()})
+            payload, status = _current_group_payload_locked()
+            return {"undone": False, **payload}, status
         last = SESSION.undo_stack[-1]
         if last["group_index"] != SESSION.current_group:
-            return jsonify({"undone": False, **_payload_group()})
+            payload, status = _current_group_payload_locked()
+            return {"undone": False, **payload}, status
         SESSION.undo_stack.pop()
         snap = last["snapshot"]
         SESSION.groups[SESSION.current_group] = _group_from_dict(snap)
         save_state(SESSION)
-    return jsonify({"undone": True, **_payload_group()})
+        payload, status = _current_group_payload_locked()
+        return {"undone": True, **payload}, status
 
 
-def _payload_group():
+def _skip_group_payload() -> tuple[dict, int]:
     if SESSION is None:
-        return {"error": "no session"}
-    _skip_finished_locked()
-    _validate_current_pair_locked()
-    if SESSION.current_group >= len(SESSION.groups):
-        return {"done": True}
-    g = SESSION.groups[SESSION.current_group]
-    return {"done": False, "group": _serialize_group(g, SESSION.current_group)}
-
-
-@app.route("/api/skip_group", methods=["POST"])
-def api_skip_group():
-    if SESSION is None:
-        return jsonify({"error": "no session"}), 400
+        return {"error": "no session"}, 400
     with LOCK:
         if SESSION.current_group < len(SESSION.groups):
             g = SESSION.groups.pop(SESSION.current_group)
             SESSION.groups.append(g)
         SESSION.undo_stack = []
         save_state(SESSION)
-    return _current_group_response()
+        return _current_group_payload_locked()
 
 
-@app.route("/api/reopen_group", methods=["POST"])
-def api_reopen_group():
+def _reopen_group_payload(data: dict) -> tuple[dict, int]:
     """跨组反悔：按 group_id 找到一个已 finished 的组，把它的 winners/losers
     物理还原回根目录，重置决策状态，把用户带回擂台从头挑这一组。"""
     if SESSION is None:
-        return jsonify({"error": "no session"}), 400
-    data = request.get_json(force=True) or {}
+        return {"error": "no session"}, 400
     gid = data.get("group_id") or ""
     if not gid:
-        return jsonify({"error": "缺少 group_id"}), 400
+        return {"error": "缺少 group_id"}, 400
     with LOCK:
         idx = next((i for i, g in enumerate(SESSION.groups) if g.id == gid), -1)
         if idx < 0:
-            return jsonify({"error": "找不到该组"}), 404
+            return {"error": "找不到该组"}, 404
         g = SESSION.groups[idx]
         if not g.finished:
-            return jsonify({"error": "该组还没决定，无需反悔"}), 400
+            return {"error": "该组还没决定，无需反悔"}, 400
         result = reopen_group(g, SESSION.folder, SESSION.mode, SESSION)
         # 跳到这组重新挑；undo_stack 整体作废（snapshot 引用的是旧状态）
         SESSION.current_group = idx
@@ -2488,10 +2461,24 @@ def api_reopen_group():
         if result["failed"]:
             for f in result["failed"]:
                 logger.warning(f"reopen 还原失败 {f['path']}: {f['reason']}")
-    payload = _current_group_response().get_json()
-    payload["reopened"] = True
-    payload["failed"] = result["failed"]
-    return jsonify(payload)
+        payload, status = _current_group_payload_locked()
+        payload["reopened"] = True
+        payload["failed"] = result["failed"]
+        return payload, status
+
+
+app.register_blueprint(create_selection_blueprint(
+    lambda: SESSION,
+    LOCK,
+    _skip_finished_locked,
+    _validate_current_pair_locked,
+    _serialize_group,
+    _choose_group_payload,
+    _kick_group_payload,
+    _undo_group_payload,
+    _skip_group_payload,
+    _reopen_group_payload,
+))
 
 
 # ---------------- 其它接口 ----------------
