@@ -166,3 +166,51 @@ def kick_group_payload(
             validate_current_pair,
             serialize_group,
         )
+
+
+def reopen_group_payload(
+    data: dict,
+    get_session: Callable,
+    lock,
+    skip_finished: Callable[[], None],
+    validate_current_pair: Callable[[], None],
+    serialize_group: Callable,
+    reopen_group: Callable,
+    save_state: Callable,
+    log_warning: Callable[[str], None],
+) -> tuple[dict, int]:
+    with lock:
+        session = get_session()
+        if session is None:
+            return {"error": "no session"}, 400
+
+        group_id = data.get("group_id") or ""
+        if not group_id:
+            return {"error": "缺少 group_id"}, 400
+
+        index = next((i for i, group in enumerate(session.groups)
+                      if group.id == group_id), -1)
+        if index < 0:
+            return {"error": "找不到该组"}, 404
+
+        group = session.groups[index]
+        if not group.finished:
+            return {"error": "该组还没决定，无需反悔"}, 400
+
+        result = reopen_group(group, session.folder, session.mode, session)
+        session.current_group = index
+        session.undo_stack = []
+        save_state(session)
+        if result["failed"]:
+            for failure in result["failed"]:
+                log_warning(f"reopen 还原失败 {failure['path']}: {failure['reason']}")
+
+        payload, status = current_group_payload(
+            session,
+            skip_finished,
+            validate_current_pair,
+            serialize_group,
+        )
+        payload["reopened"] = True
+        payload["failed"] = result["failed"]
+        return payload, status

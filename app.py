@@ -63,6 +63,7 @@ from server.services.selection_service import (
     choose_group_payload,
     current_group_payload,
     kick_group_payload,
+    reopen_group_payload,
     skip_group_payload,
     undo_group_payload,
 )
@@ -2305,35 +2306,6 @@ def _record_preference(left_path: Optional[str], right_path: Optional[str],
             SESSION.pref_brighter_passed += 1
 
 
-def _reopen_group_payload(data: dict) -> tuple[dict, int]:
-    """跨组反悔：按 group_id 找到一个已 finished 的组，把它的 winners/losers
-    物理还原回根目录，重置决策状态，把用户带回擂台从头挑这一组。"""
-    if SESSION is None:
-        return {"error": "no session"}, 400
-    gid = data.get("group_id") or ""
-    if not gid:
-        return {"error": "缺少 group_id"}, 400
-    with LOCK:
-        idx = next((i for i, g in enumerate(SESSION.groups) if g.id == gid), -1)
-        if idx < 0:
-            return {"error": "找不到该组"}, 404
-        g = SESSION.groups[idx]
-        if not g.finished:
-            return {"error": "该组还没决定，无需反悔"}, 400
-        result = reopen_group(g, SESSION.folder, SESSION.mode, SESSION)
-        # 跳到这组重新挑；undo_stack 整体作废（snapshot 引用的是旧状态）
-        SESSION.current_group = idx
-        SESSION.undo_stack = []
-        save_state(SESSION)
-        if result["failed"]:
-            for f in result["failed"]:
-                logger.warning(f"reopen 还原失败 {f['path']}: {f['reason']}")
-        payload, status = _current_group_payload_locked()
-        payload["reopened"] = True
-        payload["failed"] = result["failed"]
-        return payload, status
-
-
 app.register_blueprint(create_selection_blueprint(
     lambda: SESSION,
     LOCK,
@@ -2380,7 +2352,17 @@ app.register_blueprint(create_selection_blueprint(
         _serialize_group,
         save_state,
     ),
-    _reopen_group_payload,
+    lambda data: reopen_group_payload(
+        data,
+        lambda: SESSION,
+        LOCK,
+        _skip_finished_locked,
+        _validate_current_pair_locked,
+        _serialize_group,
+        reopen_group,
+        save_state,
+        logger.warning,
+    ),
 ))
 
 
