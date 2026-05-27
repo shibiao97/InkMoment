@@ -111,6 +111,50 @@ def mark_job_grouping(job) -> None:
     job.label = "构建分组..."
 
 
+def prepare_grouping_result(
+    job,
+    infos,
+    folder: str,
+    dry_run: bool,
+    mode: str,
+    threshold_near: int,
+    threshold_far: int,
+    near_seconds: int,
+    prescreen_enabled: bool,
+    prescreen_strength: str,
+    engine: str,
+    group_infos: Callable,
+    build_session_from_groups: Callable,
+    save_state: Callable,
+):
+    mark_job_grouping(job)
+    raw_groups = group_infos(
+        infos,
+        threshold_near=threshold_near,
+        threshold_far=threshold_far,
+        near_seconds=near_seconds,
+        engine=engine,
+    )
+    session = build_session_from_groups(
+        folder,
+        dry_run,
+        mode,
+        raw_groups,
+        infos,
+        threshold_near,
+        threshold_far,
+        near_seconds,
+        prescreen_enabled=False,
+        prescreen_strength=prescreen_strength,
+        engine=engine,
+    )
+    session.prescreen_enabled = prescreen_enabled
+    session.prescreen_strength = prescreen_strength
+    session.prescreen_reviewed = True
+    save_state(session)
+    return session
+
+
 def mark_job_grouping_done(
     job,
     group_count: int,

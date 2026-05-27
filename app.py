@@ -53,10 +53,10 @@ from server.services.job_runner_service import (
     mark_job_cancelled,
     mark_job_checking,
     mark_job_error,
-    mark_job_grouping,
     mark_job_grouping_done,
     mark_job_prescreen_done,
     mark_job_started,
+    prepare_grouping_result,
     prepare_prescreen_result,
     run_info_scan,
 )
@@ -2103,25 +2103,22 @@ def _run_job(folder: str, dry_run: bool, mode: str, wipe_cache: bool,
                 )
             return
 
-        mark_job_grouping(job)
-        raw_groups = group_infos(
+        sess = prepare_grouping_result(
+            job,
             infos,
-            threshold_near=threshold_near,
-            threshold_far=threshold_far,
-            near_seconds=near_seconds,
-            engine=engine,
+            folder,
+            dry_run,
+            mode,
+            threshold_near,
+            threshold_far,
+            near_seconds,
+            prescreen_enabled,
+            prescreen_strength,
+            engine,
+            group_infos,
+            build_session_from_groups,
+            save_state,
         )
-        sess = build_session_from_groups(
-            folder, dry_run, mode, raw_groups, infos,
-            threshold_near, threshold_far, near_seconds,
-            prescreen_enabled=False,
-            prescreen_strength=prescreen_strength,
-            engine=engine,
-        )
-        sess.prescreen_enabled = prescreen_enabled
-        sess.prescreen_strength = prescreen_strength
-        sess.prescreen_reviewed = True
-        save_state(sess)
         if _cancel_check() or job.status == "cancelled":
             raise CancelledError()
         with LOCK:
