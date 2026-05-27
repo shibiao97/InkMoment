@@ -1,5 +1,6 @@
 <script setup>
 import { ref } from "vue";
+import ArenaView from "./views/ArenaView.vue";
 import LandingView from "./views/LandingView.vue";
 import PrescreenView from "./views/PrescreenView.vue";
 import PreviewView from "./views/PreviewView.vue";
@@ -24,11 +25,19 @@ function continueFromProcessing(kind) {
   }
   if (kind === "preview") {
     currentView.value = "preview";
+    return;
+  }
+  if (kind === "arena") {
+    currentView.value = "arena";
   }
 }
 
 function enterPreview() {
   currentView.value = "preview";
+}
+
+function enterArena() {
+  currentView.value = "arena";
 }
 </script>
 
@@ -49,6 +58,11 @@ function enterPreview() {
     @continue-preview="enterPreview"
   />
   <PreviewView
+    v-else-if="currentView === 'preview'"
+    @back-home="backHome"
+    @continue-arena="enterArena"
+  />
+  <ArenaView
     v-else
     @back-home="backHome"
   />

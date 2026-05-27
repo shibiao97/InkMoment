@@ -63,3 +63,26 @@ export function regroup(payload) {
     body: payload,
   });
 }
+
+export function getGroup() {
+  return fetchJSON("/api/group");
+}
+
+export function chooseGroup(loser) {
+  return fetchJSON("/api/choose", {
+    method: "POST",
+    body: { loser },
+  });
+}
+
+export function skipGroup() {
+  return fetchJSON("/api/skip_group", {
+    method: "POST",
+  });
+}
+
+export function undoGroup() {
+  return fetchJSON("/api/undo", {
+    method: "POST",
+  });
+}
