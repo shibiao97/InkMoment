@@ -264,6 +264,34 @@ def record_preference(
             session.pref_brighter_passed += 1
 
 
+def finalize_current_group(
+    session,
+    apply_group: Callable,
+    save_state: Callable,
+    log_warning: Callable[[str], None],
+) -> None:
+    group = session.groups[session.current_group]
+    save_state(session)  # 先把 advance 后的状态落盘
+    if group.finished:
+        result = apply_group(
+            group,
+            session.folder,
+            session.dry_run,
+            session.mode,
+            session,
+        )
+        if result.get("failed"):
+            for failure in result["failed"]:
+                log_warning(f"apply 失败 {failure['path']}: {failure['reason']}")
+        finished_index = session.current_group
+        session.current_group += 1
+        session.undo_stack = [
+            undo for undo in session.undo_stack
+            if undo["group_index"] != finished_index
+        ]
+    save_state(session)
+
+
 def current_group_payload(
     session,
     skip_finished: Callable[[], None],

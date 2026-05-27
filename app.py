@@ -63,6 +63,7 @@ from server.services.selection_service import (
     advance,
     choose_group_payload,
     current_group_payload,
+    finalize_current_group,
     group_best_path,
     group_earliest_dt,
     kick_side,
@@ -2068,18 +2069,7 @@ def _push_undo_locked() -> None:
 
 
 def _finalize_group_locked() -> None:
-    g = SESSION.groups[SESSION.current_group]
-    save_state(SESSION)  # 先把 advance 后的状态落盘
-    if g.finished:
-        result = apply_group(g, SESSION.folder, SESSION.dry_run, SESSION.mode, SESSION)
-        if result.get("failed"):
-            for f in result["failed"]:
-                logger.warning(f"apply 失败 {f['path']}: {f['reason']}")
-        finished_idx = SESSION.current_group
-        SESSION.current_group += 1
-        SESSION.undo_stack = [u for u in SESSION.undo_stack
-                              if u["group_index"] != finished_idx]
-    save_state(SESSION)
+    finalize_current_group(SESSION, apply_group, save_state, logger.warning)
 
 
 def _record_preference(left_path: Optional[str], right_path: Optional[str],
