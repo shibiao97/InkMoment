@@ -108,7 +108,9 @@ server/
 - 已迁移缩略图/原图响应、RAW 内嵌预览读取、占位图响应、路径安全校验和图片缓存头到 `server.services.image_service`。
 - 已迁移选片路由 `server.routes.selection`，覆盖 `/api/group`、`/api/choose`、`/api/kick`、`/api/undo`、`/api/skip_group` 与 `/api/reopen_group`。
 - 已迁移当前选片组读取入口到 `server.services.selection_service`；组序列化、坏图预检和选片写操作的状态机暂留 `app.py` 并通过回调注入。
-- `app.py` 仍保留大部分全局状态和业务路由，后续建议继续按 folder/job/image/selection/result 逐块拆分。
+- 已迁移水印路由 `server.routes.watermark`，覆盖 `/api/watermark/templates`、`/api/watermark/preview`、`/api/watermark/start`、`/api/watermark/status`、`/api/watermark/cancel` 与 `/api/watermark/open_out_dir`。
+- 水印预览、批量导出、取消和打开输出目录的状态机暂留 `app.py` 并通过回调注入。
+- `app.py` 直接路由已收敛到 `/` 与 `/api/start`；仍保留全局状态、任务启动、水印状态机和部分业务 helper，后续重点是把 `/api/start` 收敛成可复用 service。
 
 ### Phase 4: Tauri 桌面壳
 
@@ -137,11 +139,10 @@ server/
 
 目标：让 `app.py` 逐步只负责启动、全局状态装配和 blueprint 注册，为 Tauri sidecar 启动做准备。
 
-建议顺序：
+剩余建议：
 
-1. 抽离 `/api/restore_rejected` 到结果/初筛领域，保留文件还原 helper 通过回调注入。
-2. 抽离 `/api/watermark/*` 到 `server.routes.watermark` 与 `server.services.watermark_service`。
-3. 最后处理 `/api/start`，把 job 创建、线程启动和 session 写入收敛成一个可被 CLI/Tauri 复用的 service。
+1. 处理 `/api/start`，把 job 创建、线程启动和 session 写入收敛成一个可被 CLI/Tauri 复用的 service。
+2. 将水印预览、批量导出、取消和打开输出目录的状态机继续下沉到 `server.services.watermark_service`。
 
 完成标准：
 

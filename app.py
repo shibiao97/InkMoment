@@ -46,6 +46,7 @@ from server.routes.results import create_results_blueprint
 from server.routes.selection import create_selection_blueprint
 from server.routes.session import create_session_blueprint
 from server.routes.system import system_bp
+from server.routes.watermark import create_watermark_blueprint
 from server.services.llm_service import load_llm_config_from_file
 from server.services.selection_service import current_group_payload
 
@@ -1524,6 +1525,14 @@ app.register_blueprint(create_session_blueprint(
     _infos_from_memory_or_cache,
 ))
 app.register_blueprint(system_bp)
+app.register_blueprint(create_watermark_blueprint(
+    lambda: _watermark_templates_payload(),
+    lambda data: _watermark_preview_payload(data),
+    lambda data: _watermark_start_payload(data),
+    lambda: _watermark_status_payload(),
+    lambda: _watermark_cancel_payload(),
+    lambda: _watermark_open_out_dir_payload(),
+))
 SESSION: Optional[SessionState] = None
 JOB: Optional[JobState] = None
 LOCK = threading.Lock()
@@ -2819,24 +2828,21 @@ def _winner_paths() -> list[str]:
     return paths
 
 
-@app.route("/api/watermark/templates")
-def api_watermark_templates():
+def _watermark_templates_payload() -> dict:
     """列出可用的水印模板及其子样式。"""
     from inkmoment.watermark import list_templates
-    return jsonify({"templates": list_templates()})
+    return {"templates": list_templates()}
 
 
-@app.route("/api/watermark/preview", methods=["POST"])
-def api_watermark_preview():
+def _watermark_preview_payload(cfg_dict: dict) -> tuple[dict, int]:
     """用第一张 winner 生成一张预览图，base64 返回。"""
     if SESSION is None:
-        return jsonify({"error": "no session"}), 400
+        return {"error": "no session"}, 400
     winners = _winner_paths()
     if not winners:
-        return jsonify({"error": "没有 winner 照片可预览"}), 400
+        return {"error": "没有 winner 照片可预览"}, 400
 
     from inkmoment.watermark import WatermarkConfig, render, parse_exif
-    cfg_dict = request.get_json(silent=True) or {}
     cfg = WatermarkConfig.from_dict(cfg_dict)
 
     # 允许前端用 index 指定预览的是第几张（默认第 0 张）
@@ -2853,10 +2859,10 @@ def api_watermark_preview():
         data = render(src, cfg, preview_max_side=1400)
     except Exception as e:
         logger.exception("watermark preview failed")
-        return jsonify({"error": f"{type(e).__name__}: {e}"}), 500
+        return {"error": f"{type(e).__name__}: {e}"}, 500
 
     import base64
-    return jsonify({
+    return {
         "image_b64": base64.b64encode(data).decode("ascii"),
         "size_kb": round(len(data) / 1024, 1),
         "source_name": Path(src).name,
@@ -2872,7 +2878,7 @@ def api_watermark_preview():
             "iso": exif.iso,
             "datetime": exif.datetime_str,
         },
-    })
+    }, 200
 
 
 def _run_watermark_job(src_paths: list[str], dst: Path, cfg) -> None:
@@ -2910,21 +2916,19 @@ def _run_watermark_job(src_paths: list[str], dst: Path, cfg) -> None:
         job.finished_at = time.time()
 
 
-@app.route("/api/watermark/start", methods=["POST"])
-def api_watermark_start():
+def _watermark_start_payload(cfg_dict: dict) -> tuple[dict, int]:
     """启动批量导出。"""
     global WATERMARK_JOB
     if SESSION is None:
-        return jsonify({"error": "no session"}), 400
+        return {"error": "no session"}, 400
     if WATERMARK_JOB and WATERMARK_JOB.status == "running":
-        return jsonify({"error": "已有水印任务在跑"}), 409
+        return {"error": "已有水印任务在跑"}, 409
 
     winners = _winner_paths()
     if not winners:
-        return jsonify({"error": "没有 winner 照片可导出"}), 400
+        return {"error": "没有 winner 照片可导出"}, 400
 
     from inkmoment.watermark import WatermarkConfig
-    cfg_dict = request.get_json(silent=True) or {}
     cfg = WatermarkConfig.from_dict(cfg_dict)
 
     # 输出目录：winners/watermarked_YYYYMMDD_HHMMSS
@@ -2943,15 +2947,14 @@ def api_watermark_start():
         args=(winners, out_dir, cfg),
         daemon=True,
     ).start()
-    return jsonify({"ok": True, "total": len(winners), "out_dir": str(out_dir)})
+    return {"ok": True, "total": len(winners), "out_dir": str(out_dir)}, 200
 
 
-@app.route("/api/watermark/status")
-def api_watermark_status():
+def _watermark_status_payload() -> dict:
     if WATERMARK_JOB is None:
-        return jsonify({"status": "idle"})
+        return {"status": "idle"}
     j = WATERMARK_JOB
-    return jsonify({
+    return {
         "status": j.status,
         "done": j.done,
         "total": j.total,
@@ -2964,25 +2967,23 @@ def api_watermark_status():
         ],
         "error": j.error,
         "elapsed": (j.finished_at or time.time()) - (j.started_at or time.time()),
-    })
+    }
 
 
-@app.route("/api/watermark/cancel", methods=["POST"])
-def api_watermark_cancel():
+def _watermark_cancel_payload() -> tuple[dict, int]:
     if WATERMARK_JOB is None or WATERMARK_JOB.status != "running":
-        return jsonify({"ok": False, "error": "no running job"}), 400
+        return {"ok": False, "error": "no running job"}, 400
     WATERMARK_JOB.cancel_requested = True
-    return jsonify({"ok": True})
+    return {"ok": True}, 200
 
 
-@app.route("/api/watermark/open_out_dir", methods=["POST"])
-def api_watermark_open_out_dir():
+def _watermark_open_out_dir_payload() -> tuple[dict, int]:
     """打开水印输出目录。"""
     if WATERMARK_JOB is None or not WATERMARK_JOB.out_dir:
-        return jsonify({"error": "no output dir"}), 400
+        return {"error": "no output dir"}, 400
     target = Path(WATERMARK_JOB.out_dir)
     if not target.exists():
-        return jsonify({"error": "目录不存在"}), 400
+        return {"error": "目录不存在"}, 400
     try:
         if sys.platform == "darwin":
             subprocess.Popen(["open", str(target)])
@@ -2990,9 +2991,9 @@ def api_watermark_open_out_dir():
             os.startfile(str(target))  # type: ignore
         else:
             subprocess.Popen(["xdg-open", str(target)])
-        return jsonify({"ok": True})
+        return {"ok": True}, 200
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return {"error": str(e)}, 500
 
 
 # ---------------- 入口 ----------------
