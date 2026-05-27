@@ -92,8 +92,8 @@ server/
 - 已建立 `server/routes/` 与 `server/services/` 骨架。
 - 已迁移低风险系统路由 `server.routes.system`，覆盖 `/api/branding` 与 `/api/capabilities`。
 - 已迁移品牌配置读取到 `server.services.branding_service`，初筛能力探测到 `server.services.capability_service`。
-- 已迁移低风险文件夹路由 `server.routes.folder`，覆盖 `/api/browse_folder` 与 `/api/peek_folder`。
-- 已迁移原生文件夹选择和轻量目录快照到 `server.services.folder_service`；`/api/open_folder` 因依赖当前 `SESSION` 暂留 `app.py`。
+- 已迁移低风险文件夹路由 `server.routes.folder`，覆盖 `/api/browse_folder`、`/api/peek_folder`、`/api/skipped` 与 `/api/open_folder`。
+- 已迁移原生文件夹选择、轻量目录快照、无法读取日志查询和打开当前会话目录到 `server.services.folder_service`。
 - 已迁移任务状态路由 `server.routes.job`，覆盖 `/api/job`、`/api/cancel_job` 与 `/api/job_log`。
 - 已迁移任务状态序列化、取消逻辑和 per-job 日志读取到 `server.services.job_service`；`/api/start` 因依赖线程启动、`SESSION`、`LAST_INFOS` 和任务日志写入暂留 `app.py`。
 - 已迁移模型服务配置路由 `server.routes.llm`，覆盖 `/api/ark_key`、`/api/llm_models`、`/api/llm_concurrency` 与 `/api/diagnostics`。

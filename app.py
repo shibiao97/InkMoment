@@ -39,7 +39,7 @@ from inkmoment.grouper import (
     build_groups,
     group_infos,
 )
-from server.routes.folder import folder_bp
+from server.routes.folder import create_folder_blueprint
 from server.routes.grouping import create_grouping_blueprint
 from server.routes.job import create_job_blueprint
 from server.routes.llm import llm_bp
@@ -1532,7 +1532,11 @@ def _set_session_state(session: SessionState) -> None:
 # ---------------- Flask ----------------
 
 app = Flask(__name__, static_folder="static", static_url_path="/static")
-app.register_blueprint(folder_bp)
+app.register_blueprint(create_folder_blueprint(
+    lambda: SESSION,
+    pic_dir,
+    skipped_log_path,
+))
 app.register_blueprint(create_job_blueprint(
     lambda: JOB,
     lambda: JOB_LOG,
@@ -3003,50 +3007,6 @@ def api_confirm_prescreen():
     )
     t.start()
     return jsonify({"ok": True, "async": True, "all_paths": all_paths})
-
-
-@app.route("/api/skipped")
-def api_skipped():
-    if SESSION is None:
-        return jsonify({"skipped": []})
-    p = skipped_log_path(SESSION.folder)
-    if not p.exists():
-        return jsonify({"skipped": []})
-    out = []
-    try:
-        for line in p.read_text(encoding="utf-8").splitlines():
-            parts = line.split("\t")
-            if len(parts) >= 3:
-                out.append({"ts": int(parts[0]), "path": parts[1], "reason": parts[2]})
-    except Exception as e:
-        logger.warning(f"读 skipped.log 失败: {e}")
-    return jsonify({"skipped": out[-200:]})
-
-
-@app.route("/api/open_folder", methods=["POST"])
-def api_open_folder():
-    """跨平台打开 folder 或 _inkmoment 子目录。"""
-    if SESSION is None:
-        return jsonify({"error": "no session"}), 400
-    data = request.get_json(silent=True) or {}
-    sub = data.get("sub")
-    target = pic_dir(SESSION.folder) if sub == "log" else Path(SESSION.folder)
-    target = Path(target)
-    if not target.exists():
-        try:
-            target.mkdir(parents=True, exist_ok=True)
-        except Exception:
-            return jsonify({"error": "目录不存在"}), 400
-    try:
-        if sys.platform == "darwin":
-            subprocess.Popen(["open", str(target)])
-        elif sys.platform == "win32":
-            os.startfile(str(target))  # type: ignore
-        else:
-            subprocess.Popen(["xdg-open", str(target)])
-        return jsonify({"ok": True})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
 
 
 # ============================================================

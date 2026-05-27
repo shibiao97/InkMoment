@@ -3,7 +3,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 from inkmoment import grouper
 
@@ -93,6 +93,52 @@ def peek_folder(folder: str) -> tuple[dict, int]:
     if snapshot["count"] == 0:
         return {"ok": True, "count": 0}, 200
     return snapshot, 200
+
+
+def read_skipped_log(session, skipped_log_path_factory: Callable[[str], Path]) -> dict:
+    if session is None:
+        return {"skipped": []}
+    path = skipped_log_path_factory(session.folder)
+    if not path.exists():
+        return {"skipped": []}
+
+    skipped = []
+    try:
+        for line in path.read_text(encoding="utf-8").splitlines():
+            parts = line.split("\t")
+            if len(parts) >= 3:
+                skipped.append({"ts": int(parts[0]), "path": parts[1], "reason": parts[2]})
+    except Exception:
+        return {"skipped": []}
+    return {"skipped": skipped[-200:]}
+
+
+def open_session_folder(
+    session,
+    sub: str | None,
+    pic_dir_factory: Callable[[str], Path],
+) -> tuple[dict, int]:
+    if session is None:
+        return {"error": "no session"}, 400
+
+    target = pic_dir_factory(session.folder) if sub == "log" else Path(session.folder)
+    target = Path(target)
+    if not target.exists():
+        try:
+            target.mkdir(parents=True, exist_ok=True)
+        except Exception:
+            return {"error": "目录不存在"}, 400
+
+    try:
+        if sys.platform == "darwin":
+            subprocess.Popen(["open", str(target)])
+        elif sys.platform == "win32":
+            os.startfile(str(target))  # type: ignore
+        else:
+            subprocess.Popen(["xdg-open", str(target)])
+        return {"ok": True}, 200
+    except Exception as exc:
+        return {"error": str(exc)}, 500
 
 
 def _scan_folder_snapshot(path: Path) -> dict:
