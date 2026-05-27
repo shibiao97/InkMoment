@@ -72,6 +72,7 @@ from server.services.selection_service import (
     record_preference,
     reopen_group_payload,
     serialize_group,
+    skip_finished_groups,
     skip_group_payload,
     undo_group_payload,
 )
@@ -1986,9 +1987,7 @@ def _start_job_payload(data: dict) -> tuple[dict, int]:
 
 
 def _skip_finished_locked() -> None:
-    while (SESSION.current_group < len(SESSION.groups)
-           and SESSION.groups[SESSION.current_group].finished):
-        SESSION.current_group += 1
+    skip_finished_groups(SESSION)
 
 
 def _validate_current_pair_locked() -> None:

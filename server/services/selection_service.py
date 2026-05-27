@@ -292,6 +292,14 @@ def finalize_current_group(
     save_state(session)
 
 
+def skip_finished_groups(session) -> None:
+    while (
+        session.current_group < len(session.groups) and
+        session.groups[session.current_group].finished
+    ):
+        session.current_group += 1
+
+
 def current_group_payload(
     session,
     skip_finished: Callable[[], None],
