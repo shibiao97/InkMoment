@@ -61,6 +61,7 @@ from server.services.job_runner_service import (
 )
 from server.services.selection_service import (
     current_group_payload,
+    kick_group_payload,
     skip_group_payload,
     undo_group_payload,
 )
@@ -2324,25 +2325,6 @@ def _choose_group_payload(data: dict) -> tuple[dict, int]:
         return _current_group_payload_locked()
 
 
-def _kick_group_payload(data: dict) -> tuple[dict, int]:
-    if SESSION is None:
-        return {"error": "no session"}, 400
-    side = data.get("side")
-    if side not in ("left", "right"):
-        return {"error": "invalid side"}, 400
-    with LOCK:
-        _skip_finished_locked()
-        if SESSION.current_group >= len(SESSION.groups):
-            return {"done": True}, 200
-        _push_undo_locked()
-        g = SESSION.groups[SESSION.current_group]
-        if not kick_side(g, side):
-            SESSION.undo_stack.pop()
-            return {"error": "no image on side"}, 400
-        _finalize_group_locked()
-        return _current_group_payload_locked()
-
-
 def _reopen_group_payload(data: dict) -> tuple[dict, int]:
     """跨组反悔：按 group_id 找到一个已 finished 的组，把它的 winners/losers
     物理还原回根目录，重置决策状态，把用户带回擂台从头挑这一组。"""
@@ -2379,7 +2361,17 @@ app.register_blueprint(create_selection_blueprint(
     _validate_current_pair_locked,
     _serialize_group,
     _choose_group_payload,
-    _kick_group_payload,
+    lambda data: kick_group_payload(
+        data,
+        lambda: SESSION,
+        LOCK,
+        _skip_finished_locked,
+        _validate_current_pair_locked,
+        _serialize_group,
+        _push_undo_locked,
+        _finalize_group_locked,
+        kick_side,
+    ),
     lambda: undo_group_payload(
         lambda: SESSION,
         LOCK,
