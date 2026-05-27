@@ -3109,19 +3109,28 @@ body:has(#view-processing.active) .status-badge {
 }
 .tycoon-row {
   display: flex; gap: 8px; align-items: center;
+  flex-wrap: wrap;
   margin: 6px 0 8px;
 }
 .tycoon-row select,
+.tycoon-row input[type="url"],
 .tycoon-row input[type="password"] {
-  flex: 1;
   padding: 7px 10px;
   background: var(--bg-card);
   border: 1px solid var(--line);
   border-radius: 8px;
   color: var(--ink);
   font-size: 13px;
+  min-width: 0;
+}
+.tycoon-row select {
+  flex: 1 1 260px;
+}
+.tycoon-row input[type="url"] {
+  flex: 1 1 280px;
 }
 .tycoon-row input[type="password"] {
+  flex: 1 1 220px;
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
 }
 .btn-small {
@@ -3169,6 +3178,8 @@ body:has(#view-processing.active) .status-badge {
   font-size: 13px;
   color: var(--ink);
   display: flex; gap: 6px; align-items: center;
+  flex-wrap: wrap;
+  min-width: 0;
 }
 .tycoon-key-ok { color: #86efac; }
 .tycoon-key-warn { color: #fbbf24; }
@@ -3185,11 +3196,31 @@ body:has(#view-processing.active) .status-badge {
   background: rgba(0,0,0,.15);
   border-radius: 4px;
 }
+.tycoon-key-url {
+  max-width: min(360px, 100%);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 12px;
+  color: var(--ink-muted);
+}
 .tycoon-key-edit {
   margin: 0 0 12px;
   padding: 10px 12px;
   background: rgba(0,0,0,.15);
   border-radius: 8px;
+}
+@media (max-width: 720px) {
+  .tycoon-key-status {
+    align-items: flex-start;
+  }
+  .tycoon-key-status .btn-small {
+    flex: 0 0 auto;
+  }
+  .tycoon-row .btn-small {
+    flex: 1 1 110px;
+  }
 }
 
 /* =========================================================

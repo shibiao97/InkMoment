@@ -6,6 +6,7 @@ const RECENT_KEY = "pic-arena.recent-folders";
 const TUTORIAL_KEY = "pic-arena.tutorial-seen";
 const CONFIRM_MOVE_KEY = "pic-arena.confirmed-move";
 const CONFIRM_REAL_KEY = "pic-arena.confirmed-real";
+const CONFIRM_TYCOON_UPLOAD_KEY = "pic-arena.confirmed-tycoon-upload";
 const VERDICT_HOLD_MS = 380;
 
 let busy = false;
@@ -24,6 +25,75 @@ const WALL_CELL_COUNT = 40; // 10 columns × 4 rows
 const WALL_FILL_MS = 200;
 const WALL_REPLACE_MS = 420;
 const WALL_QUEUE_CAP = 80;
+
+// =================================================================
+// 二开品牌配置
+// =================================================================
+let appBranding = {
+  app_name: "片刻",
+  title_suffix: "决定性的那一张",
+  tagline: "本地运行 · 不上传",
+  hero_eyebrow: "在一摞照片里，留下那一刻",
+  hero_title: "让 AI 替你过一遍，由你做最后的决定。",
+  hero_subtitle: "先按相似度自动成组、淘汰明显失败片，剩下的两两摆上擂台，由你裁决。",
+};
+
+function textValue(v, fallback) {
+  const s = String(v || "").trim();
+  return s || fallback;
+}
+
+function escapeHTML(v) {
+  return String(v ?? "").replace(/[&<>"']/g, (ch) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;",
+  }[ch]));
+}
+
+function applyBranding(data = {}) {
+  appBranding = {
+    app_name: textValue(data.app_name, appBranding.app_name),
+    title_suffix: textValue(data.title_suffix, appBranding.title_suffix),
+    tagline: textValue(data.tagline, appBranding.tagline),
+    hero_eyebrow: textValue(data.hero_eyebrow, appBranding.hero_eyebrow),
+    hero_title: textValue(data.hero_title, appBranding.hero_title),
+    hero_subtitle: textValue(data.hero_subtitle, appBranding.hero_subtitle),
+  };
+  const appName = appBranding.app_name;
+  const brandName = $("brand-name");
+  if (brandName) brandName.textContent = appName;
+  const siteTag = $("site-tag");
+  if (siteTag) siteTag.textContent = appBranding.tagline;
+  const heroEyebrow = $("hero-eyebrow");
+  if (heroEyebrow) heroEyebrow.textContent = appBranding.hero_eyebrow;
+  const heroTitle = $("hero-title");
+  if (heroTitle) heroTitle.textContent = appBranding.hero_title;
+  const heroSubtitle = $("hero-subtitle");
+  if (heroSubtitle) heroSubtitle.textContent = appBranding.hero_subtitle;
+  document.querySelectorAll(".brand-tiny").forEach((el) => {
+    const old = el.textContent || "";
+    if (old.includes("初筛复核")) {
+      el.textContent = `${appName} · 初筛复核`;
+    } else if (old.includes("分组预览")) {
+      el.textContent = `${appName} · 分组预览`;
+    } else {
+      el.textContent = appName;
+    }
+  });
+  updateTitle(document.body.dataset.view || "landing");
+}
+
+async function loadBranding() {
+  try {
+    applyBranding(await fetchJSON("/api/branding"));
+  } catch (e) {
+    console.warn("品牌配置加载失败，使用默认值:", e);
+    applyBranding();
+  }
+}
 
 // =================================================================
 // 全局引擎状态徽章
@@ -57,16 +127,17 @@ function showView(name, push = true) {
   }
 }
 function updateTitle(view) {
+  const appName = appBranding.app_name || "片刻";
   const map = {
-    landing: "片刻",
-    processing: "分析中… · 片刻",
-    prescreen: "初筛复核 · 片刻",
-    preview: "分组预览 · 片刻",
-    arena: currentGroup ? `组 #${currentGroup.id_short} · 片刻`
-                        : "选片中 · 片刻",
-    done: "完成 · 片刻",
+    landing: `${appName} — ${appBranding.title_suffix || "决定性的那一张"}`,
+    processing: `分析中… · ${appName}`,
+    prescreen: `初筛复核 · ${appName}`,
+    preview: `分组预览 · ${appName}`,
+    arena: currentGroup ? `组 #${currentGroup.id_short} · ${appName}`
+                        : `选片中 · ${appName}`,
+    done: `完成 · ${appName}`,
   };
-  document.title = map[view] || "片刻";
+  document.title = map[view] || appName;
 }
 window.addEventListener("popstate", (e) => {
   const v = e.state?.view;
@@ -296,6 +367,25 @@ document.querySelectorAll(".engine-opt").forEach(el => {
 // ---------- 土豪模式模型选择 + API Key 管理 ----------
 let llmModelsLoaded = false;
 let arkKeyConfigured = false;
+let llmBaseUrl = "";
+let llmBaseUrlSource = "default";
+
+function llmBaseUrlSourceLabel(source) {
+  return ({
+    env: "环境变量",
+    file: "本地存储",
+    default: "默认地址",
+  })[source] || "当前地址";
+}
+
+function setTycoonBaseUrlInput(value) {
+  const input = $("tycoon-base-url-input");
+  if (input) input.value = value || "";
+}
+
+function tycoonUploadConfirmKey(baseUrl, model) {
+  return `${CONFIRM_TYCOON_UPLOAD_KEY}:${baseUrl || "unknown"}:${model || "unknown"}`;
+}
 
 function syncTycoonPicker(engine) {
   const picker = $("tycoon-model-picker");
@@ -317,18 +407,31 @@ async function refreshArkKeyStatus() {
     const r = await fetch("/api/ark_key");
     const data = await r.json();
     arkKeyConfigured = !!data.configured;
+    llmBaseUrl = data.base_url || data.default_base_url || "";
+    llmBaseUrlSource = data.base_url_source || "default";
+    setTycoonBaseUrlInput(llmBaseUrl);
+    const safeUrl = escapeHTML(llmBaseUrl);
+    const sourceLabel = llmBaseUrlSourceLabel(llmBaseUrlSource);
     if (data.configured) {
-      const src = data.source === "env" ? "环境变量" : "本地存储";
-      badge.innerHTML = `<span class="tycoon-key-ok">●</span> Key 已配置 <span class="tycoon-key-mask">${data.masked || ""}</span> <span class="tycoon-key-src">${src}</span>`;
+      const keySrc = data.source === "env" ? "环境变量" : "本地存储";
+      badge.innerHTML =
+        `<span class="tycoon-key-ok">●</span> 模型服务已配置 ` +
+        `<span class="tycoon-key-mask">${escapeHTML(data.masked || "")}</span> ` +
+        `<span class="tycoon-key-src">${keySrc}</span> ` +
+        `<span class="tycoon-key-url" title="${safeUrl}">${safeUrl}</span> ` +
+        `<span class="tycoon-key-src">${sourceLabel}</span>`;
       btn.textContent = "修改";
       // 自动加载模型
       if (!llmModelsLoaded) loadLlmModels();
     } else {
-      badge.innerHTML = `<span class="tycoon-key-warn">●</span> 未配置 API Key`;
+      badge.innerHTML =
+        `<span class="tycoon-key-warn">●</span> 未配置模型服务 API Key ` +
+        `<span class="tycoon-key-url" title="${safeUrl}">${safeUrl}</span> ` +
+        `<span class="tycoon-key-src">${sourceLabel}</span>`;
       btn.textContent = "设置 Key";
       llmModelsLoaded = false;
       if (select) {
-        select.innerHTML = '<option value="">请先配置 API Key</option>';
+        select.innerHTML = '<option value="">请先配置模型服务</option>';
       }
     }
   } catch (e) {
@@ -337,12 +440,29 @@ async function refreshArkKeyStatus() {
 }
 
 async function saveArkKey() {
-  const input = $("tycoon-key-input");
+  const keyInput = $("tycoon-key-input");
+  const urlInput = $("tycoon-base-url-input");
   const saveBtn = $("tycoon-key-save");
-  const key = (input?.value || "").trim();
+  const key = (keyInput?.value || "").trim();
+  const base_url = (urlInput?.value || "").trim();
+  if (!base_url) {
+    setStatus("请填写模型服务地址", "error");
+    urlInput?.focus();
+    return;
+  }
+  try {
+    const u = new URL(base_url);
+    if (u.protocol !== "http:" && u.protocol !== "https:") {
+      throw new Error("bad protocol");
+    }
+  } catch {
+    setStatus("模型服务地址必须是完整的 http(s) URL", "error");
+    urlInput?.focus();
+    return;
+  }
   if (!key) {
-    setStatus("请粘贴 API Key", "error");
-    input?.focus();
+    setStatus("请粘贴模型服务 API Key", "error");
+    keyInput?.focus();
     return;
   }
   if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = "验证中..."; }
@@ -350,18 +470,20 @@ async function saveArkKey() {
     const r = await fetch("/api/ark_key", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ key }),
+      body: JSON.stringify({ key, base_url }),
     });
     const data = await r.json();
     if (!r.ok || !data.ok) {
       throw new Error(data.error || "验证失败");
     }
     // 成功：关闭录入面板、清空输入、刷新状态
-    if (input) input.value = "";
+    if (keyInput) keyInput.value = "";
+    llmBaseUrl = data.base_url || base_url;
+    setTycoonBaseUrlInput(llmBaseUrl);
     $("tycoon-key-edit").hidden = true;
     llmModelsLoaded = false;
     await refreshArkKeyStatus();
-    setStatus(`✓ Key 已保存（${data.model_count} 个模型可用）`, "idle");
+    setStatus(`模型服务已保存，正在检查 ${data.model_count || 0} 个模型...`, "busy");
   } catch (e) {
     setStatus(`× ${e.message}`, "error");
   } finally {
@@ -370,9 +492,9 @@ async function saveArkKey() {
 }
 
 async function clearArkKey() {
-  if (!confirm("清除 API Key？\n\n本地存储的 key 会被删掉，需要重新输入才能用土豪模式。")) return;
+  if (!confirm("清除 API Key？\n\n本地存储的 key 会被删掉，模型服务地址会保留。")) return;
   try {
-    await fetch("/api/ark_key", { method: "DELETE" });
+    await fetchJSON("/api/ark_key", { method: "DELETE" });
     llmModelsLoaded = false;
     await refreshArkKeyStatus();
   } catch (e) {
@@ -390,7 +512,10 @@ if (keyBtn) {
       // 已配置时显示"清除"按钮
       const clearBtn = $("tycoon-key-clear");
       if (clearBtn) clearBtn.hidden = !arkKeyConfigured;
-      if (!edit.hidden) $("tycoon-key-input")?.focus();
+      if (!edit.hidden) {
+        setTycoonBaseUrlInput(llmBaseUrl);
+        $("tycoon-base-url-input")?.focus();
+      }
     }
   });
 }
@@ -402,6 +527,7 @@ if (keyCancelBtn) {
     $("tycoon-key-edit").hidden = true;
     const inp = $("tycoon-key-input");
     if (inp) inp.value = "";
+    setTycoonBaseUrlInput(llmBaseUrl);
   });
 }
 const keyClearBtn = document.getElementById("tycoon-key-clear");
@@ -417,25 +543,50 @@ if (keyInput) {
     if (e.key === "Enter") { e.preventDefault(); saveArkKey(); }
   });
 }
-async function loadLlmModels() {
+const baseUrlInput = document.getElementById("tycoon-base-url-input");
+if (baseUrlInput) {
+  baseUrlInput.addEventListener("input", () => {
+    llmModelsLoaded = false;
+  });
+  baseUrlInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); saveArkKey(); }
+  });
+}
+async function loadLlmModels(force = false) {
   const select = $("llm-model-select");
   const hint = $("tycoon-hint");
+  const refreshBtn = $("llm-model-refresh");
   if (!select) return;
-  select.innerHTML = '<option value="">加载中...</option>';
+  select.disabled = true;
+  if (refreshBtn) refreshBtn.disabled = true;
+  select.innerHTML = '<option value="">检查模型中...</option>';
+  if (hint) {
+    hint.textContent = "检查模型中... 会逐个确认哪些模型能用于图片判断。";
+    hint.classList.remove("tycoon-hint-error");
+  }
+  setStatus("检查模型中", "busy");
   try {
-    const r = await fetch("/api/llm_models");
+    const r = await fetch(`/api/llm_models${force ? "?force=1" : ""}`);
     const data = await r.json();
     if (!r.ok) {
       select.innerHTML = '<option value="">不可用</option>';
-      hint.textContent = `× ${data.error || "拉取模型列表失败"}。请设置 ARK_API_KEY 后重启服务。`;
-      hint.classList.add("tycoon-hint-error");
+      if (hint) {
+        hint.textContent = `× ${data.error || "拉取模型列表失败"}。请设置模型服务地址和 API Key。`;
+        hint.classList.add("tycoon-hint-error");
+      }
       return;
     }
+    llmBaseUrl = data.base_url || llmBaseUrl;
     const models = data.models || [];
     if (!models.length) {
       select.innerHTML = '<option value="">无可用模型</option>';
-      hint.textContent = "× Ark 账号未返回 Seed 系列视觉模型，请到火山引擎控制台开通。";
-      hint.classList.add("tycoon-hint-error");
+      if (hint) {
+        const total = Number(data.total_models || 0);
+        hint.textContent = total
+          ? `× 已检查 ${total} 个模型，但都不能用于图片判断。请换模型服务、Key 权限或稍后重试。`
+          : "× 模型服务未返回可用模型，请检查服务地址、Key 或模型权限。";
+        hint.classList.add("tycoon-hint-error");
+      }
       return;
     }
     // 按 tier 分组：pro / lite / mini / other
@@ -467,13 +618,24 @@ async function loadLlmModels() {
     } else if (groups.mini.length) {
       select.value = groups.mini[groups.mini.length - 1].id;
     }
-    hint.textContent = "已就绪。图片会上传至火山引擎服务器，按 token 计费。";
-    hint.classList.remove("tycoon-hint-error");
+    if (hint) {
+      const unavailable = Number(data.unavailable_count || 0);
+      const suffix = unavailable ? `，已隐藏 ${unavailable} 个不可用模型` : "";
+      hint.textContent = `已检查 ${models.length} 个可用模型${suffix}。图片缩略图会上传至 ${llmBaseUrl}，按服务商规则计费。`;
+      hint.classList.remove("tycoon-hint-error");
+    }
     llmModelsLoaded = true;
+    setStatus("模型检查完成", "idle");
   } catch (e) {
     select.innerHTML = '<option value="">网络错误</option>';
-    hint.textContent = `× ${e.message || "拉取失败"}`;
-    hint.classList.add("tycoon-hint-error");
+    if (hint) {
+      hint.textContent = `× ${e.message || "拉取失败"}`;
+      hint.classList.add("tycoon-hint-error");
+    }
+    setStatus("模型检查失败", "error");
+  } finally {
+    select.disabled = false;
+    if (refreshBtn) refreshBtn.disabled = false;
   }
 }
 const llmSelect = $("llm-model-select");
@@ -486,7 +648,7 @@ const llmRefreshBtn = $("llm-model-refresh");
 if (llmRefreshBtn) {
   llmRefreshBtn.addEventListener("click", () => {
     llmModelsLoaded = false;
-    loadLlmModels();
+    loadLlmModels(true);
   });
 }
 
@@ -633,6 +795,30 @@ async function handleStart(e) {
       setStatus("请先选择一个 LLM 模型再开始", "error");
       $("start-btn").disabled = false;
       return;
+    }
+    if (engine === "tycoon") {
+      if (!arkKeyConfigured || !llmBaseUrl) {
+        await refreshArkKeyStatus();
+      }
+      if (!arkKeyConfigured) {
+        setStatus("请先配置模型服务地址和 API Key", "error");
+        $("start-btn").disabled = false;
+        $("tycoon-key-edit").hidden = false;
+        $("tycoon-base-url-input")?.focus();
+        return;
+      }
+      const confirmKey = tycoonUploadConfirmKey(llmBaseUrl, llm_model);
+      if (!localStorage.getItem(confirmKey)) {
+        const ok = await confirmDialog(
+          "确认使用土豪模式",
+          `本次会把照片缩略图发送到：\n${llmBaseUrl}\n\n模型：${llm_model}\n请确认该服务商和费用规则可接受。`
+        );
+        if (!ok) {
+          $("start-btn").disabled = false;
+          return;
+        }
+        localStorage.setItem(confirmKey, "1");
+      }
     }
     const r = await fetchJSON("/api/start", {
       method: "POST",
@@ -1018,7 +1204,16 @@ async function refreshJob() {
 
   if (j.status === "error") {
     stopJobPolling();
-    $("proc-error").textContent = "处理失败：" + (j.error || "未知错误");
+    if (j.error_info) {
+      const actions = Array.isArray(j.error_info.actions) && j.error_info.actions.length
+        ? `\n\n建议：\n${j.error_info.actions.map((x) => `- ${x}`).join("\n")}`
+        : "";
+      const detail = j.error_info.detail ? `\n\n详情：${j.error_info.detail}` : "";
+      $("proc-error").textContent =
+        `${j.error_info.title || "处理失败"}：${j.error_info.message || j.error || "未知错误"}${actions}${detail}`;
+    } else {
+      $("proc-error").textContent = "处理失败：" + (j.error || "未知错误");
+    }
     $("progress-fill").classList.remove("indeterminate");
     $("start-btn").disabled = false;
     setStatus("处理失败", "error");
@@ -2524,6 +2719,7 @@ $("lb-original").addEventListener("click", () => {
 // 启动
 // =================================================================
 async function bootstrap() {
+  await loadBranding();
   renderRecent();
   setStatus("引擎就绪", "idle");
   try {

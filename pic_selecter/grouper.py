@@ -545,7 +545,11 @@ def _process_one(path: str, strength: str = "standard",
             face_embeddings=face_embs,
         ), None
     except Exception as e:
-        return None, f"解码失败: {type(e).__name__}: {e}"
+        if engine == "tycoon":
+            from pic_selecter import llm_judge
+            if isinstance(e, llm_judge.LLMJudgeError):
+                raise
+        return None, f"处理失败: {type(e).__name__}: {e}"
     finally:
         if img is not None:
             try:
@@ -672,14 +676,20 @@ def compute_infos(
     if needed:
         # 工作线程数：
         # - expert：强制 1（torch MPS / InsightFace ONNX 多线程会段错误）
-        # - tycoon：用 ARK_MAX_WORKERS（默认 20）作为 ThreadPool 上限；
-        #          实际并发由 llm_judge._LIMITER 自适应控制（起 10、触发限流减半）
+        # - tycoon：用 ARK_MAX_WORKERS 作为 ThreadPool 上限；未显式设置时，
+        #          Pro/推理类模型采用更保守的默认值，避免一次性压满上游服务。
+        #          实际并发还会被 llm_judge._LIMITER 自适应限制。
         # - fast：纯 CPU + numpy/cv2，开 8 线程没问题
         if workers is None:
             if engine == "expert":
                 workers = 1
             elif engine == "tycoon":
-                workers = int(os.getenv("ARK_MAX_WORKERS", "20"))
+                from pic_selecter import llm_judge
+                llm_judge.configure_concurrency_for_model(llm_model)
+                if "ARK_MAX_WORKERS" in os.environ:
+                    workers = int(os.getenv("ARK_MAX_WORKERS", "20"))
+                else:
+                    workers = llm_judge.recommended_workers(llm_model) or 20
                 workers = max(1, min(workers, 32))
             else:
                 workers = min(8, max(2, (os.cpu_count() or 4)))

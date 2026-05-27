@@ -91,8 +91,8 @@ PROFILES: dict[str, dict[str, float]] = {
         "low_entropy": 1.20,
         "min_long_side": 900.0,
         "min_file_size": 40_000.0,
-        "horizon_tilt_deg": 3.0,
-        "horizon_severe_deg": 12.0,    # 进阶档：12° 硬拒
+        "horizon_tilt_deg": 6.0,       # 软提示放宽（轻微歪斜交给 LLM 复判）
+        "horizon_severe_deg": 20.0,    # 进阶档硬拒放宽：仅拦截 20°+ 的灾难级歪斜
         "score_adjust": -6.0,
         "score_floor": 45.0,
     },
