@@ -432,7 +432,7 @@ def _saliency_region_sharpness(arr: np.ndarray) -> Optional[float]:
     实现复用 fast_quality 里的 numpy FFT spectral residual saliency
     （cv2.saliency 在 opencv-contrib 4.10+ 已被移除，不再可用）。
     """
-    from pic_selecter.fast_quality import _saliency_map, _salient_region_sharpness
+    from inkmoment.fast_quality import _saliency_map, _salient_region_sharpness
     smap = _saliency_map(arr)
     return _salient_region_sharpness(arr, smap)
 
@@ -541,7 +541,7 @@ def _face_signals_from_data(face_data: list[dict], img: Image.Image) -> dict:
     # A3 修复：之前这里有 try: import vision except: vision = None 兜底——
     # 启动期 require_expert_capabilities 已校验过，运行时再 import 失败属于
     # 异常状态，应当向上抛而不是悄悄把 eye_score 全置 None。
-    from pic_selecter import vision
+    from inkmoment import vision
 
     faces_detail: list[dict] = []
     for f in face_data:
@@ -563,7 +563,7 @@ def _face_signals_from_data(face_data: list[dict], img: Image.Image) -> dict:
             eye_score = vision.compute_eye_open_score(f, img)
         except Exception as _eye_exc:
             import logging as _logging
-            _logging.getLogger("pic_selecter").warning(
+            _logging.getLogger("inkmoment").warning(
                 f"compute_eye_open_score 失败: {type(_eye_exc).__name__}: {_eye_exc}"
             )
             eye_score = None
@@ -612,6 +612,6 @@ def _compute_face_signals(img: Image.Image) -> dict:
       整图 skip 还是把任务挂掉。以前 `except Exception: return {}` 会让
       expert 模式跑到一半 InsightFace 崩了也假装"这张没人脸"，废片放过。
     """
-    from pic_selecter import vision
+    from inkmoment import vision
     faces = vision.extract_faces(img)
     return _face_signals_from_data(faces, img)

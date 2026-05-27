@@ -32,11 +32,12 @@ from PIL import Image
 # 默认走国内镜像下载 HuggingFace 模型（DINOv2 等）。
 # 经 launcher 启动时它已设过；直接运行 app.py 时这里兜底，否则会直连
 # huggingface.co 在国内常超时/被墙，报 "Can't load image processor"。
-# 海外网络可设 PIANKE_NO_MIRROR=1 关闭；setdefault 尊重已显式设置的 HF_ENDPOINT。
-if os.environ.get("PIANKE_NO_MIRROR", "0") != "1":
+# 海外网络可设 INKMOMENT_NO_MIRROR=1 关闭。
+NO_MIRROR = os.environ.get("INKMOMENT_NO_MIRROR", "0") == "1"
+if not NO_MIRROR:
     os.environ.setdefault("HF_ENDPOINT", "https://hf-mirror.com")
 
-logger = logging.getLogger("pic_selecter")
+logger = logging.getLogger("inkmoment")
 
 _LOCK = threading.Lock()
 _models: dict = {}
@@ -67,7 +68,7 @@ def _device():
 
 
 def _cache_dir() -> Path:
-    d = Path.home() / ".cache" / "pic_selecter"
+    d = Path.home() / ".cache" / "inkmoment"
     d.mkdir(parents=True, exist_ok=True)
     return d
 

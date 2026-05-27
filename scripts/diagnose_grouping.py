@@ -26,7 +26,7 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(message)s",
     datefmt="%H:%M:%S",
 )
-log = logging.getLogger("pic_selecter")
+log = logging.getLogger("inkmoment")
 
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".heic", ".heif", ".webp", ".bmp", ".tif", ".tiff"}
 
@@ -53,7 +53,7 @@ class ImageInfo:
 
 def extract_for_test(path: str) -> Optional[ImageInfo]:
     """提取 DINOv2 + EXIF（跳过 InsightFace 和 NIMA）。"""
-    from pic_selecter.grouper import _read_exif_datetime, extract_exif_summary
+    from inkmoment.grouper import _read_exif_datetime, extract_exif_summary
     try:
         st = os.stat(path)
         with Image.open(path) as img:
@@ -63,7 +63,7 @@ def extract_for_test(path: str) -> Optional[ImageInfo]:
             img_t = ImageOps.exif_transpose(img)
             ph = imagehash.phash(img_t, hash_size=8)
 
-            from pic_selecter import vision
+            from inkmoment import vision
             dinov2_vec = vision.extract_dinov2(img_t)
 
         return ImageInfo(
@@ -100,7 +100,7 @@ def main():
     files = []
     for root, _, names in os.walk(folder):
         rel = Path(root).relative_to(folder)
-        if rel.parts and rel.parts[0] in {"winners", "losers", "_pic_selecter"}:
+        if rel.parts and rel.parts[0] in {"winners", "losers", "_inkmoment"}:
             continue
         for n in names:
             if Path(n).suffix.lower() in IMAGE_EXTS:
@@ -156,7 +156,7 @@ def main():
     # ---- 4. 模拟旧 vs 新聚类 ----
     print("\n[3/3] 聚类对比（旧映射 vs 新映射）...")
 
-    from pic_selecter import clustering
+    from inkmoment import clustering
 
     # 保存当前代码（已修复）的结果
     print("\n  --- 新映射（已修复）---")

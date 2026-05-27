@@ -24,7 +24,7 @@ from typing import Optional, Sequence
 import cv2  # 极速模式硬依赖：ORB 匹配 / RANSAC；缺失就在模块导入时挂掉
 import numpy as np
 
-logger = logging.getLogger("pic_selecter")
+logger = logging.getLogger("inkmoment")
 
 
 # ---- 可调参数 ----

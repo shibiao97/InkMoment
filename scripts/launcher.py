@@ -1,4 +1,4 @@
-"""片刻 · 启动器（Python 部分）
+"""影刻 InkMoment · 启动器（Python 部分）
 
 由 启动_macOS.command / 启动_Windows.bat 调用。
 本脚本只用标准库，可以在任何 Python 3.10+ 下运行。
@@ -11,7 +11,7 @@
 约定：
 - 项目根目录 = 本脚本所在目录的父目录
 - venv 位于项目根目录的 .venv/
-- 依赖安装记录在 .pic_selecter_install.json
+- 依赖安装记录在 .inkmoment_install.json
 """
 
 from __future__ import annotations
@@ -30,24 +30,24 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-REMOTE_UPDATE_OWNER = os.environ.get("PIANKE_UPDATE_OWNER", "").strip()
-REMOTE_UPDATE_REPO = os.environ.get("PIANKE_UPDATE_REPO", "").strip()
-REMOTE_UPDATE_BRANCH = os.environ.get("PIANKE_UPDATE_BRANCH", "main").strip() or "main"
+REMOTE_UPDATE_OWNER = os.environ.get("INKMOMENT_UPDATE_OWNER", "").strip()
+REMOTE_UPDATE_REPO = os.environ.get("INKMOMENT_UPDATE_REPO", "").strip()
+REMOTE_UPDATE_BRANCH = os.environ.get("INKMOMENT_UPDATE_BRANCH", "main").strip() or "main"
 REMOTE_UPDATE_ENABLED = (
-    os.environ.get("PIANKE_ENABLE_REMOTE_UPDATE", "0") == "1"
+    os.environ.get("INKMOMENT_ENABLE_REMOTE_UPDATE", "0") == "1"
     and bool(REMOTE_UPDATE_OWNER)
     and bool(REMOTE_UPDATE_REPO)
 )
 
 ROOT = Path(__file__).resolve().parent.parent
 VENV = ROOT / ".venv"
-INSTALL_INFO = ROOT / ".pic_selecter_install.json"
+INSTALL_INFO = ROOT / ".inkmoment_install.json"
 
 IS_WIN = os.name == "nt"
 PY_IN_VENV = VENV / ("Scripts" if IS_WIN else "bin") / ("python.exe" if IS_WIN else "python")
 
-# 国内镜像源（pip / HuggingFace）。设 PIANKE_NO_MIRROR=1 关闭。
-USE_MIRROR = os.environ.get("PIANKE_NO_MIRROR", "0") != "1"
+# 国内镜像源（pip / HuggingFace）。设 INKMOMENT_NO_MIRROR=1 关闭。
+USE_MIRROR = os.environ.get("INKMOMENT_NO_MIRROR", "0") != "1"
 PYPI_MIRROR = "https://pypi.tuna.tsinghua.edu.cn/simple/"
 PYPI_MIRROR_HOST = "pypi.tuna.tsinghua.edu.cn（清华大学）"
 HF_MIRROR = "https://hf-mirror.com"  # HuggingFace 镜像（DINOv2、NIMA 等模型）
@@ -226,7 +226,7 @@ def ask_modes(previous: list[str] | None) -> list[str]:
 # ---------- GitHub 更新检查 ----------
 
 def http_get(url: str, timeout: float = 8.0) -> bytes:
-    req = urllib.request.Request(url, headers={"User-Agent": "pianke-launcher"})
+    req = urllib.request.Request(url, headers={"User-Agent": "inkmoment-launcher"})
     with urllib.request.urlopen(req, timeout=timeout) as resp:
         return resp.read()
 
@@ -258,8 +258,8 @@ def download_tarball(sha: str, dest: Path) -> bool:
 # 不会被更新覆盖的文件 / 目录（用户私有数据 + 体积大的依赖）
 PRESERVE = {
     ".venv",
-    ".pic_selecter_install.json",
-    ".pic_selecter_deps.stamp",
+    ".inkmoment_install.json",
+    ".inkmoment_deps.stamp",
     "__pycache__",
     ".git",
     "pic_test",     # 开发用的测试图，可能用户也存了私货
@@ -280,7 +280,7 @@ def apply_update(tar_path: Path) -> bool:
     try:
         with tarfile.open(tar_path, "r:gz") as tf:
             tf.extractall(tmp)
-        # tarball 顶层是 pianke-<sha>/，取里面内容
+        # tarball 顶层是 inkmoment-<sha>/（或仓库名-<sha>/），取里面内容
         children = [p for p in tmp.iterdir() if p.is_dir()]
         if len(children) != 1:
             warn("更新包结构异常，跳过")
@@ -398,7 +398,7 @@ def pip_install(packages: list[str]) -> None:
         cmd += packages
     if USE_MIRROR:
         info(f"使用国内镜像源：{PYPI_MIRROR_HOST}")
-        info("（海外用户想用 PyPI 官方源请在终端先 `export PIANKE_NO_MIRROR=1` 再启动）")
+        info("（海外用户想用 PyPI 官方源请在终端先 `export INKMOMENT_NO_MIRROR=1` 再启动）")
     info("接下来会看到 pip 滚动下载进度条——只要在动就是在装，不要关窗口。")
     print()
     subprocess.check_call(cmd)
@@ -615,7 +615,7 @@ def diagnose_runtime(modes: list[str]) -> None:
     missing = [m for m in seen if not _check_import(m)]
     if missing:
         warn(f"以下模块仍不可用：{', '.join(missing)}")
-        warn("建议删除 .pic_selecter_install.json 后重新运行启动器，或手动在 .venv 中安装缺失依赖。")
+        warn("建议删除 .inkmoment_install.json 后重新运行启动器，或手动在 .venv 中安装缺失依赖。")
     else:
         info("关键模块检查通过 ✓")
     if {"expert", "tycoon"} & set(modes):
@@ -659,12 +659,12 @@ def run_app(port: int) -> int:
 # ---------- 主流程 ----------
 
 def main() -> int:
-    banner("片刻 · 启动器")
+    banner("影刻 InkMoment · 启动器")
     print()
     print("  本启动器会自动：检查远程更新配置 → 选模式 → 装依赖 → 起服务 → 开浏览器")
     if USE_MIRROR:
         print("  当前已开启国内镜像加速（清华 PyPI + hf-mirror.com）")
-        print("  海外网络环境请关闭：export PIANKE_NO_MIRROR=1 后重启")
+        print("  海外网络环境请关闭：export INKMOMENT_NO_MIRROR=1 后重启")
     print()
 
     if not (ROOT / "app.py").exists():
@@ -694,7 +694,7 @@ def main() -> int:
 
     # 步骤 4：启动
     step(4, 4, "启动应用")
-    port = int(os.environ.get("PIC_SELECTER_PORT", "5057"))
+    port = int(os.environ.get("INKMOMENT_PORT", "5057"))
     rc = run_app(port)
 
     if rc != 0:

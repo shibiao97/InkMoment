@@ -41,7 +41,7 @@ from PIL import (Image, ImageChops, ImageDraw, ImageEnhance, ImageFilter,
                  ImageFont, ImageOps)
 from PIL.ExifTags import TAGS
 
-logger = logging.getLogger("pic_selecter")
+logger = logging.getLogger("inkmoment")
 
 
 # ============================================================
