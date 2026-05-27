@@ -32,6 +32,12 @@ export function getStatus() {
   return fetchJSON("/api/status");
 }
 
+export function resetSession() {
+  return fetchJSON("/api/reset_session", {
+    method: "POST",
+  });
+}
+
 export function getAutoRejected() {
   return fetchJSON("/api/auto_rejected");
 }

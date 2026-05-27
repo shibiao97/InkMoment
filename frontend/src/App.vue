@@ -6,16 +6,26 @@ import LandingView from "./views/LandingView.vue";
 import PrescreenView from "./views/PrescreenView.vue";
 import PreviewView from "./views/PreviewView.vue";
 import ProcessingView from "./views/ProcessingView.vue";
+import { useSessionReset } from "./composables/useSessionReset";
 
 const currentView = ref("landing");
 const startedPayload = ref(null);
+const { resetting, resetError, resetCurrentSession } = useSessionReset();
 
 function enterProcessing(payload) {
   startedPayload.value = payload;
   currentView.value = "processing";
 }
 
-function backHome() {
+async function backHome() {
+  if (resetting.value) return;
+  if (currentView.value !== "landing") {
+    const ok = await resetCurrentSession();
+    if (!ok) {
+      console.warn("reset_session failed; returning to landing anyway");
+    }
+  }
+  startedPayload.value = null;
   currentView.value = "landing";
 }
 
@@ -81,4 +91,8 @@ function enterDone() {
     @back-home="backHome"
     @continue-arena="enterArena"
   />
+
+  <div v-if="resetting || resetError" class="session-reset-banner" :class="{ error: resetError }">
+    {{ resetting ? "正在回首页..." : resetError }}
+  </div>
 </template>

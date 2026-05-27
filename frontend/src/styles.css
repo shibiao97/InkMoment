@@ -47,6 +47,28 @@ input:disabled {
   padding: 28px 0 40px;
 }
 
+.session-reset-banner {
+  position: fixed;
+  left: 50%;
+  bottom: 20px;
+  z-index: 120;
+  max-width: min(520px, calc(100% - 32px));
+  padding: 10px 14px;
+  color: #303b33;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid #dbe6d4;
+  border-radius: 999px;
+  box-shadow: 0 12px 32px rgba(31, 41, 34, 0.12);
+  font-size: 13px;
+  transform: translateX(-50%);
+}
+
+.session-reset-banner.error {
+  color: #8e4e4b;
+  background: #fff5f3;
+  border-color: #f0cbc5;
+}
+
 .status-badge {
   position: fixed;
   top: 18px;
