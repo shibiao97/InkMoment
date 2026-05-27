@@ -47,6 +47,7 @@
 
 - 已建立 `api/`、`composables/`、`components/`、`views/` 目录结构。
 - 已迁移 `LandingView` 的品牌配置、主题选择、模式选择、文件夹路径输入、文件夹快照和 `/api/start` 请求封装。
+- Vue 开发联调需要通过 `INKMOMENT_DEV_ORIGINS=http://127.0.0.1:5173` 显式允许 Vite 开发源访问 Flask API。
 - 土豪模式的模型服务地址/API Key 管理尚未迁移，Vue 入口暂时禁用土豪模式并提示使用原页面。
 - 处理页、初筛复核、分组预览、擂台和完成页仍由原生 `static/` 页面承载。
 

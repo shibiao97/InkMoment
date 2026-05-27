@@ -56,6 +56,11 @@ THUMB_MAX = 1600
 # 可选：用于脚本/curl 访问的 token（默认不开启）
 # 设置 INKMOMENT_TOKEN 环境变量即启用
 SCRIPT_TOKEN = os.environ.get("INKMOMENT_TOKEN") or None
+DEV_ORIGINS = {
+    origin.strip().rstrip("/")
+    for origin in os.environ.get("INKMOMENT_DEV_ORIGINS", "").split(",")
+    if origin.strip()
+}
 
 # 静态占位图（解码失败时给前端）
 _BROKEN_PLACEHOLDER_SVG = """<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 480 360'>
@@ -1748,6 +1753,7 @@ def _security_check():
     if port:
         allowed_origins |= {f"http://127.0.0.1:{port}", f"http://localhost:{port}"}
     allowed_origins.add(f"http://{host}")
+    allowed_origins |= DEV_ORIGINS
 
     origin = request.headers.get("Origin", "")
     referer = request.headers.get("Referer", "")

@@ -97,10 +97,10 @@ python app.py --port 8080 --no-browser
 # 安装前端依赖
 npm install
 
-# 终端 1：启动 Flask API
-python app.py --no-browser
+# 终端 1：启动 Flask API，并允许 Vite 开发源访问 /api
+INKMOMENT_DEV_ORIGINS=http://127.0.0.1:5173 python app.py --no-browser
 
-# 终端 2：启动 Vue dev server（/api 会代理到 127.0.0.1:5057）
+# 终端 2：启动 Vue dev server
 npm run frontend:dev
 
 # 构建 Vue 前端到 static/vue/
