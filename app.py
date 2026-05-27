@@ -40,6 +40,7 @@ from inkmoment.grouper import (
     group_infos,
 )
 from server.routes.folder import folder_bp
+from server.routes.grouping import create_grouping_blueprint
 from server.routes.job import create_job_blueprint
 from server.routes.llm import llm_bp
 from server.routes.session import create_session_blueprint
@@ -1522,6 +1523,12 @@ def _clear_session_state() -> None:
         LAST_INFOS = None
 
 
+def _set_session_state(session: SessionState) -> None:
+    global SESSION
+    with LOCK:
+        SESSION = session
+
+
 # ---------------- Flask ----------------
 
 app = Flask(__name__, static_folder="static", static_url_path="/static")
@@ -1531,6 +1538,19 @@ app.register_blueprint(create_job_blueprint(
     lambda: JOB_LOG,
     lambda: SESSION,
     lambda folder: pic_dir(folder) / "jobs",
+))
+app.register_blueprint(create_grouping_blueprint(
+    lambda: SESSION,
+    _set_session_state,
+    lambda: LAST_INFOS,
+    lambda: _GROUPING,
+    group_infos,
+    build_session_from_groups,
+    {
+        "threshold_near": THRESHOLD_NEAR,
+        "threshold_far": THRESHOLD_FAR,
+        "near_seconds": NEAR_SECONDS,
+    },
 ))
 app.register_blueprint(llm_bp)
 app.register_blueprint(create_session_blueprint(
@@ -2985,18 +3005,6 @@ def api_confirm_prescreen():
     return jsonify({"ok": True, "async": True, "all_paths": all_paths})
 
 
-@app.route("/api/grouping_progress")
-def api_grouping_progress():
-    since = int(request.args.get("since", 0))
-    return jsonify({
-        "status": _GROUPING["status"],
-        "groups": _GROUPING["groups"][since:],
-        "total": _GROUPING["total"],
-        "multi": _GROUPING["multi"],
-        "error": _GROUPING["error"],
-    })
-
-
 @app.route("/api/skipped")
 def api_skipped():
     if SESSION is None:
@@ -3013,102 +3021,6 @@ def api_skipped():
     except Exception as e:
         logger.warning(f"读 skipped.log 失败: {e}")
     return jsonify({"skipped": out[-200:]})
-
-
-@app.route("/api/regroup", methods=["POST"])
-def api_regroup():
-    """用新阈值重新分组（不重哈希）。仅在 SESSION 已存在且 LAST_INFOS 可用时有效。"""
-    global SESSION
-    data = request.get_json(force=True)
-    threshold_near = int(data.get("threshold_near", THRESHOLD_NEAR))
-    threshold_far = int(data.get("threshold_far", THRESHOLD_FAR))
-    near_seconds = int(data.get("near_seconds", NEAR_SECONDS))
-
-    if SESSION is None:
-        return jsonify({"error": "no session"}), 400
-    if any(g.applied for g in SESSION.groups):
-        return jsonify({"error": "已经开始处理，无法重新分组"}), 400
-
-    infos = LAST_INFOS
-    if not infos:
-        # 缓存已禁用——内存里没有就让用户重跑
-        return jsonify({"error": "内存中无图片数据，请重新分组（/api/start）"}), 400
-    if SESSION.prescreen_rejected:
-        rejected = set(SESSION.prescreen_rejected)
-        restored = set(SESSION.prescreen_restored)
-        infos = [
-            info for info in infos
-            if info.path not in rejected or info.path in restored
-        ]
-
-    raw_groups = group_infos(infos, threshold_near=threshold_near,
-                             threshold_far=threshold_far, near_seconds=near_seconds,
-                             engine=SESSION.engine)
-    new_session = build_session_from_groups(
-        SESSION.folder, SESSION.dry_run, SESSION.mode, raw_groups, infos,
-        threshold_near, threshold_far, near_seconds,
-        prescreen_enabled=False,
-        prescreen_strength=SESSION.prescreen_strength,
-        engine=SESSION.engine,
-    )
-    new_session.prescreen_enabled = SESSION.prescreen_enabled
-    new_session.prescreen_strength = SESSION.prescreen_strength
-    new_session.prescreen_reviewed = SESSION.prescreen_reviewed
-    new_session.prescreen_rejected = list(SESSION.prescreen_rejected)
-    new_session.prescreen_reject_reasons = dict(SESSION.prescreen_reject_reasons)
-    new_session.prescreen_restored = list(SESSION.prescreen_restored)
-    with LOCK:
-        SESSION = new_session
-    return jsonify({
-        "ok": True,
-        "total_groups": len(SESSION.groups),
-        "multi_groups": sum(1 for g in SESSION.groups if len(g.images) > 1),
-        "max_group_size": max((len(g.images) for g in SESSION.groups), default=0),
-    })
-
-
-@app.route("/api/preview_groups")
-def api_preview_groups():
-    """前 N 个最大组的代表图（带时间锚 + AI 候选），用于预览页章节布局。"""
-    if SESSION is None:
-        return jsonify({"groups": []})
-    multi_groups = [g for g in SESSION.groups if len(g.images) > 1]
-    # 按拍摄时间排序而不是按大小——这样章节布局才有时间线感
-    multi_groups.sort(key=lambda g: _group_earliest_dt(g) or "9999")
-    multi_groups = multi_groups[:24]
-    out = []
-    for g in multi_groups:
-        best = _group_best_path(g)
-        # samples：把 best 放第一，其它跟在后面
-        ordered = list(g.images)
-        if best and best in ordered:
-            ordered.remove(best)
-            ordered.insert(0, best)
-        # 估算拍摄间隔：用 EXIF datetime 极值（如有）
-        dts = sorted([(SESSION.meta.get(p) or {}).get("datetime")
-                      for p in g.images if (SESSION.meta.get(p) or {}).get("datetime")])
-        span_seconds = None
-        if len(dts) >= 2:
-            try:
-                from datetime import datetime as _dt
-                span_seconds = (
-                    _dt.fromisoformat(dts[-1]) - _dt.fromisoformat(dts[0])
-                ).total_seconds()
-            except (ValueError, TypeError):
-                span_seconds = None
-        out.append({
-            "id": g.id,
-            "size": len(g.images),
-            "samples": ordered[:4],
-            "best_path": best,
-            "earliest_dt": _group_earliest_dt(g),
-            "span_seconds": span_seconds,
-        })
-    return jsonify({
-        "groups": out,
-        "total": len(SESSION.groups),
-        "multi": sum(1 for g in SESSION.groups if len(g.images) > 1),
-    })
 
 
 @app.route("/api/open_folder", methods=["POST"])

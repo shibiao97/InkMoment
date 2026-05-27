@@ -100,6 +100,8 @@ server/
 - 已迁移模型服务配置读写、base URL 归一化、Key 脱敏、模型列表探测、环境诊断和启动期配置加载到 `server.services.llm_service`。
 - 已迁移会话状态路由 `server.routes.session`，覆盖 `/api/status` 与 `/api/reset_session`。
 - 已迁移会话状态汇总和回首页重置逻辑到 `server.services.session_service`；`SESSION` 和 `LAST_INFOS` 仍由 `app.py` 持有并通过回调注入。
+- 已迁移分组预览路由 `server.routes.grouping`，覆盖 `/api/grouping_progress`、`/api/regroup` 与 `/api/preview_groups`。
+- 已迁移分组进度响应、重新分组和预览组序列化到 `server.services.grouping_service`；`/api/confirm_prescreen` 的异步线程启动逻辑暂留 `app.py`。
 - `app.py` 仍保留大部分全局状态和业务路由，后续建议继续按 folder/job/image/selection/result 逐块拆分。
 
 ### Phase 4: Tauri 桌面壳
