@@ -97,6 +97,7 @@ server/
 - 已迁移任务状态路由 `server.routes.job`，覆盖 `/api/job`、`/api/cancel_job` 与 `/api/job_log`。
 - 已迁移任务启动路由 `server.routes.start`，覆盖 `/api/start`。
 - 已迁移 `/api/start` 请求解析、默认值归一、参数校验和 pending `JobState` 构造到 `server.services.start_service`；后台线程 `_run_job`、`SESSION`、`JOB`、`LAST_INFOS` 和任务日志写入暂留 `app.py`。
+- 已迁移 `_run_job` 的状态生命周期变更到 `server.services.job_runner_service`，覆盖 checking、hashing、prescreen done、grouping、done、cancelled 与 error 状态。
 - 已迁移模型服务配置路由 `server.routes.llm`，覆盖 `/api/ark_key`、`/api/llm_models`、`/api/llm_concurrency` 与 `/api/diagnostics`。
 - 已迁移模型服务配置读写、base URL 归一化、Key 脱敏、模型列表探测、环境诊断和启动期配置加载到 `server.services.llm_service`。
 - 已迁移会话状态路由 `server.routes.session`，覆盖 `/api/status` 与 `/api/reset_session`。
@@ -142,7 +143,7 @@ server/
 
 剩余建议：
 
-1. 继续处理 `_run_job`，把扫描、分组、session 写入和任务日志收敛成一个可被 CLI/Tauri 复用的 service。
+1. 继续处理 `_run_job`，把扫描、分组、session 写入和任务日志收敛成一个可被 CLI/Tauri 复用的 runner service。
 2. 将水印预览、批量导出、取消和打开输出目录的状态机继续下沉到 `server.services.watermark_service`。
 
 完成标准：

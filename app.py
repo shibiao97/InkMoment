@@ -49,6 +49,16 @@ from server.routes.start import create_start_blueprint
 from server.routes.system import system_bp
 from server.routes.watermark import create_watermark_blueprint
 from server.services.llm_service import load_llm_config_from_file
+from server.services.job_runner_service import (
+    mark_job_cancelled,
+    mark_job_checking,
+    mark_job_error,
+    mark_job_grouping,
+    mark_job_grouping_done,
+    mark_job_hashing,
+    mark_job_prescreen_done,
+    mark_job_started,
+)
 from server.services.selection_service import current_group_payload
 from server.services.start_service import (
     active_job_error,
@@ -2034,23 +2044,16 @@ def _run_job(folder: str, dry_run: bool, mode: str, wipe_cache: bool,
             near_seconds=near_seconds,
         )
     try:
-        job.started_at = time.time()
+        mark_job_started(job)
 
         # ---- 启动期能力硬校验：缺一即报错，不进入"假装在跑"的状态 ----
-        job.status = "checking"
-        job.label = f"校验 {engine} 模式依赖..."
+        mark_job_checking(job, engine)
         if jlog: jlog.event("CHECK", f"engine={engine} 依赖校验中…")
         logger.info(f"[{engine}] 启动任务：folder={folder} prescreen={prescreen_enabled}/{prescreen_strength} mode={mode}")
         _require_engine(engine)
         if jlog: jlog.event("CHECK", "依赖校验通过")
 
-        job.status = "hashing"
-        if engine == "fast":
-            job.label = "扫描与计算指纹（pHash + dHash + wHash + aHash + HSV + ORB）..."
-        elif engine == "tycoon":
-            job.label = f"扫描 + DINOv2 + InsightFace + LLM 初筛（模型: {llm_model}）..."
-        else:
-            job.label = "扫描与计算 pHash + DINOv2 + NIMA/MUSIQ/CLIP + 人脸嵌入..."
+        mark_job_hashing(job, engine, llm_model)
         infos, skipped = grouper.compute_infos(
             folder,
             progress=_job_progress,
@@ -2086,13 +2089,7 @@ def _run_job(folder: str, dry_run: bool, mode: str, wipe_cache: bool,
             with LOCK:
                 SESSION = sess
                 LAST_INFOS = infos
-            job.status = "done"
-            if rejected:
-                job.label = f"初筛出 {len(rejected)} 张失败照片，等待复核"
-            else:
-                job.label = f"扫描 {len(infos)} 张，未发现失败照片"
-            job.done = job.total = len(infos)
-            job.finished_at = time.time()
+            mark_job_prescreen_done(job, len(infos), len(rejected))
             if jlog:
                 jlog.footer(
                     status="done(prescreen)",
@@ -2104,8 +2101,7 @@ def _run_job(folder: str, dry_run: bool, mode: str, wipe_cache: bool,
                 )
             return
 
-        job.status = "grouping"
-        job.label = "构建分组..."
+        mark_job_grouping(job)
         raw_groups = group_infos(
             infos,
             threshold_near=threshold_near,
@@ -2129,13 +2125,7 @@ def _run_job(folder: str, dry_run: bool, mode: str, wipe_cache: bool,
         with LOCK:
             SESSION = sess
             LAST_INFOS = infos
-        job.status = "done"
-        if skipped:
-            job.label = f"共 {len(sess.groups)} 组（跳过 {len(skipped)} 张无法读取）"
-        else:
-            job.label = f"共 {len(sess.groups)} 组"
-        job.done = job.total = len(sess.groups)
-        job.finished_at = time.time()
+        mark_job_grouping_done(job, len(sess.groups), len(skipped))
         if jlog:
             jlog.footer(
                 status="done",
@@ -2147,18 +2137,12 @@ def _run_job(folder: str, dry_run: bool, mode: str, wipe_cache: bool,
             )
     except CancelledError:
         # 状态可能已由 api_cancel_job 提前置位
-        if job.status != "cancelled":
-            job.status = "cancelled"
-            job.label = "已取消"
-            job.finished_at = time.time()
+        mark_job_cancelled(job)
         logger.info("job cancelled")
         if jlog: jlog.footer(status="cancelled")
     except Exception as e:
         logger.exception("job error")
-        job.status = "error"
-        job.error = str(e)
-        job.error_info = _classify_job_error(e)
-        job.finished_at = time.time()
+        mark_job_error(job, e, _classify_job_error)
         if jlog: jlog.footer(status="error", error=str(e))
     finally:
         _close_job_log()
