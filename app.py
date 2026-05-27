@@ -74,6 +74,7 @@ from server.services.watermark_service import (
     watermark_status_payload,
     watermark_templates_payload,
 )
+from server.services.result_service import restore_rejected_payload
 
 try:
     from pillow_heif import register_heif_opener
@@ -1542,7 +1543,16 @@ app.register_blueprint(create_results_blueprint(
     lambda: SESSION,
     winners_dir,
     losers_dir,
-    lambda data: _restore_rejected_payload(data),
+    lambda data: restore_rejected_payload(
+        data,
+        lambda: SESSION,
+        LOCK,
+        winners_dir,
+        losers_dir,
+        _unique_target,
+        save_state,
+        logger,
+    ),
 ))
 app.register_blueprint(create_session_blueprint(
     lambda: SESSION,
@@ -2401,169 +2411,6 @@ app.register_blueprint(create_selection_blueprint(
     _skip_group_payload,
     _reopen_group_payload,
 ))
-
-
-# ---------------- 其它接口 ----------------
-
-def _actual_auto_rejected_path(group: GroupState, original: str, folder: str) -> str:
-    if Path(original).exists():
-        return original
-    for entry in group.move_log:
-        if entry.get("src") == original and Path(entry.get("dst", "")).exists():
-            return entry.get("dst", "")
-    candidate = losers_dir(folder) / Path(original).name
-    if candidate.exists():
-        return str(candidate)
-    return original
-
-
-def _find_auto_rejected(group_id: str, raw_path: str) -> tuple[int, Optional[GroupState], Optional[str]]:
-    if SESSION is None:
-        return -1, None, None
-    for idx, group in enumerate(SESSION.groups):
-        if group.id != group_id:
-            continue
-        for original in group.auto_rejected:
-            actual = _actual_auto_rejected_path(group, original, SESSION.folder)
-            if raw_path in (original, actual):
-                return idx, group, original
-    return -1, None, None
-
-
-def _find_prescreen_rejected(raw_path: str) -> Optional[str]:
-    if SESSION is None:
-        return None
-    for original in SESSION.prescreen_rejected:
-        if raw_path == original:
-            return original
-        candidate = losers_dir(SESSION.folder) / Path(original).name
-        if raw_path == str(candidate):
-            return original
-    return None
-
-
-def _restore_rejected_payload(data: dict) -> tuple[dict, int]:
-    if SESSION is None:
-        return {"error": "no session"}, 400
-    gid = data.get("group_id") or ""
-    raw_path = data.get("path") or data.get("original_path") or ""
-    if not gid or not raw_path:
-        return {"error": "缺少 group_id 或 path"}, 400
-
-    with LOCK:
-        original_pre = _find_prescreen_rejected(raw_path)
-        if gid == "__prescreen__" and original_pre:
-            if original_pre not in SESSION.prescreen_restored:
-                SESSION.prescreen_restored.append(original_pre)
-                save_state(SESSION)
-            return {"ok": True, "restored": True}, 200
-
-        _, group, original = _find_auto_rejected(gid, raw_path)
-        if group is None or original is None:
-            return {"error": "找不到这张粗筛照片"}, 404
-        if original in group.manual_restored:
-            return {"ok": True, "restored": True}, 200
-
-        actual = _actual_auto_rejected_path(group, original, SESSION.folder)
-        winner_path = original
-        failed: Optional[str] = None
-        companions = list(SESSION.companions.get(original, []))
-
-        def _companion_actual(comp_orig: str) -> Optional[str]:
-            """同 _actual_auto_rejected_path，但针对 companion 文件。"""
-            if Path(comp_orig).exists():
-                return comp_orig
-            for entry in group.move_log:
-                if entry.get("kind") == "loser_companion" and entry.get("src") == comp_orig:
-                    dst = entry.get("dst", "")
-                    if Path(dst).exists():
-                        return dst
-            candidate = losers_dir(SESSION.folder) / Path(comp_orig).name
-            if candidate.exists():
-                return str(candidate)
-            return None
-
-        if not SESSION.dry_run:
-            win_d = winners_dir(SESSION.folder)
-            win_d.mkdir(exist_ok=True)
-            source = Path(actual)
-            if not source.exists():
-                failed = "文件不存在，无法捞回"
-            else:
-                target = _unique_target(win_d, Path(original).name)
-                try:
-                    if SESSION.mode == "move":
-                        shutil.move(str(source), str(target))
-                        winner_path = str(target)
-                    else:
-                        shutil.copy2(str(source), target)
-                        winner_path = original
-                        for entry in group.move_log:
-                            if entry.get("src") == original and entry.get("kind") == "loser":
-                                loser_copy = Path(entry.get("dst", ""))
-                                if loser_copy.exists():
-                                    try:
-                                        loser_copy.unlink()
-                                    except OSError:
-                                        pass
-                    group.move_log.append({"src": original, "dst": str(target), "kind": "restored"})
-                except OSError as e:
-                    failed = str(e)
-
-                # ---- 把 companions 也救回 winners/，保持配对 ----
-                # 用 winner 的最终 stem 统一命名，跟 _transfer_main_with_companions 的逻辑对称。
-                if not failed:
-                    final_stem = Path(target).stem
-                    restored_pairs: list[tuple[str, str]] = []
-                    for comp_orig in companions:
-                        comp_now = _companion_actual(comp_orig)
-                        if comp_now is None:
-                            continue  # 找不到就放过，不阻塞主流程
-                        comp_target = _unique_target(
-                            win_d, final_stem + Path(comp_orig).suffix
-                        )
-                        try:
-                            if SESSION.mode == "move":
-                                shutil.move(comp_now, str(comp_target))
-                            else:
-                                shutil.copy2(comp_orig, str(comp_target))
-                                # 删 losers/ 里的 companion 副本（如果有）
-                                for entry in group.move_log:
-                                    if (entry.get("kind") == "loser_companion"
-                                            and entry.get("src") == comp_orig):
-                                        lc = Path(entry.get("dst", ""))
-                                        if lc.exists():
-                                            try:
-                                                lc.unlink()
-                                            except OSError:
-                                                pass
-                            restored_pairs.append((comp_orig, str(comp_target)))
-                            group.move_log.append({
-                                "src": comp_orig, "dst": str(comp_target),
-                                "kind": "restored_companion",
-                            })
-                        except OSError as e:
-                            logger.warning(f"捞回 companion {comp_orig} 失败: {e}")
-
-                    # move 模式下 primary 路径变了，同步更新 session.companions 的 key
-                    if SESSION.mode == "move" and restored_pairs:
-                        if original in SESSION.companions:
-                            SESSION.companions.pop(original)
-                        SESSION.companions[winner_path] = [dst for _, dst in restored_pairs]
-        if failed:
-            return {"error": failed}, 500
-
-        group.manual_restored.append(original)
-        if winner_path not in group.extra_winners:
-            group.extra_winners.append(winner_path)
-        group.losers = [
-            p for p in group.losers
-            if p not in {original, actual, winner_path}
-        ]
-        if SESSION.mode == "move" and actual in SESSION.meta:
-            SESSION.meta[winner_path] = SESSION.meta.pop(actual)
-        save_state(SESSION)
-    return {"ok": True, "restored": True}, 200
 
 
 def _run_grouping_async(accepted_infos, old_session_snapshot):

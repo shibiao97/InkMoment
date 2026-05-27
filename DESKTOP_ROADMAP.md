@@ -112,7 +112,7 @@ server/
 - 已迁移分组路由 `server.routes.grouping`，覆盖 `/api/grouping_progress`、`/api/regroup`、`/api/preview_groups` 与 `/api/confirm_prescreen`。
 - 已迁移分组进度响应、重新分组和预览组序列化到 `server.services.grouping_service`；`/api/confirm_prescreen` 的异步线程启动逻辑暂留 `app.py` 并通过回调注入。
 - 已迁移结果路由 `server.routes.results`，覆盖 `/api/winners`、`/api/auto_rejected` 与 `/api/restore_rejected`。
-- 已迁移胜出照片列表和自动放手照片列表序列化到 `server.services.result_service`；`/api/restore_rejected` 的文件搬运与状态回写逻辑暂留 `app.py` 并通过回调注入。
+- 已迁移胜出照片列表、自动放手照片列表序列化和 `/api/restore_rejected` 的文件搬运/状态回写逻辑到 `server.services.result_service`；`SESSION`、锁、目录工厂和状态保存仍由 `app.py` 回调注入。
 - 已迁移图片读取路由 `server.routes.image`，覆盖 `/api/image` 与 `/api/image_original`。
 - 已迁移缩略图/原图响应、RAW 内嵌预览读取、占位图响应、路径安全校验和图片缓存头到 `server.services.image_service`。
 - 已迁移选片路由 `server.routes.selection`，覆盖 `/api/group`、`/api/choose`、`/api/kick`、`/api/undo`、`/api/skip_group` 与 `/api/reopen_group`。
