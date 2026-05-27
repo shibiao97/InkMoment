@@ -59,6 +59,11 @@ from server.services.job_runner_service import (
     prepare_grouping_result,
     prepare_prescreen_result,
     run_info_scan,
+    write_grouping_footer,
+    write_job_event,
+    write_job_header,
+    write_prescreen_footer,
+    write_status_footer,
 )
 from server.services.selection_service import current_group_payload
 from server.services.start_service import (
@@ -2031,28 +2036,29 @@ def _run_job(folder: str, dry_run: bool, mode: str, wipe_cache: bool,
     setup_logger(folder)
     # 单任务日志（每次 /api/start 一个文件，便于复盘单次运行的数据）
     jlog = _open_job_log(folder, engine, llm_model)
-    if jlog:
-        jlog.header(
-            folder=folder,
-            engine=engine,
-            mode=mode,
-            dry_run=dry_run,
-            prescreen=f"{prescreen_enabled}/{prescreen_strength}",
-            face_aware=face_aware,
-            llm_model=llm_model or "(none)",
-            threshold_near=threshold_near,
-            threshold_far=threshold_far,
-            near_seconds=near_seconds,
-        )
+    write_job_header(
+        jlog,
+        folder,
+        engine,
+        mode,
+        dry_run,
+        prescreen_enabled,
+        prescreen_strength,
+        face_aware,
+        llm_model,
+        threshold_near,
+        threshold_far,
+        near_seconds,
+    )
     try:
         mark_job_started(job)
 
         # ---- 启动期能力硬校验：缺一即报错，不进入"假装在跑"的状态 ----
         mark_job_checking(job, engine)
-        if jlog: jlog.event("CHECK", f"engine={engine} 依赖校验中…")
+        write_job_event(jlog, "CHECK", f"engine={engine} 依赖校验中…")
         logger.info(f"[{engine}] 启动任务：folder={folder} prescreen={prescreen_enabled}/{prescreen_strength} mode={mode}")
         _require_engine(engine)
-        if jlog: jlog.event("CHECK", "依赖校验通过")
+        write_job_event(jlog, "CHECK", "依赖校验通过")
 
         infos, skipped = run_info_scan(
             job,
@@ -2092,15 +2098,7 @@ def _run_job(folder: str, dry_run: bool, mode: str, wipe_cache: bool,
                 SESSION = sess
                 LAST_INFOS = infos
             mark_job_prescreen_done(job, len(infos), len(rejected))
-            if jlog:
-                jlog.footer(
-                    status="done(prescreen)",
-                    extra={
-                        "total_images": len(infos),
-                        "prescreen_rejected": len(rejected),
-                        "label": job.label,
-                    },
-                )
+            write_prescreen_footer(jlog, len(infos), len(rejected), job.label)
             return
 
         sess = prepare_grouping_result(
@@ -2125,24 +2123,16 @@ def _run_job(folder: str, dry_run: bool, mode: str, wipe_cache: bool,
             SESSION = sess
             LAST_INFOS = infos
         mark_job_grouping_done(job, len(sess.groups), len(skipped))
-        if jlog:
-            jlog.footer(
-                status="done",
-                extra={
-                    "groups": len(sess.groups),
-                    "skipped": len(skipped),
-                    "label": job.label,
-                },
-            )
+        write_grouping_footer(jlog, len(sess.groups), len(skipped), job.label)
     except CancelledError:
         # 状态可能已由 api_cancel_job 提前置位
         mark_job_cancelled(job)
         logger.info("job cancelled")
-        if jlog: jlog.footer(status="cancelled")
+        write_status_footer(jlog, "cancelled")
     except Exception as e:
         logger.exception("job error")
         mark_job_error(job, e, _classify_job_error)
-        if jlog: jlog.footer(status="error", error=str(e))
+        write_status_footer(jlog, "error", str(e))
     finally:
         _close_job_log()
 

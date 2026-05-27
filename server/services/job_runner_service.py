@@ -3,6 +3,82 @@ from collections import Counter
 from typing import Callable, Optional
 
 
+def write_job_header(
+    job_log,
+    folder: str,
+    engine: str,
+    mode: str,
+    dry_run: bool,
+    prescreen_enabled: bool,
+    prescreen_strength: str,
+    face_aware: bool,
+    llm_model: Optional[str],
+    threshold_near: int,
+    threshold_far: int,
+    near_seconds: int,
+) -> None:
+    if job_log is None:
+        return
+    job_log.header(
+        folder=folder,
+        engine=engine,
+        mode=mode,
+        dry_run=dry_run,
+        prescreen=f"{prescreen_enabled}/{prescreen_strength}",
+        face_aware=face_aware,
+        llm_model=llm_model or "(none)",
+        threshold_near=threshold_near,
+        threshold_far=threshold_far,
+        near_seconds=near_seconds,
+    )
+
+
+def write_job_event(job_log, kind: str, message: str) -> None:
+    if job_log is not None:
+        job_log.event(kind, message)
+
+
+def write_prescreen_footer(
+    job_log,
+    infos_count: int,
+    rejected_count: int,
+    label: str,
+) -> None:
+    if job_log is None:
+        return
+    job_log.footer(
+        status="done(prescreen)",
+        extra={
+            "total_images": infos_count,
+            "prescreen_rejected": rejected_count,
+            "label": label,
+        },
+    )
+
+
+def write_grouping_footer(
+    job_log,
+    group_count: int,
+    skipped_count: int,
+    label: str,
+) -> None:
+    if job_log is None:
+        return
+    job_log.footer(
+        status="done",
+        extra={
+            "groups": group_count,
+            "skipped": skipped_count,
+            "label": label,
+        },
+    )
+
+
+def write_status_footer(job_log, status: str, error: Optional[str] = None) -> None:
+    if job_log is not None:
+        job_log.footer(status=status, error=error)
+
+
 def mark_job_started(job, now: Callable[[], float] = time.time) -> None:
     job.started_at = now()
 
