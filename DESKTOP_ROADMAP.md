@@ -130,3 +130,56 @@ server/
 - 现在不迁 FastAPI。Flask 对本地单机工具足够，当前收益更高的是模块化。
 - 现在不直接引入 Tauri。先稳定 Vue 与 API 边界，避免三条技术线同时变动。
 - 构建产物先放 `static/vue/`，后续再决定是否替换根入口。
+
+## 接下来开发顺序
+
+### Iteration A: 后端继续变薄
+
+目标：让 `app.py` 逐步只负责启动、全局状态装配和 blueprint 注册，为 Tauri sidecar 启动做准备。
+
+建议顺序：
+
+1. 抽离 `/api/restore_rejected` 到结果/初筛领域，保留文件还原 helper 通过回调注入。
+2. 抽离 `/api/confirm_prescreen` 到初筛领域，异步线程启动逻辑先留在 `app.py` service helper。
+3. 抽离 `/api/watermark/*` 到 `server.routes.watermark` 与 `server.services.watermark_service`。
+4. 最后处理 `/api/start`，把 job 创建、线程启动和 session 写入收敛成一个可被 CLI/Tauri 复用的 service。
+
+完成标准：
+
+- `app.py` 中只剩 `/`、`/api/start` 或更少的直接 route。
+- 所有已迁移 API 的路径、请求体和返回结构保持兼容。
+- 每次迁移至少跑 `py_compile`、`npm run frontend:build` 和对应 Flask smoke test。
+
+### Iteration B: Vue 入口补齐桌面主流程
+
+目标：让 Vue 入口承担日常使用主链路，减少对原生 `static/app.js` 页面的依赖。
+
+建议顺序：
+
+1. 迁移土豪模式的模型服务配置 UI，接入现有 `/api/ark_key`、`/api/llm_models`、`/api/llm_concurrency` 与 `/api/diagnostics`。
+2. 补齐 ArenaView 的高级交互：快捷键提示、缩放查看、单图组处理、跨组反悔入口。
+3. 迁移水印结果流程，接入 `/api/watermark/*`。
+4. 统一错误提示、任务取消、回首页重置和长任务 loading 状态。
+
+完成标准：
+
+- Vue 入口能覆盖：选择文件夹、启动分析、初筛复核、分组预览、选片、完成页、水印导出。
+- 原生页面只作为回退入口，不再承载唯一主流程。
+- Vite dev、Vue build 和 Flask API 联调路径稳定。
+
+### Iteration C: Tauri 预接入
+
+目标：在 Web 主流程稳定后再加入桌面壳，避免打包链影响业务迭代。
+
+建议顺序：
+
+1. 新增 `src-tauri/`，先只加载 Vue build，不启动 Python sidecar。
+2. 增加 Tauri 配置，限制窗口、权限和资源路径。
+3. 将 Flask 启动封装成稳定的 sidecar 命令，支持动态端口和健康检查。
+4. 加入后端异常退出提示、退出时释放 sidecar、打开目录等桌面能力。
+
+完成标准：
+
+- macOS 本机能通过 Tauri 启动 Vue 壳。
+- Tauri 能启动并探活 Python 后端。
+- 桌面版主流程至少完成一次本地手工验证。
