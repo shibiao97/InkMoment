@@ -21,6 +21,45 @@ def current_group_payload(
     }, 200
 
 
+def choose_group_payload(
+    data: dict,
+    get_session: Callable,
+    lock,
+    skip_finished: Callable[[], None],
+    validate_current_pair: Callable[[], None],
+    serialize_group: Callable,
+    push_undo: Callable[[], None],
+    finalize_group: Callable[[], None],
+    advance: Callable,
+    record_preference: Callable,
+) -> tuple[dict, int]:
+    with lock:
+        session = get_session()
+        if session is None:
+            return {"error": "no session"}, 400
+
+        loser = data.get("loser")
+        if loser not in ("left", "right", "both", "neither"):
+            return {"error": "invalid loser"}, 400
+
+        skip_finished()
+        if session.current_group >= len(session.groups):
+            return {"done": True}, 200
+        push_undo()
+        group = session.groups[session.current_group]
+        left_before = group.left
+        right_before = group.right
+        advance(group, loser)
+        record_preference(left_before, right_before, loser)
+        finalize_group()
+        return current_group_payload(
+            session,
+            skip_finished,
+            validate_current_pair,
+            serialize_group,
+        )
+
+
 def skip_group_payload(
     get_session: Callable,
     lock,
