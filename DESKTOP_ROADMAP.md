@@ -55,9 +55,10 @@
 - 已新增 `DoneView` 和 `useDoneResults()`，接入 `/api/status`、`/api/winners`、`/api/skipped`、`/api/open_folder` 与 `/api/reopen_group`，支持基础结果统计、胜出照片网格、输出目录路径、无法读取列表和跨组反悔重选入口。
 - 已新增 `useWatermarkExport()` 并在 Vue 完成页接入 `/api/watermark/*`，支持水印模板、预览、EXIF 展示、批量导出、状态轮询、中止和打开水印输出目录。
 - 已新增 Vue 统一回首页重置流程，所有主流程页的回首页事件都会调用 `/api/reset_session`，用于中止运行中任务并清理当前会话状态。
+- 已新增 Vue 启动状态恢复：入口加载时读取 `/api/job` 与 `/api/status`，自动恢复到处理中、初筛复核、分组预览、选片、完成页或首页。
 - Vue 开发联调需要通过 `INKMOMENT_DEV_ORIGINS=http://127.0.0.1:5173` 显式允许 Vite 开发源访问 Flask API。
 - 土豪模式的模型服务地址/API Key 管理已迁移到 Vue 首页，接入 `/api/ark_key`、`/api/llm_models`、`/api/llm_concurrency` 与 `/api/diagnostics`，可保存配置、刷新模型并选择视觉模型启动任务。
-- ProcessingView 目前是基础进度页，PrescreenView 是基础复核页，PreviewView 是基础分组预览页，ArenaView 已覆盖常用双图选片、快捷键和缩放查看，DoneView 已覆盖基础完成结果、水印导出和跨组反悔入口；Vue 主流程已具备统一回首页重置；照片墙动画、重做流程和单图组处理细节仍需继续迁移。
+- ProcessingView 目前是基础进度页，PrescreenView 是基础复核页，PreviewView 是基础分组预览页，ArenaView 已覆盖常用双图选片、快捷键和缩放查看，DoneView 已覆盖基础完成结果、水印导出和跨组反悔入口；Vue 主流程已具备统一回首页重置和启动状态恢复；照片墙动画、重做流程和单图组处理细节仍需继续迁移。
 
 ### Phase 3: Flask 后端模块化
 
@@ -199,6 +200,7 @@ Task:
 - [ ] 补齐 ArenaView 高级交互：快捷键、缩放查看和跨组反悔入口已完成；继续补单图组处理细节。
 - [x] 迁移水印导出流程，接入 `/api/watermark/*`。
 - [ ] 统一长任务 loading、错误提示、取消和回首页重置：回首页重置已完成；继续收敛跨页面错误提示和长任务 loading。
+- [x] 增加 Vue 启动状态恢复，支持桌面窗口重开后回到当前流程位置。
 
 验收：
 

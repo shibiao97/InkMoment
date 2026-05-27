@@ -9,7 +9,7 @@ function shouldShowPrescreen(status) {
   );
 }
 
-function resolveNextStep(status) {
+export function resolveNextStep(status) {
   if (!status?.ready) {
     return {
       kind: "home",

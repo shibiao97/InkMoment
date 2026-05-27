@@ -69,6 +69,27 @@ input:disabled {
   border-color: #f0cbc5;
 }
 
+.app-boot-shell {
+  display: grid;
+  place-items: center;
+}
+
+.app-boot-panel {
+  width: min(460px, 100%);
+  padding: 24px;
+  text-align: center;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid #dbe6d4;
+  border-radius: 14px;
+  box-shadow: 0 12px 32px rgba(31, 41, 34, 0.08);
+}
+
+.app-boot-panel h1 {
+  margin: 6px 0 0;
+  color: #1f2922;
+  font-size: 28px;
+}
+
 .status-badge {
   position: fixed;
   top: 18px;
