@@ -31,3 +31,24 @@ export function cancelJob() {
 export function getStatus() {
   return fetchJSON("/api/status");
 }
+
+export function getAutoRejected() {
+  return fetchJSON("/api/auto_rejected");
+}
+
+export function restoreRejected(payload) {
+  return fetchJSON("/api/restore_rejected", {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export function confirmPrescreen() {
+  return fetchJSON("/api/confirm_prescreen", {
+    method: "POST",
+  });
+}
+
+export function getGroupingProgress(since = 0) {
+  return fetchJSON(`/api/grouping_progress?since=${encodeURIComponent(String(since))}`);
+}

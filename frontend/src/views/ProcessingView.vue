@@ -12,7 +12,7 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits(["back-home"]);
+const emit = defineEmits(["back-home", "continue"]);
 
 const {
   job,
@@ -146,6 +146,7 @@ onMounted(start);
       :error="nextStepError"
       @refresh="refreshStatus"
       @back-home="emit('back-home')"
+      @continue="emit('continue', $event)"
     />
 
     <section class="event-panel">
@@ -169,7 +170,7 @@ onMounted(start);
     </section>
 
     <p class="start-note">
-      Vue 迁移版已接入基础处理进度。初筛复核、分组预览、擂台页将在后续迭代接入。
+      Vue 迁移版已接入基础处理进度和初筛复核入口。分组预览、擂台页将在后续迭代接入。
     </p>
   </main>
 </template>

@@ -1,5 +1,7 @@
 <script setup>
-defineProps({
+import { computed } from "vue";
+
+const props = defineProps({
   nextStep: {
     type: Object,
     required: true,
@@ -18,7 +20,26 @@ defineProps({
   },
 });
 
-const emit = defineEmits(["refresh", "back-home"]);
+const emit = defineEmits(["refresh", "back-home", "continue"]);
+
+const canContinue = computed(() => {
+  return ["prescreen", "confirm-prescreen"].includes(props.nextStep.kind);
+});
+
+const primaryLabel = computed(() => {
+  if (props.nextStep.kind === "prescreen") return "进入复核";
+  if (props.nextStep.kind === "confirm-prescreen") return "进入确认";
+  if (props.nextStep.kind === "home") return "回首页";
+  return "暂回首页";
+});
+
+function handlePrimary() {
+  if (canContinue.value) {
+    emit("continue", props.nextStep.kind);
+    return;
+  }
+  emit("back-home");
+}
 </script>
 
 <template>
@@ -46,8 +67,8 @@ const emit = defineEmits(["refresh", "back-home"]);
 
     <div class="next-step-actions">
       <button class="btn-ghost" type="button" @click="emit('refresh')">刷新状态</button>
-      <button class="btn-primary" type="button" @click="emit('back-home')">
-        {{ nextStep.kind === "home" ? "回首页" : "暂回首页" }}
+      <button class="btn-primary" type="button" :disabled="loading" @click="handlePrimary">
+        {{ primaryLabel }}
       </button>
     </div>
   </section>
