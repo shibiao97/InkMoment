@@ -1513,6 +1513,7 @@ app.register_blueprint(create_results_blueprint(
     lambda: SESSION,
     winners_dir,
     losers_dir,
+    lambda data: _restore_rejected_payload(data),
 ))
 app.register_blueprint(create_session_blueprint(
     lambda: SESSION,
@@ -2520,15 +2521,13 @@ def _find_prescreen_rejected(raw_path: str) -> Optional[str]:
     return None
 
 
-@app.route("/api/restore_rejected", methods=["POST"])
-def api_restore_rejected():
+def _restore_rejected_payload(data: dict) -> tuple[dict, int]:
     if SESSION is None:
-        return jsonify({"error": "no session"}), 400
-    data = request.get_json(force=True) or {}
+        return {"error": "no session"}, 400
     gid = data.get("group_id") or ""
     raw_path = data.get("path") or data.get("original_path") or ""
     if not gid or not raw_path:
-        return jsonify({"error": "缺少 group_id 或 path"}), 400
+        return {"error": "缺少 group_id 或 path"}, 400
 
     with LOCK:
         original_pre = _find_prescreen_rejected(raw_path)
@@ -2536,13 +2535,13 @@ def api_restore_rejected():
             if original_pre not in SESSION.prescreen_restored:
                 SESSION.prescreen_restored.append(original_pre)
                 save_state(SESSION)
-            return jsonify({"ok": True, "restored": True})
+            return {"ok": True, "restored": True}, 200
 
         _, group, original = _find_auto_rejected(gid, raw_path)
         if group is None or original is None:
-            return jsonify({"error": "找不到这张粗筛照片"}), 404
+            return {"error": "找不到这张粗筛照片"}, 404
         if original in group.manual_restored:
-            return jsonify({"ok": True, "restored": True})
+            return {"ok": True, "restored": True}, 200
 
         actual = _actual_auto_rejected_path(group, original, SESSION.folder)
         winner_path = original
@@ -2631,7 +2630,7 @@ def api_restore_rejected():
                             SESSION.companions.pop(original)
                         SESSION.companions[winner_path] = [dst for _, dst in restored_pairs]
         if failed:
-            return jsonify({"error": failed}), 500
+            return {"error": failed}, 500
 
         group.manual_restored.append(original)
         if winner_path not in group.extra_winners:
@@ -2643,7 +2642,7 @@ def api_restore_rejected():
         if SESSION.mode == "move" and actual in SESSION.meta:
             SESSION.meta[winner_path] = SESSION.meta.pop(actual)
         save_state(SESSION)
-    return jsonify({"ok": True, "restored": True})
+    return {"ok": True, "restored": True}, 200
 
 
 def _run_grouping_async(accepted_infos, old_session_snapshot):
