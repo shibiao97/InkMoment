@@ -45,10 +45,16 @@ from server.routes.llm import llm_bp
 from server.routes.results import create_results_blueprint
 from server.routes.selection import create_selection_blueprint
 from server.routes.session import create_session_blueprint
+from server.routes.start import create_start_blueprint
 from server.routes.system import system_bp
 from server.routes.watermark import create_watermark_blueprint
 from server.services.llm_service import load_llm_config_from_file
 from server.services.selection_service import current_group_payload
+from server.services.start_service import (
+    active_job_error,
+    build_pending_job,
+    parse_start_request,
+)
 
 try:
     from pillow_heif import register_heif_opener
@@ -1525,6 +1531,9 @@ app.register_blueprint(create_session_blueprint(
     _infos_from_memory_or_cache,
 ))
 app.register_blueprint(system_bp)
+app.register_blueprint(create_start_blueprint(
+    lambda data: _start_job_payload(data),
+))
 app.register_blueprint(create_watermark_blueprint(
     lambda: _watermark_templates_payload(),
     lambda data: _watermark_preview_payload(data),
@@ -2162,68 +2171,36 @@ def index():
     return send_from_directory(app.static_folder, "index.html")
 
 
-@app.route("/api/start", methods=["POST"])
-def api_start():
+def _start_job_payload(data: dict) -> tuple[dict, int]:
     global JOB, SESSION
-    data = request.get_json(force=True)
-    folder = (data.get("folder") or "").strip()
-    dry_run = bool(data.get("dry_run", False))
-    wipe_cache = bool(data.get("wipe_cache", False))
-    mode = data.get("mode", "copy")
-    if mode not in ("copy", "move"):
-        mode = "copy"
-    engine = data.get("engine", "fast")
-    if engine not in ("fast", "expert", "tycoon"):
-        engine = "fast"
-    llm_model = (data.get("llm_model") or "").strip() or None
-    threshold_near = int(data.get("threshold_near", THRESHOLD_NEAR))
-    threshold_far = int(data.get("threshold_far", THRESHOLD_FAR))
-    near_seconds = int(data.get("near_seconds", NEAR_SECONDS))
-    prescreen_enabled = bool(data.get("prescreen_enabled", True))
-    prescreen_strength = data.get("prescreen_strength", "standard")
-    # 前端历史上发过两个值：早期是 "aggressive"、后来改成 "advanced"。
-    # 两个都接住兜底，谁也别再被静默打回 standard。
-    if prescreen_strength == "aggressive":
-        prescreen_strength = "advanced"
-    if prescreen_strength not in ("standard", "advanced"):
-        prescreen_strength = "standard"
-    face_aware = bool(data.get("face_aware", True))
-
-    if not folder:
-        return jsonify({"error": "请填写文件夹路径"}), 400
-    folder = str(Path(folder).expanduser().resolve())
-    if not Path(folder).is_dir():
-        return jsonify({"error": f"目录不存在: {folder}"}), 400
-    if engine == "tycoon" and not llm_model:
-        return jsonify({"error": "土豪模式需要选择 LLM 模型"}), 400
+    start_request, error_payload, error_status = parse_start_request(
+        data,
+        {
+            "threshold_near": THRESHOLD_NEAR,
+            "threshold_far": THRESHOLD_FAR,
+            "near_seconds": NEAR_SECONDS,
+        },
+    )
+    if start_request is None:
+        return error_payload, error_status
 
     with LOCK:
-        if JOB and JOB.status in ("pending", "scanning", "hashing", "grouping"):
-            return jsonify({"error": "已有任务在跑，请稍候"}), 409
+        error_payload, error_status = active_job_error(JOB)
+        if error_payload is not None:
+            return error_payload, error_status
 
         # 一次性运行：始终全新开始，不读旧 state，不复用缓存。
         # 旧的 state.json / winners / losers 由 _run_job 里的 _wipe_caches 清掉。
-        JOB = JobState(
-            folder=folder, dry_run=dry_run, mode=mode, engine=engine,
-            status="pending",
-            threshold_near=threshold_near, threshold_far=threshold_far,
-            near_seconds=near_seconds, prescreen_enabled=prescreen_enabled,
-            prescreen_strength=prescreen_strength,
-            face_aware=face_aware,
-            llm_model=llm_model,
-        )
+        JOB = build_pending_job(JobState, start_request)
         SESSION = None
 
     t = threading.Thread(
         target=_run_job,
-        args=(folder, dry_run, mode, wipe_cache,
-              threshold_near, threshold_far, near_seconds,
-              prescreen_enabled, prescreen_strength, face_aware, engine,
-              llm_model),
+        args=start_request.run_args(),
         daemon=True,
     )
     t.start()
-    return jsonify({"ok": True})
+    return {"ok": True}, 200
 
 
 def _skip_finished_locked() -> None:

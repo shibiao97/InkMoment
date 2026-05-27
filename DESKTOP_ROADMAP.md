@@ -95,7 +95,8 @@ server/
 - 已迁移低风险文件夹路由 `server.routes.folder`，覆盖 `/api/browse_folder`、`/api/peek_folder`、`/api/skipped` 与 `/api/open_folder`。
 - 已迁移原生文件夹选择、轻量目录快照、无法读取日志查询和打开当前会话目录到 `server.services.folder_service`。
 - 已迁移任务状态路由 `server.routes.job`，覆盖 `/api/job`、`/api/cancel_job` 与 `/api/job_log`。
-- 已迁移任务状态序列化、取消逻辑和 per-job 日志读取到 `server.services.job_service`；`/api/start` 因依赖线程启动、`SESSION`、`LAST_INFOS` 和任务日志写入暂留 `app.py`。
+- 已迁移任务启动路由 `server.routes.start`，覆盖 `/api/start`。
+- 已迁移 `/api/start` 请求解析、默认值归一、参数校验和 pending `JobState` 构造到 `server.services.start_service`；后台线程 `_run_job`、`SESSION`、`JOB`、`LAST_INFOS` 和任务日志写入暂留 `app.py`。
 - 已迁移模型服务配置路由 `server.routes.llm`，覆盖 `/api/ark_key`、`/api/llm_models`、`/api/llm_concurrency` 与 `/api/diagnostics`。
 - 已迁移模型服务配置读写、base URL 归一化、Key 脱敏、模型列表探测、环境诊断和启动期配置加载到 `server.services.llm_service`。
 - 已迁移会话状态路由 `server.routes.session`，覆盖 `/api/status` 与 `/api/reset_session`。
@@ -110,7 +111,7 @@ server/
 - 已迁移当前选片组读取入口到 `server.services.selection_service`；组序列化、坏图预检和选片写操作的状态机暂留 `app.py` 并通过回调注入。
 - 已迁移水印路由 `server.routes.watermark`，覆盖 `/api/watermark/templates`、`/api/watermark/preview`、`/api/watermark/start`、`/api/watermark/status`、`/api/watermark/cancel` 与 `/api/watermark/open_out_dir`。
 - 水印预览、批量导出、取消和打开输出目录的状态机暂留 `app.py` 并通过回调注入。
-- `app.py` 直接路由已收敛到 `/` 与 `/api/start`；仍保留全局状态、任务启动、水印状态机和部分业务 helper，后续重点是把 `/api/start` 收敛成可复用 service。
+- `app.py` 直接路由已收敛到 `/`；仍保留全局状态、后台任务线程、水印状态机和部分业务 helper，后续重点是把 `_run_job` 收敛成可复用 service。
 
 ### Phase 4: Tauri 桌面壳
 
@@ -141,12 +142,12 @@ server/
 
 剩余建议：
 
-1. 处理 `/api/start`，把 job 创建、线程启动和 session 写入收敛成一个可被 CLI/Tauri 复用的 service。
+1. 继续处理 `_run_job`，把扫描、分组、session 写入和任务日志收敛成一个可被 CLI/Tauri 复用的 service。
 2. 将水印预览、批量导出、取消和打开输出目录的状态机继续下沉到 `server.services.watermark_service`。
 
 完成标准：
 
-- `app.py` 中只剩 `/`、`/api/start` 或更少的直接 route。
+- `app.py` 中只剩 `/` 或更少的直接 route。
 - 所有已迁移 API 的路径、请求体和返回结构保持兼容。
 - 每次迁移至少跑 `py_compile`、`npm run frontend:build` 和对应 Flask smoke test。
 
