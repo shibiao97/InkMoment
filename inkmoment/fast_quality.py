@@ -20,7 +20,7 @@ import cv2  # 极速模式硬依赖；缺失就让本模块导入失败，启动
 import numpy as np
 from PIL import Image
 
-from pic_selecter.quality import (
+from inkmoment.quality import (
     QualityInfo,
     REASON_LABELS,
     _laplacian_variance,

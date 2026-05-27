@@ -17,7 +17,7 @@ from typing import Any, Callable, Optional
 import imagehash
 import numpy as np
 from PIL import Image, ImageOps
-from pic_selecter.quality import analyze_image
+from inkmoment.quality import analyze_image
 
 try:
     from pillow_heif import register_heif_opener
@@ -338,7 +338,7 @@ def _load_image_for_analysis(path: str, companions: list[str]) -> Image.Image:
             # JPG/JPEG companion 损坏（少见，但用户的 SD 卡读坏过）。
             # 优先级 1 失败了，自动 fallback 到 RAW 内嵌 JPEG——比直接 skip 整张图友好。
             import logging
-            logging.getLogger("pic_selecter").warning(
+            logging.getLogger("inkmoment").warning(
                 f"RAW {Path(path).name} 的 companion {Path(best_comp).name} 加载失败"
                 f"（{type(e).__name__}: {e}），退回 RAW 内嵌 JPEG"
             )
@@ -405,7 +405,7 @@ def _process_one(path: str, strength: str = "standard",
         ph = imagehash.phash(img_t, hash_size=8)
 
         if engine == "fast":
-            from pic_selecter.fast_quality import analyze_image_fast
+            from inkmoment.fast_quality import analyze_image_fast
             quality_info = analyze_image_fast(img_t, st.st_size, strength=strength)
             # 多 hash 签名 —— 四个 hash 都是必须的，任一失败让这张图归 skipped
             dh = str(imagehash.dhash(img_t, hash_size=8))
@@ -441,11 +441,11 @@ def _process_one(path: str, strength: str = "standard",
             if not llm_model:
                 return None, "tycoon 缺少 llm_model 参数"
             import logging as _logging
-            from pic_selecter import vision
-            from pic_selecter import llm_judge
-            from pic_selecter.quality import analyze_basic
-            from pic_selecter.fast_quality import analyze_image_fast
-            _log = _logging.getLogger("pic_selecter")
+            from inkmoment import vision
+            from inkmoment import llm_judge
+            from inkmoment.quality import analyze_basic
+            from inkmoment.fast_quality import analyze_image_fast
+            _log = _logging.getLogger("inkmoment")
 
             dinov2_vec = vision.extract_dinov2(img_t)
             face_data = vision.extract_faces(img_t)
@@ -502,8 +502,8 @@ def _process_one(path: str, strength: str = "standard",
 
         # ---- expert 分支 ----
         import logging as _logging
-        _log = _logging.getLogger("pic_selecter")
-        from pic_selecter import vision
+        _log = _logging.getLogger("inkmoment")
+        from inkmoment import vision
         dinov2_vec = vision.extract_dinov2(img_t)
         aesthetic = vision.extract_aesthetic_score(img_t)
         musiq = vision.extract_musiq_score(img_t)
@@ -546,7 +546,7 @@ def _process_one(path: str, strength: str = "standard",
         ), None
     except Exception as e:
         if engine == "tycoon":
-            from pic_selecter import llm_judge
+            from inkmoment import llm_judge
             if isinstance(e, llm_judge.LLMJudgeError):
                 raise
         return None, f"处理失败: {type(e).__name__}: {e}"
@@ -576,7 +576,7 @@ def scan_folder(folder: str) -> list[tuple[str, list[str]]]:
     groups: dict[tuple[str, str], list[str]] = {}
     for root, _, names in os.walk(p):
         rel = Path(root).relative_to(p)
-        if rel.parts and rel.parts[0] in {"winners", "losers", "_pic_selecter"}:
+        if rel.parts and rel.parts[0] in {"winners", "losers", "_inkmoment"}:
             continue
         for n in names:
             suffix = Path(n).suffix.lower()
@@ -626,7 +626,7 @@ def compute_infos(
     返回 (info_list, skipped_list)，skipped_list 元素为 (path, reason)。
     """
     import logging
-    log = logging.getLogger("pic_selecter")
+    log = logging.getLogger("inkmoment")
     pairs = scan_folder(folder)
     companions_by_primary: dict[str, list[str]] = {p: c for p, c in pairs}
     files = [p for p, _ in pairs]
@@ -684,7 +684,7 @@ def compute_infos(
             if engine == "expert":
                 workers = 1
             elif engine == "tycoon":
-                from pic_selecter import llm_judge
+                from inkmoment import llm_judge
                 llm_judge.configure_concurrency_for_model(llm_model)
                 if "ARK_MAX_WORKERS" in os.environ:
                     workers = int(os.getenv("ARK_MAX_WORKERS", "20"))
@@ -708,12 +708,12 @@ def compute_infos(
             from concurrent.futures import CancelledError as _FutCancelled
             _capability_excs: tuple = ()
             try:
-                from pic_selecter import llm_judge
+                from inkmoment import llm_judge
                 _capability_excs += (llm_judge.LLMJudgeError,)
             except Exception:
                 pass
             try:
-                from pic_selecter import vision as _vision_mod
+                from inkmoment import vision as _vision_mod
                 _capability_excs += (_vision_mod.VisionUnavailable,)
             except Exception:
                 pass
@@ -812,7 +812,7 @@ def group_infos(
       区别只在初筛走 LLM 而非本地拒片。
     """
     import logging
-    log = logging.getLogger("pic_selecter")
+    log = logging.getLogger("inkmoment")
     if not infos:
         return []
     if len(infos) == 1:
@@ -820,10 +820,10 @@ def group_infos(
         return [[infos[0]]]
     log.info(f"[{engine}] group_infos: 开始聚类 {len(infos)} 张")
     if engine == "fast":
-        from pic_selecter import fast_clustering
+        from inkmoment import fast_clustering
         idx_groups = fast_clustering.cluster(infos)
     elif engine in ("expert", "tycoon"):
-        from pic_selecter import clustering
+        from inkmoment import clustering
         idx_groups = clustering.cluster(infos)
     else:
         raise ValueError(f"未知 engine: {engine!r}（仅支持 'fast' / 'expert' / 'tycoon'）")

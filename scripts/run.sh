@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 片刻 — 启动脚本
+# 影刻 InkMoment — 启动脚本
 #
 # 第一次运行：自动创建 .venv 并装依赖
 # 后续运行：直接启动
@@ -10,7 +10,7 @@ cd "$(dirname "$0")/.."
 
 VENV=".venv"
 REQ="requirements.txt"
-STAMP=".pic_selecter_deps.stamp"
+STAMP=".inkmoment_deps.stamp"
 
 # ---------- 找 python ----------
 if command -v python3 &>/dev/null; then
@@ -49,5 +49,5 @@ if [ "$needs_install" = "1" ]; then
 fi
 
 # ---------- 启动 ----------
-echo "▶ 启动 pic_selecter..."
+echo "▶ 启动影刻 InkMoment..."
 exec python app.py "$@"

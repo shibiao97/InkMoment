@@ -35,7 +35,7 @@ from urllib.parse import urlparse
 
 from PIL import Image
 
-logger = logging.getLogger("pic_selecter")
+logger = logging.getLogger("inkmoment")
 
 DEFAULT_BASE_URL = "https://api.openai.com/v1"
 

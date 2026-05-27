@@ -1,4 +1,4 @@
-# 片刻 (Pianke)
+# 影刻 (InkMoment)
 
 > **让 AI 协助初筛与分组，把最终的审美决定权留给自己。**
 
@@ -6,7 +6,7 @@
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey.svg)](#一键启动推荐)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-**片刻** 是一款专为摄影师和摄影爱好者设计的**本地照片双语/擂台式选片工具**。它能够将一次拍摄中相似的几十甚至上百张照片自动归入“同一个瞬间”的组中，然后通过直观的 **左右 A/B 擂台 PK** 方式，让你快速挑出最满意的一张。
+**影刻 (InkMoment)** 是一款专为摄影师和摄影爱好者设计的**本地照片双语/擂台式选片工具**。它能够将一次拍摄中相似的几十甚至上百张照片自动归入“同一个瞬间”的组中，然后通过直观的 **左右 A/B 擂台 PK** 方式，让你快速挑出最满意的一张。
 
 ---
 
@@ -62,7 +62,7 @@
 | **macOS** | `启动_macOS.command` | 若提示“身份不明的开发者”：**按住 Control 键**点击脚本 ➔ 选择 **打开** ➔ 弹窗中再次点击 **打开**。 |
 | **Windows** | `启动_Windows.bat` | 若弹出“Windows 已保护你的电脑”：点击 **更多信息** ➔ 选择 **仍要运行**。 |
 
-*注：启动器会自动在项目独立目录下下载并构建 Python 环境，不污染你的系统环境。国内用户默认启用 PyPI 和模型镜像，可以使用环境变量 `PIANKE_NO_MIRROR=1` 禁用镜像走官方源。*
+*注：启动器会自动在项目独立目录下下载并构建 Python 环境，不污染你的系统环境。国内用户默认启用 PyPI 和模型镜像，可以使用环境变量 `INKMOMENT_NO_MIRROR=1` 禁用镜像走官方源。*
 
 ### 方式二：手动启动（适合开发者）
 
@@ -116,8 +116,8 @@ python app.py --port 8080 --no-browser
 📂 你的照片文件夹/
 ├── 📂 winners/                # 最终胜出保留的照片 (你的成片)
 ├── 📂 losers/                 # 被淘汰的照片
-├── 📄 .pic_selecter_state.json # 进度持久化文件 (可随时中断并继续)
-└── 📂 _pic_selecter/          # 缓存与日志目录
+├── 📄 .inkmoment_state.json # 进度持久化文件 (可随时中断并继续)
+└── 📂 _inkmoment/          # 缓存与日志目录
     ├── 📂 thumbs/             # 缩略图缓存 (重复加载近乎瞬时)
     ├── 📄 log.txt             # 详细处理日志
     └── 📄 skipped.log         # 坏图/无法读取文件清单
@@ -165,8 +165,8 @@ python app.py --port 8080 --no-browser
 <summary><b>2. 默认的 5057 端口被占用怎么办？</b></summary>
 在启动前设置环境变量改变端口：
 <ul>
-  <li>macOS: <code>export PIC_SELECTER_PORT=8080</code></li>
-  <li>Windows: <code>set PIC_SELECTER_PORT=8080</code></li>
+  <li>macOS: <code>export INKMOMENT_PORT=8080</code></li>
+  <li>Windows: <code>set INKMOMENT_PORT=8080</code></li>
 </ul>
 后再运行启动器。
 </details>
@@ -183,7 +183,7 @@ python app.py --port 8080 --no-browser
   <li><b>模型服务地址</b>：默认使用 OpenAI 官方地址 <code>https://api.openai.com/v1</code>。如果只填根域名（例如 <code>https://api.openai.com</code>），后端会自动补成 <code>/v1</code>。</li>
   <li><b>API Key</b>：只粘贴平台生成的 key 本体，不要带说明文字、空格、引号或状态符号。</li>
 </ul>
-配置会保存到本机 <code>~/.config/pic_selecter/</code>：Key 保存在 <code>ark_key</code>，模型服务地址保存在 <code>llm_config.json</code>。也可以通过环境变量覆盖：<code>ARK_BASE_URL</code> 和 <code>ARK_API_KEY</code>。
+配置会保存到本机 <code>~/.config/inkmoment/</code>：Key 保存在 <code>ark_key</code>，模型服务地址保存在 <code>llm_config.json</code>。也可以通过环境变量覆盖：<code>ARK_BASE_URL</code> 和 <code>ARK_API_KEY</code>。
 </details>
 
 <details>
@@ -203,12 +203,12 @@ python app.py --port 8080 --no-browser
 <details>
 <summary><b>7. 如何彻底卸载和清理缓存？</b></summary>
 <ul>
-  <li><b>清理照片缓存</b>：直接删除对应照片目录下的 <code>winners/</code>、<code>losers/</code>、<code>.pic_selecter_state.json</code> 及 <code>_pic_selecter/</code> 文件夹（移动模式下请先移回照片）。</li>
+  <li><b>清理照片缓存</b>：直接删除对应照片目录下的 <code>winners/</code>、<code>losers/</code>、<code>.inkmoment_state.json</code> 及 <code>_inkmoment/</code> 文件夹（移动模式下请先移回照片）。</li>
   <li><b>完全卸载程序</b>：删除解压出的项目文件夹，并清理本地全局工具缓存：
     <ul>
       <li>macOS: <code>rm -rf ~/.local/bin/uv ~/.local/share/uv/</code></li>
       <li>Windows: 删除 <code>%USERPROFILE%\.local\bin\uv.exe</code> 和 <code>%USERPROFILE%\.local\share\uv\</code></li>
-      <li>模型服务配置: 删除 <code>~/.config/pic_selecter/</code></li>
+      <li>模型服务配置: 删除 <code>~/.config/inkmoment/</code></li>
     </ul>
   </li>
 </ul>
@@ -216,7 +216,7 @@ python app.py --port 8080 --no-browser
 
 <details>
 <summary><b>8. HEIC 格式图片在网页上无法预览？</b></summary>
-Windows 系统可能需要安装微软官方的 HEIF 扩展才能正常在浏览器中预览该格式；片刻工具在后端能够正常分析处理该格式。
+Windows 系统可能需要安装微软官方的 HEIF 扩展才能正常在浏览器中预览该格式；影刻在后端能够正常分析处理该格式。
 </details>
 
 ---
@@ -225,5 +225,5 @@ Windows 系统可能需要安装微软官方的 HEIF 扩展才能正常在浏览
 
 1. 本地模式下，所有照片数据、模型特征计算**完全在本地运行**，无任何外发流量。
 2. Web 服务器仅绑定本地 `127.0.0.1` 环回地址，局域网及外网设备均无法访问。
-3. 接口提供严格的 Origin 和 Referer 校验，防止跨站请求伪造 (CSRF/DNS Rebinding)。如果需要对脚本访问开启 token 鉴权，可在运行前设置环境变量 `PIC_SELECTER_TOKEN=your_token`。
+3. 接口提供严格的 Origin 和 Referer 校验，防止跨站请求伪造 (CSRF/DNS Rebinding)。如果需要对脚本访问开启 token 鉴权，可在运行前设置环境变量 `INKMOMENT_TOKEN=your_token`。
 4. ⚠️ **土豪模式例外**：该模式下，照片的缩略图会被发送至你配置的大模型服务商接口。如果对数据隐私有极高要求，请仅使用**极速**或**专家**模式。

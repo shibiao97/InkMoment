@@ -4,7 +4,7 @@ import types
 
 from PIL import Image, ImageFilter, ImageDraw
 
-from pic_selecter.quality import analyze_image
+from inkmoment.quality import analyze_image
 
 
 def checkerboard(size=256, block=8):
@@ -75,7 +75,7 @@ def test_quality_info_can_be_serialized_to_plain_dict():
 
 def test_grouper_cache_round_trips_quality_metrics(tmp_path):
     sys.modules.setdefault("imagehash", types.SimpleNamespace(phash=lambda *args, **kwargs: "0" * 16))
-    grouper = importlib.import_module("pic_selecter.grouper")
+    grouper = importlib.import_module("inkmoment.grouper")
     ImageInfo = grouper.ImageInfo
     photo = tmp_path / "a.jpg"
     photo.write_bytes(b"fake")

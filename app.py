@@ -30,8 +30,8 @@ from urllib.parse import urlparse
 from flask import Flask, Response, abort, jsonify, request, send_file, send_from_directory
 from PIL import Image, ImageOps
 
-from pic_selecter import grouper
-from pic_selecter.grouper import (
+from inkmoment import grouper
+from inkmoment.grouper import (
     CancelledError,
     ImageInfo,
     THRESHOLD_NEAR,
@@ -48,14 +48,14 @@ except Exception:
     pass
 
 
-STATE_FILENAME = ".pic_selecter_state.json"
+STATE_FILENAME = ".inkmoment_state.json"
 STATE_SCHEMA = 6
-PIC_DIR = "_pic_selecter"
+PIC_DIR = "_inkmoment"
 THUMB_MAX = 1600
 
 # 可选：用于脚本/curl 访问的 token（默认不开启）
-# 设置 PIC_SELECTER_TOKEN 环境变量即启用
-SCRIPT_TOKEN = os.environ.get("PIC_SELECTER_TOKEN") or None
+# 设置 INKMOMENT_TOKEN 环境变量即启用
+SCRIPT_TOKEN = os.environ.get("INKMOMENT_TOKEN") or None
 
 # 静态占位图（解码失败时给前端）
 _BROKEN_PLACEHOLDER_SVG = """<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 480 360'>
@@ -169,7 +169,7 @@ def _classify_job_error(exc: BaseException) -> dict:
             "actions": [
                 "保持启动器窗口打开，等待模型预下载完成后重试。",
                 "也可以在项目目录运行：.venv/bin/python scripts/download_models.py --model facebook/dinov2-small",
-                "国内网络默认使用 hf-mirror.com；海外网络可设置 PIANKE_NO_MIRROR=1 后重启。",
+                "国内网络默认使用 hf-mirror.com；海外网络可设置 INKMOMENT_NO_MIRROR=1 后重启。",
             ],
         }
     if "torchvision" in low:
@@ -263,7 +263,7 @@ def _diagnostics_payload() -> dict:
     ]
     module_status = {module: _check_importable(module) for module in modules}
     try:
-        from pic_selecter import vision
+        from inkmoment import vision
         model_status = {
             "dinov2": vision.hf_model_cache_status(),
         }
@@ -312,21 +312,21 @@ def state_path(folder: str) -> Path:
     return Path(folder) / STATE_FILENAME
 
 
-logger = logging.getLogger("pic_selecter")
+logger = logging.getLogger("inkmoment")
 
 
 # ---------------- 模型服务配置持久化 ----------------
 #
 # 限制：Python 子进程没法回写父 shell 的环境变量（OS 决定的）。
 # 折中方案：UI 录入 → 写本地配置文件 + 立即设到 os.environ → 当前进程生效。
-CONFIG_DIR = Path.home() / ".config" / "pic_selecter"
+CONFIG_DIR = Path.home() / ".config" / "inkmoment"
 ARK_KEY_FILE = CONFIG_DIR / "ark_key"
 LLM_CONFIG_FILE = CONFIG_DIR / "llm_config.json"
 BRANDING_FILE = Path(__file__).resolve().parent / "branding.json"
 
 DEFAULT_BRANDING = {
-    "app_name": "片刻",
-    "title_suffix": "决定性的那一张",
+    "app_name": "影刻",
+    "title_suffix": "InkMoment",
     "tagline": "本地运行 · 不上传",
     "hero_eyebrow": "在一摞照片里，留下那一刻",
     "hero_title": "让 AI 替你过一遍，由你做最后的决定。",
@@ -344,7 +344,7 @@ def _mask_key(k: str) -> str:
 
 
 def _default_llm_base_url() -> str:
-    from pic_selecter import llm_judge
+    from inkmoment import llm_judge
     return llm_judge.DEFAULT_BASE_URL
 
 
@@ -404,7 +404,7 @@ def _effective_llm_base_url() -> tuple[str, str]:
 
 def _reset_llm_client_cache() -> None:
     try:
-        from pic_selecter import llm_judge
+        from inkmoment import llm_judge
         llm_judge._CLIENT = None
         llm_judge._MODELS_CACHE = {"at": 0.0, "data": None}
         llm_judge._MODEL_PROBE_CACHE = {}
@@ -435,7 +435,7 @@ def _load_llm_config_from_file() -> None:
 
 
 def _save_ark_key_to_file(key: str) -> None:
-    """写到 ~/.config/pic_selecter/ark_key，0600 权限。"""
+    """写到 ~/.config/inkmoment/ark_key，0600 权限。"""
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     ARK_KEY_FILE.write_text(key, encoding="utf-8")
     try:
@@ -487,7 +487,7 @@ def setup_logger(folder: Optional[str]) -> None:
 #
 # 共享 log.txt 跨任务追加，时间一长很难找"这一次跑"的范围。
 # 这个 JobLogger 在 /api/start 启动一个新文件，处理完追加 summary 行后关闭。
-# 文件名：<folder>/_pic_selecter/jobs/<YYYYMMDD-HHMMSS>-<engine>.log
+# 文件名：<folder>/_inkmoment/jobs/<YYYYMMDD-HHMMSS>-<engine>.log
 # 路径暴露给 UI 让用户能在 done 页面下载这个文件。
 
 JOB_LOG: Optional["JobLogger"] = None
@@ -708,7 +708,7 @@ def _migrate_state(data: dict) -> dict:
         return data
     raise ValueError(
         f"state schema {schema} 太旧（仅支持 v4+）。"
-        f"请删除 .pic_selecter_state.json 重新跑。"
+        f"请删除 .inkmoment_state.json 重新跑。"
     )
 
 
@@ -1667,7 +1667,7 @@ def _safe_open_image(path: Path) -> Optional[Image.Image]:
     """
     suffix = path.suffix.lower()
     try:
-        from pic_selecter.grouper import RAW_EXTS
+        from inkmoment.grouper import RAW_EXTS
     except Exception:
         RAW_EXTS = set()
     if suffix in RAW_EXTS:
@@ -2070,7 +2070,7 @@ def _wipe_caches(folder: str) -> None:
 
     - copy 模式：winners/ losers/ 是副本，原图还在根目录 → 直接删 winners/ losers/。
     - move 模式：winners/ losers/ 里就是原图本体 → 把文件搬回根目录再删空目录。
-    - 同时清掉 phash 缓存、session 进度、_pic_selecter/（日志/缩略图/skipped）。
+    - 同时清掉 phash 缓存、session 进度、_inkmoment/（日志/缩略图/skipped）。
     """
     # 先读上次的 mode（在删 state 之前），决定 winners/losers 怎么处理。
     # 读不到时默认按 move 处理（先把文件搬回根目录再删空）—— 这样即使原本是
@@ -2117,7 +2117,7 @@ def _wipe_caches(folder: str) -> None:
         try:
             shutil.rmtree(pd)
         except OSError as e:
-            logger.warning(f"清 _pic_selecter 目录失败: {e}")
+            logger.warning(f"清 _inkmoment 目录失败: {e}")
 
 
 def _require_engine(engine: str) -> None:
@@ -2130,7 +2130,7 @@ def _require_engine(engine: str) -> None:
     """
     if engine == "fast":
         import importlib
-        for mod in ("cv2", "imagehash", "pic_selecter.fast_quality", "pic_selecter.fast_clustering"):
+        for mod in ("cv2", "imagehash", "inkmoment.fast_quality", "inkmoment.fast_clustering"):
             try:
                 importlib.import_module(mod)
             except ImportError as e:
@@ -2149,14 +2149,14 @@ def _require_engine(engine: str) -> None:
             import cv2  # noqa: F401
         except ImportError as e:
             raise RuntimeError(f"[expert] 缺少 cv2：{e}") from e
-        from pic_selecter import vision
+        from inkmoment import vision
         vision.require_expert_capabilities()  # imports 检查
         vision.prewarm_all()                  # 真正加载模型权重；失败 raise
         logger.info("[expert] 依赖校验通过：DINOv2 / NIMA / MUSIQ / CLIP-IQA+ / InsightFace 全部就绪")
     elif engine == "tycoon":
         # 土豪模式：分组依赖 DINOv2 + InsightFace；初筛靠 LLM
-        from pic_selecter import vision
-        from pic_selecter import llm_judge
+        from inkmoment import vision
+        from inkmoment import llm_judge
         vision.require_tycoon_capabilities()
         vision.prewarm_tycoon()
         llm_judge.require_llm_capabilities()  # API Key + list_models() 联通
@@ -2376,7 +2376,7 @@ def api_ark_key_set():
     os.environ["ARK_API_KEY"] = key
     os.environ["ARK_BASE_URL"] = base_url
     try:
-        from pic_selecter import llm_judge
+        from inkmoment import llm_judge
         _reset_llm_client_cache()
         models = llm_judge.list_models()
         if not models:
@@ -2428,7 +2428,7 @@ def api_llm_models():
         return jsonify({"error": "未配置模型服务 API Key（请在土豪模式卡片下方点击设置）",
                         "models": []}), 412
     try:
-        from pic_selecter import llm_judge
+        from inkmoment import llm_judge
         force = request.args.get("force") in {"1", "true", "yes"}
         if force:
             llm_judge._MODELS_CACHE = {"at": 0.0, "data": None}
@@ -2495,7 +2495,7 @@ def api_llm_concurrency():
     """诊断：返回当前自适应限速器允许的并发数。
     任务跑的时候可以轮询这个看 limiter 有没有因为 429 被压低。"""
     try:
-        from pic_selecter import llm_judge
+        from inkmoment import llm_judge
         return jsonify({"limit": llm_judge.current_concurrency()})
     except Exception as e:
         return jsonify({"error": str(e), "limit": None}), 500
@@ -2758,7 +2758,7 @@ def _validate_current_pair_locked() -> None:
 def _decode_ok(path: str) -> bool:
     """擂台两边的图能否解码。RAW 走 rawpy 内嵌预览的可用性判断。"""
     try:
-        from pic_selecter.grouper import RAW_EXTS
+        from inkmoment.grouper import RAW_EXTS
     except Exception:
         RAW_EXTS = set()
     if Path(path).suffix.lower() in RAW_EXTS:
@@ -3064,7 +3064,7 @@ def api_image_original():
     if p is None:
         abort(404)
     try:
-        from pic_selecter.grouper import RAW_EXTS
+        from inkmoment.grouper import RAW_EXTS
     except Exception:
         RAW_EXTS = set()
     # RAW 文件浏览器原生不支持渲染；提取内嵌全分辨率 JPEG 替代。
@@ -3588,7 +3588,7 @@ def api_preview_groups():
 def api_capabilities():
     """前端用：探测当前后端可用的初筛能力。"""
     try:
-        from pic_selecter.quality import has_face_support
+        from inkmoment.quality import has_face_support
         face = bool(has_face_support())
     except Exception:
         face = False
@@ -3751,7 +3751,7 @@ def api_peek_folder():
 
 @app.route("/api/open_folder", methods=["POST"])
 def api_open_folder():
-    """跨平台打开 folder 或 _pic_selecter 子目录。"""
+    """跨平台打开 folder 或 _inkmoment 子目录。"""
     if SESSION is None:
         return jsonify({"error": "no session"}), 400
     data = request.get_json(silent=True) or {}
@@ -3818,7 +3818,7 @@ def _winner_paths() -> list[str]:
 @app.route("/api/watermark/templates")
 def api_watermark_templates():
     """列出可用的水印模板及其子样式。"""
-    from pic_selecter.watermark import list_templates
+    from inkmoment.watermark import list_templates
     return jsonify({"templates": list_templates()})
 
 
@@ -3831,7 +3831,7 @@ def api_watermark_preview():
     if not winners:
         return jsonify({"error": "没有 winner 照片可预览"}), 400
 
-    from pic_selecter.watermark import WatermarkConfig, render, parse_exif
+    from inkmoment.watermark import WatermarkConfig, render, parse_exif
     cfg_dict = request.get_json(silent=True) or {}
     cfg = WatermarkConfig.from_dict(cfg_dict)
 
@@ -3875,7 +3875,7 @@ def _run_watermark_job(src_paths: list[str], dst: Path, cfg) -> None:
     global WATERMARK_JOB
     job = WATERMARK_JOB
     assert job is not None
-    from pic_selecter.watermark import batch_export
+    from inkmoment.watermark import batch_export
 
     def _progress(done: int, total: int, name: str):
         job.done = done
@@ -3919,7 +3919,7 @@ def api_watermark_start():
     if not winners:
         return jsonify({"error": "没有 winner 照片可导出"}), 400
 
-    from pic_selecter.watermark import WatermarkConfig
+    from inkmoment.watermark import WatermarkConfig
     cfg_dict = request.get_json(silent=True) or {}
     cfg = WatermarkConfig.from_dict(cfg_dict)
 

@@ -21,7 +21,7 @@ from typing import Optional, Sequence
 
 import numpy as np
 
-logger = logging.getLogger("pic_selecter")
+logger = logging.getLogger("inkmoment")
 
 
 # ---------- 信号权重（可调；保持总和约等 1） ----------
