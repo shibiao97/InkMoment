@@ -75,6 +75,7 @@ from server.services.selection_service import (
     skip_finished_groups,
     skip_group_payload,
     undo_group_payload,
+    validate_current_pair,
 )
 from server.services.start_service import (
     active_job_error,
@@ -1991,45 +1992,13 @@ def _skip_finished_locked() -> None:
 
 
 def _validate_current_pair_locked() -> None:
-    """派发前预检 left/right：解码失败的自动入 losers，从 pending 补一张。"""
-    if SESSION is None:
-        return
-    while SESSION.current_group < len(SESSION.groups):
-        g = SESSION.groups[SESSION.current_group]
-        if g.finished:
-            SESSION.current_group += 1
-            continue
-        changed = False
-        for side in ("left", "right"):
-            p = getattr(g, side)
-            if not p:
-                continue
-            if not _decode_ok(p):
-                _record_skipped(SESSION.folder, [(p, "decode_error_at_dispatch")])
-                g.losers.append(p)
-                setattr(g, side, None)
-                changed = True
-        if changed:
-            if g.pending and g.left is None:
-                g.left = g.pending.pop(0)
-            if g.pending and g.right is None:
-                g.right = g.pending.pop(0)
-            if not g.pending:
-                if g.left and not g.right:
-                    g.winner = g.left
-                    g.finished = True
-                elif g.right and not g.left:
-                    g.winner = g.right
-                    g.finished = True
-                elif not g.left and not g.right:
-                    g.finished = True
-            if g.finished:
-                apply_group(g, SESSION.folder, SESSION.dry_run, SESSION.mode, SESSION)
-                SESSION.current_group += 1
-                save_state(SESSION)
-                continue
-            save_state(SESSION)
-        break
+    validate_current_pair(
+        SESSION,
+        _decode_ok,
+        _record_skipped,
+        apply_group,
+        save_state,
+    )
 
 
 def _decode_ok(path: str) -> bool:

@@ -300,6 +300,65 @@ def skip_finished_groups(session) -> None:
         session.current_group += 1
 
 
+def validate_current_pair(
+    session,
+    decode_ok: Callable[[str], bool],
+    record_skipped: Callable[[str, list[tuple[str, str]]], None],
+    apply_group: Callable,
+    save_state: Callable,
+) -> None:
+    """派发前预检 left/right：解码失败的自动入 losers，从 pending 补一张。"""
+    if session is None:
+        return
+    while session.current_group < len(session.groups):
+        group = session.groups[session.current_group]
+        if group.finished:
+            session.current_group += 1
+            continue
+
+        changed = False
+        for side in ("left", "right"):
+            path = getattr(group, side)
+            if not path:
+                continue
+            if not decode_ok(path):
+                record_skipped(session.folder, [(path, "decode_error_at_dispatch")])
+                group.losers.append(path)
+                setattr(group, side, None)
+                changed = True
+
+        if changed:
+            if group.pending and group.left is None:
+                group.left = group.pending.pop(0)
+            if group.pending and group.right is None:
+                group.right = group.pending.pop(0)
+
+            if not group.pending:
+                if group.left and not group.right:
+                    group.winner = group.left
+                    group.finished = True
+                elif group.right and not group.left:
+                    group.winner = group.right
+                    group.finished = True
+                elif not group.left and not group.right:
+                    group.finished = True
+
+            if group.finished:
+                apply_group(
+                    group,
+                    session.folder,
+                    session.dry_run,
+                    session.mode,
+                    session,
+                )
+                session.current_group += 1
+                save_state(session)
+                continue
+
+            save_state(session)
+        break
+
+
 def current_group_payload(
     session,
     skip_finished: Callable[[], None],
