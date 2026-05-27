@@ -63,9 +63,12 @@ from server.services.selection_service import (
     advance,
     choose_group_payload,
     current_group_payload,
+    group_best_path,
+    group_earliest_dt,
     kick_side,
     kick_group_payload,
     reopen_group_payload,
+    serialize_group,
     skip_group_payload,
     undo_group_payload,
 )
@@ -1576,95 +1579,8 @@ def _security_check():
     return jsonify({"error": "POST 需要浏览器 Origin 或 X-Token"}), 403
 
 
-def _serialize_image_meta(path: Optional[str]) -> Optional[dict]:
-    if not path or SESSION is None:
-        return None
-    return SESSION.meta.get(path)
-
-
-def _members_for(group: GroupState) -> list[dict]:
-    """组内每张图的状态。"""
-    out = []
-    loser_set = set(group.losers)
-    extra_set = set(group.extra_winners)
-    pending_set = set(group.pending)
-    for p in group.images:
-        if p == group.left:
-            status = "current-left"
-        elif p == group.right:
-            status = "current-right"
-        elif p in loser_set:
-            status = "loser"
-        elif p in extra_set:
-            status = "winner"
-        elif p in pending_set:
-            status = "pending"
-        elif p == group.winner and group.finished:
-            status = "winner"
-        else:
-            status = "pending"
-        out.append({"path": p, "name": Path(p).name, "status": status})
-    return out
-
-
-def _group_best_path(g: GroupState) -> Optional[str]:
-    """组内质量分最高的路径——做"AI 候选"视觉提示用。"""
-    if SESSION is None or not g.images:
-        return None
-    best_path: Optional[str] = None
-    best_score = -1.0
-    for p in g.images:
-        m = SESSION.meta.get(p) or {}
-        s = m.get("quality_score")
-        if s is None:
-            continue
-        try:
-            s = float(s)
-        except (TypeError, ValueError):
-            continue
-        if s > best_score:
-            best_score = s
-            best_path = p
-    return best_path
-
-
-def _group_earliest_dt(g: GroupState) -> Optional[str]:
-    if SESSION is None or not g.images:
-        return None
-    dts = []
-    for p in g.images:
-        dt = (SESSION.meta.get(p) or {}).get("datetime")
-        if dt:
-            dts.append(dt)
-    return min(dts) if dts else None
-
-
 def _serialize_group(g: GroupState, idx: int) -> dict:
-    decided = len(g.losers) + len(g.extra_winners)
-    can_undo = bool(SESSION and SESSION.undo_stack
-                    and SESSION.undo_stack[-1]["group_index"] == idx)
-    return {
-        "best_path": _group_best_path(g),
-        "earliest_dt": _group_earliest_dt(g),
-        "index": idx,
-        "id": g.id,
-        "id_short": g.id[:6] if g.id else "",
-        "total_images": len(g.images),
-        "decided": decided,
-        "remaining_in_group": (1 if g.left else 0) + (1 if g.right else 0) + len(g.pending),
-        "left": g.left,
-        "right": g.right,
-        "left_meta": _serialize_image_meta(g.left),
-        "right_meta": _serialize_image_meta(g.right),
-        "members": _members_for(g),
-        "next_preload": g.pending[0] if g.pending else None,
-        "pending_count": len(g.pending),
-        "loser_count": len(g.losers),
-        "winner": g.winner,
-        "finished": g.finished,
-        "applied": g.applied,
-        "can_undo": can_undo,
-    }
+    return serialize_group(SESSION, g, idx)
 
 
 def _job_event(name: str, path: str, info, reason) -> None:
@@ -2334,9 +2250,9 @@ def _run_grouping_async(accepted_infos, old_session_snapshot):
             SESSION = new_session
 
         multi_groups = [g for g in new_session.groups if len(g.images) > 1]
-        multi_groups.sort(key=lambda g: _group_earliest_dt(g) or "9999")
+        multi_groups.sort(key=lambda g: group_earliest_dt(new_session, g) or "9999")
         for g in multi_groups[:24]:
-            best = _group_best_path(g)
+            best = group_best_path(new_session, g)
             ordered = list(g.images)
             if best and best in ordered:
                 ordered.remove(best)

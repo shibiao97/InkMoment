@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Callable
 
 
@@ -87,6 +88,101 @@ def kick_side(group, side: str) -> bool:
             group.winner = None
             group.finished = True
     return True
+
+
+def serialize_image_meta(session, path: str | None) -> dict | None:
+    if not path or session is None:
+        return None
+    return session.meta.get(path)
+
+
+def members_for_group(group) -> list[dict]:
+    """组内每张图的状态。"""
+    out = []
+    loser_set = set(group.losers)
+    extra_set = set(group.extra_winners)
+    pending_set = set(group.pending)
+    for path in group.images:
+        if path == group.left:
+            status = "current-left"
+        elif path == group.right:
+            status = "current-right"
+        elif path in loser_set:
+            status = "loser"
+        elif path in extra_set:
+            status = "winner"
+        elif path in pending_set:
+            status = "pending"
+        elif path == group.winner and group.finished:
+            status = "winner"
+        else:
+            status = "pending"
+        out.append({"path": path, "name": Path(path).name, "status": status})
+    return out
+
+
+def group_best_path(session, group) -> str | None:
+    """组内质量分最高的路径——做"AI 候选"视觉提示用。"""
+    if session is None or not group.images:
+        return None
+    best_path = None
+    best_score = -1.0
+    for path in group.images:
+        meta = session.meta.get(path) or {}
+        score = meta.get("quality_score")
+        if score is None:
+            continue
+        try:
+            score = float(score)
+        except (TypeError, ValueError):
+            continue
+        if score > best_score:
+            best_score = score
+            best_path = path
+    return best_path
+
+
+def group_earliest_dt(session, group) -> str | None:
+    if session is None or not group.images:
+        return None
+    datetimes = []
+    for path in group.images:
+        taken_at = (session.meta.get(path) or {}).get("datetime")
+        if taken_at:
+            datetimes.append(taken_at)
+    return min(datetimes) if datetimes else None
+
+
+def serialize_group(session, group, index: int) -> dict:
+    decided = len(group.losers) + len(group.extra_winners)
+    can_undo = bool(session and session.undo_stack
+                    and session.undo_stack[-1]["group_index"] == index)
+    return {
+        "best_path": group_best_path(session, group),
+        "earliest_dt": group_earliest_dt(session, group),
+        "index": index,
+        "id": group.id,
+        "id_short": group.id[:6] if group.id else "",
+        "total_images": len(group.images),
+        "decided": decided,
+        "remaining_in_group": (
+            (1 if group.left else 0) +
+            (1 if group.right else 0) +
+            len(group.pending)
+        ),
+        "left": group.left,
+        "right": group.right,
+        "left_meta": serialize_image_meta(session, group.left),
+        "right_meta": serialize_image_meta(session, group.right),
+        "members": members_for_group(group),
+        "next_preload": group.pending[0] if group.pending else None,
+        "pending_count": len(group.pending),
+        "loser_count": len(group.losers),
+        "winner": group.winner,
+        "finished": group.finished,
+        "applied": group.applied,
+        "can_undo": can_undo,
+    }
 
 
 def current_group_payload(

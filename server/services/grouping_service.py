@@ -1,6 +1,8 @@
 from datetime import datetime
 from typing import Callable
 
+from server.services.selection_service import group_best_path, group_earliest_dt
+
 
 def serialize_grouping_progress(grouping: dict, since: int = 0) -> dict:
     return {
@@ -80,10 +82,10 @@ def serialize_preview_groups(session) -> dict:
         return {"groups": []}
 
     multi_groups = [group for group in session.groups if len(group.images) > 1]
-    multi_groups.sort(key=lambda group: _group_earliest_dt(session, group) or "9999")
+    multi_groups.sort(key=lambda group: group_earliest_dt(session, group) or "9999")
     out = []
     for group in multi_groups[:24]:
-        best = _group_best_path(session, group)
+        best = group_best_path(session, group)
         ordered = list(group.images)
         if best and best in ordered:
             ordered.remove(best)
@@ -93,7 +95,7 @@ def serialize_preview_groups(session) -> dict:
             "size": len(group.images),
             "samples": ordered[:4],
             "best_path": best,
-            "earliest_dt": _group_earliest_dt(session, group),
+            "earliest_dt": group_earliest_dt(session, group),
             "span_seconds": _group_span_seconds(session, group),
         })
     return {
@@ -101,38 +103,6 @@ def serialize_preview_groups(session) -> dict:
         "total": len(session.groups),
         "multi": sum(1 for group in session.groups if len(group.images) > 1),
     }
-
-
-def _group_best_path(session, group) -> str | None:
-    if session is None or not group.images:
-        return None
-    best_path = None
-    best_score = -1.0
-    for path in group.images:
-        meta = session.meta.get(path) or {}
-        score = meta.get("quality_score")
-        if score is None:
-            continue
-        try:
-            score = float(score)
-        except (TypeError, ValueError):
-            continue
-        if score > best_score:
-            best_score = score
-            best_path = path
-    return best_path
-
-
-def _group_earliest_dt(session, group) -> str | None:
-    if session is None or not group.images:
-        return None
-    datetimes = []
-    for path in group.images:
-        taken_at = (session.meta.get(path) or {}).get("datetime")
-        if taken_at:
-            datetimes.append(taken_at)
-    return min(datetimes) if datetimes else None
-
 
 def _group_span_seconds(session, group) -> float | None:
     datetimes = sorted([

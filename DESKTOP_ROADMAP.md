@@ -110,13 +110,13 @@ server/
 - 已迁移会话状态路由 `server.routes.session`，覆盖 `/api/status` 与 `/api/reset_session`。
 - 已迁移会话状态汇总和回首页重置逻辑到 `server.services.session_service`；`SESSION` 和 `LAST_INFOS` 仍由 `app.py` 持有并通过回调注入。
 - 已迁移分组路由 `server.routes.grouping`，覆盖 `/api/grouping_progress`、`/api/regroup`、`/api/preview_groups` 与 `/api/confirm_prescreen`。
-- 已迁移分组进度响应、重新分组和预览组序列化到 `server.services.grouping_service`；`/api/confirm_prescreen` 的异步线程启动逻辑暂留 `app.py` 并通过回调注入。
+- 已迁移分组进度响应、重新分组和预览组序列化到 `server.services.grouping_service`，预览组复用 `server.services.selection_service` 的质量候选/时间排序 helper；`/api/confirm_prescreen` 的异步线程启动逻辑暂留 `app.py` 并通过回调注入。
 - 已迁移结果路由 `server.routes.results`，覆盖 `/api/winners`、`/api/auto_rejected` 与 `/api/restore_rejected`。
 - 已迁移胜出照片列表、自动放手照片列表序列化和 `/api/restore_rejected` 的文件搬运/状态回写逻辑到 `server.services.result_service`；`SESSION`、锁、目录工厂和状态保存仍由 `app.py` 回调注入。
 - 已迁移图片读取路由 `server.routes.image`，覆盖 `/api/image` 与 `/api/image_original`。
 - 已迁移缩略图/原图响应、RAW 内嵌预览读取、占位图响应、路径安全校验和图片缓存头到 `server.services.image_service`。
 - 已迁移选片路由 `server.routes.selection`，覆盖 `/api/group`、`/api/choose`、`/api/kick`、`/api/undo`、`/api/skip_group` 与 `/api/reopen_group`。
-- 已迁移当前选片组读取入口、擂台状态推进 helper、`/api/choose` 擂台选择推进、`/api/kick` 单侧淘汰、`/api/skip_group` 状态变更、`/api/undo` 快照恢复和 `/api/reopen_group` 跨组反悔编排到 `server.services.selection_service`；组序列化、坏图预检和底层文件还原 helper 暂留 `app.py` 并通过回调注入。
+- 已迁移当前选片组读取入口、组响应序列化、擂台状态推进 helper、`/api/choose` 擂台选择推进、`/api/kick` 单侧淘汰、`/api/skip_group` 状态变更、`/api/undo` 快照恢复和 `/api/reopen_group` 跨组反悔编排到 `server.services.selection_service`；坏图预检和底层文件还原 helper 暂留 `app.py` 并通过回调注入。
 - 已迁移水印路由 `server.routes.watermark`，覆盖 `/api/watermark/templates`、`/api/watermark/preview`、`/api/watermark/start`、`/api/watermark/status`、`/api/watermark/cancel` 与 `/api/watermark/open_out_dir`。
 - 已迁移水印预览、批量导出、状态查询、取消和打开输出目录的 payload/state 编排到 `server.services.watermark_service`；`app.py` 仅持有 `WATERMARK_JOB` 并注入当前 `SESSION`、输出目录和 logger。
 - `app.py` 直接路由已收敛到 `/`；仍保留全局状态、后台任务线程和部分业务 helper，后续重点是继续下沉选片/结果恢复等状态机。
