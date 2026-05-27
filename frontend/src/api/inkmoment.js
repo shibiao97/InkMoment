@@ -102,6 +102,40 @@ export function openFolder(payload = {}) {
   });
 }
 
+export function getWatermarkTemplates() {
+  return fetchJSON("/api/watermark/templates");
+}
+
+export function previewWatermark(payload) {
+  return fetchJSON("/api/watermark/preview", {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export function startWatermark(payload) {
+  return fetchJSON("/api/watermark/start", {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export function getWatermarkStatus() {
+  return fetchJSON("/api/watermark/status");
+}
+
+export function cancelWatermark() {
+  return fetchJSON("/api/watermark/cancel", {
+    method: "POST",
+  });
+}
+
+export function openWatermarkOutputFolder() {
+  return fetchJSON("/api/watermark/open_out_dir", {
+    method: "POST",
+  });
+}
+
 export function getArkKeyStatus() {
   return fetchJSON("/api/ark_key");
 }

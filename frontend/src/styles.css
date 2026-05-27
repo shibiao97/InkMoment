@@ -1535,6 +1535,197 @@ input:disabled {
   border-radius: 14px;
 }
 
+.watermark-panel-vue {
+  display: grid;
+  gap: 16px;
+  margin-bottom: 18px;
+  padding: 18px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid #dbe6d4;
+  border-radius: 14px;
+  box-shadow: 0 12px 28px rgba(31, 41, 34, 0.05);
+}
+
+.watermark-panel-vue.disabled {
+  opacity: 0.72;
+}
+
+.watermark-head-vue {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.watermark-head-vue h2 {
+  margin: 4px 0 0;
+  color: #1f2922;
+  font-size: 20px;
+}
+
+.watermark-actions-vue {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.watermark-hint-vue {
+  margin: 0;
+  color: #607063;
+}
+
+.watermark-body-vue {
+  display: grid;
+  grid-template-columns: 330px minmax(0, 1fr);
+  gap: 16px;
+  min-height: 420px;
+}
+
+.watermark-options-vue {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+}
+
+.watermark-template-grid-vue {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.watermark-template-vue {
+  display: grid;
+  gap: 5px;
+  min-height: 86px;
+  padding: 10px;
+  color: #607063;
+  text-align: left;
+  background: rgba(251, 252, 244, 0.88);
+  border: 1px solid #dbe6d4;
+  border-radius: 10px;
+}
+
+.watermark-template-vue.active {
+  color: #1f2922;
+  background: color-mix(in srgb, var(--accent) 14%, #ffffff);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.watermark-template-vue strong {
+  font-size: 13px;
+}
+
+.watermark-template-vue span {
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.watermark-exif-vue {
+  padding: 12px;
+  background: rgba(251, 252, 244, 0.72);
+  border: 1px dashed #dbe6d4;
+  border-radius: 12px;
+}
+
+.watermark-exif-vue > span {
+  color: #607063;
+  font-size: 12px;
+}
+
+.watermark-exif-vue dl {
+  display: grid;
+  grid-template-columns: 62px minmax(0, 1fr);
+  gap: 8px 10px;
+  margin: 12px 0 0;
+}
+
+.watermark-exif-vue dt,
+.watermark-exif-vue dd {
+  margin: 0;
+  font-size: 12px;
+}
+
+.watermark-exif-vue dt {
+  color: #607063;
+}
+
+.watermark-exif-vue dd {
+  min-width: 0;
+  overflow: hidden;
+  color: #303b33;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.watermark-exif-vue dd.empty {
+  color: #97a493;
+}
+
+.watermark-preview-vue {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  min-width: 0;
+}
+
+.watermark-preview-head-vue {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: #607063;
+  font-size: 12px;
+}
+
+.watermark-preview-head-vue strong {
+  min-width: 0;
+  overflow: hidden;
+  color: #303b33;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.watermark-preview-frame-vue {
+  display: grid;
+  place-items: center;
+  min-height: 0;
+  overflow: hidden;
+  background: #edf3e1;
+  border: 1px solid #dbe6d4;
+  border-radius: 12px;
+}
+
+.watermark-preview-frame-vue img {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.watermark-preview-frame-vue span {
+  color: #607063;
+}
+
+.watermark-progress-vue {
+  display: grid;
+  gap: 8px;
+}
+
+.watermark-progress-vue .progress-bar {
+  margin: 0;
+}
+
+.watermark-progress-vue p {
+  margin: 0;
+  color: #607063;
+  font-size: 12px;
+}
+
+.watermark-progress-vue .watermark-error-vue {
+  color: #8e4e4b;
+}
+
 .done-empty {
   padding: 28px 0;
   color: #607063;
@@ -1672,6 +1863,8 @@ input:disabled {
   .done-stats-grid,
   .done-grid,
   .done-paths-vue div,
+  .watermark-body-vue,
+  .watermark-template-grid-vue,
   .done-skipped li {
     grid-template-columns: 1fr;
   }
@@ -1681,6 +1874,8 @@ input:disabled {
   .preview-actions,
   .arena-actions,
   .done-actions,
+  .watermark-head-vue,
+  .watermark-actions-vue,
   .unfinished-notice-vue {
     justify-content: flex-start;
     flex-wrap: wrap;
