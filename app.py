@@ -43,6 +43,7 @@ from server.routes.image import create_image_blueprint
 from server.routes.job import create_job_blueprint
 from server.routes.llm import llm_bp
 from server.routes.results import create_results_blueprint
+from server.routes.selection import create_selection_blueprint
 from server.routes.session import create_session_blueprint
 from server.routes.system import system_bp
 from server.services.llm_service import load_llm_config_from_file
@@ -2283,8 +2284,7 @@ def _decode_ok(path: str) -> bool:
         return False
 
 
-@app.route("/api/group")
-def api_group():
+def _current_group_response():
     if SESSION is None:
         return jsonify({"error": "no session"}), 400
     with LOCK:
@@ -2294,6 +2294,15 @@ def api_group():
             return jsonify({"done": True})
         g = SESSION.groups[SESSION.current_group]
         return jsonify({"done": False, "group": _serialize_group(g, SESSION.current_group)})
+
+
+app.register_blueprint(create_selection_blueprint(
+    lambda: SESSION,
+    LOCK,
+    _skip_finished_locked,
+    _validate_current_pair_locked,
+    _serialize_group,
+))
 
 
 def _push_undo_locked() -> None:
@@ -2389,7 +2398,7 @@ def api_choose():
         advance(g, side)
         _record_preference(left_before, right_before, side)
         _finalize_group_locked()
-    return api_group()
+    return _current_group_response()
 
 
 @app.route("/api/kick", methods=["POST"])
@@ -2410,7 +2419,7 @@ def api_kick():
             SESSION.undo_stack.pop()
             return jsonify({"error": "no image on side"}), 400
         _finalize_group_locked()
-    return api_group()
+    return _current_group_response()
 
 
 @app.route("/api/undo", methods=["POST"])
@@ -2451,7 +2460,7 @@ def api_skip_group():
             SESSION.groups.append(g)
         SESSION.undo_stack = []
         save_state(SESSION)
-    return api_group()
+    return _current_group_response()
 
 
 @app.route("/api/reopen_group", methods=["POST"])
@@ -2479,7 +2488,7 @@ def api_reopen_group():
         if result["failed"]:
             for f in result["failed"]:
                 logger.warning(f"reopen 还原失败 {f['path']}: {f['reason']}")
-    payload = api_group().get_json()
+    payload = _current_group_response().get_json()
     payload["reopened"] = True
     payload["failed"] = result["failed"]
     return jsonify(payload)
