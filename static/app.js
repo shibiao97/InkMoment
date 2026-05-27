@@ -1,13 +1,16 @@
-/* 片刻 — 前端逻辑 v3.2 (照片墙) */
+/* 影刻 InkMoment — 前端逻辑 v3.2 (照片墙) */
 
 const $ = (id) => document.getElementById(id);
 const VIEWS = ["landing", "processing", "prescreen", "preview", "arena", "done"];
-const RECENT_KEY = "pic-arena.recent-folders";
-const TUTORIAL_KEY = "pic-arena.tutorial-seen";
-const CONFIRM_MOVE_KEY = "pic-arena.confirmed-move";
-const CONFIRM_REAL_KEY = "pic-arena.confirmed-real";
-const CONFIRM_TYCOON_UPLOAD_KEY = "pic-arena.confirmed-tycoon-upload";
+const RECENT_KEY = "inkmoment.recent-folders";
+const TUTORIAL_KEY = "inkmoment.tutorial-seen";
+const THEME_KEY = "inkmoment.theme";
+const CONFIRM_MOVE_KEY = "inkmoment.confirmed-move";
+const CONFIRM_REAL_KEY = "inkmoment.confirmed-real";
+const CONFIRM_TYCOON_UPLOAD_KEY = "inkmoment.confirmed-tycoon-upload";
 const VERDICT_HOLD_MS = 380;
+const THEMES = new Set(["notebook", "film", "cafe", "studio", "garden"]);
+const DEFAULT_THEME = "garden";
 
 let busy = false;
 let pollHandle = null;
@@ -27,11 +30,43 @@ const WALL_REPLACE_MS = 420;
 const WALL_QUEUE_CAP = 80;
 
 // =================================================================
+// 页面风格切换
+// =================================================================
+function savedTheme() {
+  try {
+    const value = localStorage.getItem(THEME_KEY);
+    return THEMES.has(value) ? value : DEFAULT_THEME;
+  } catch {
+    return DEFAULT_THEME;
+  }
+}
+
+function applyTheme(theme) {
+  const nextTheme = THEMES.has(theme) ? theme : DEFAULT_THEME;
+  document.body.dataset.theme = nextTheme;
+  const select = $("theme-select");
+  if (select && select.value !== nextTheme) select.value = nextTheme;
+  try {
+    localStorage.setItem(THEME_KEY, nextTheme);
+  } catch {}
+}
+
+function initThemePicker() {
+  const select = $("theme-select");
+  const theme = savedTheme();
+  applyTheme(theme);
+  if (!select) return;
+  select.addEventListener("change", () => applyTheme(select.value));
+}
+
+initThemePicker();
+
+// =================================================================
 // 二开品牌配置
 // =================================================================
 let appBranding = {
-  app_name: "片刻",
-  title_suffix: "决定性的那一张",
+  app_name: "影刻",
+  title_suffix: "InkMoment",
   tagline: "本地运行 · 不上传",
   hero_eyebrow: "在一摞照片里，留下那一刻",
   hero_title: "让 AI 替你过一遍，由你做最后的决定。",
@@ -127,9 +162,9 @@ function showView(name, push = true) {
   }
 }
 function updateTitle(view) {
-  const appName = appBranding.app_name || "片刻";
+  const appName = appBranding.app_name || "影刻";
   const map = {
-    landing: `${appName} — ${appBranding.title_suffix || "决定性的那一张"}`,
+    landing: `${appName} — ${appBranding.title_suffix || "InkMoment"}`,
     processing: `分析中… · ${appName}`,
     prescreen: `初筛复核 · ${appName}`,
     preview: `分组预览 · ${appName}`,
@@ -608,7 +643,7 @@ async function loadLlmModels(force = false) {
       select.appendChild(optgroup);
     }
     // 默认选中：优先 localStorage；否则 doubao-seed-2-0-lite-260428；再降级 mini 最新
-    const saved = localStorage.getItem("pic_selecter.llm_model");
+    const saved = localStorage.getItem("inkmoment.llm_model");
     const preferred = "doubao-seed-2-0-mini-260428";
     const allOptions = [...select.options];
     if (saved && allOptions.some(o => o.value === saved)) {
@@ -641,7 +676,7 @@ async function loadLlmModels(force = false) {
 const llmSelect = $("llm-model-select");
 if (llmSelect) {
   llmSelect.addEventListener("change", () => {
-    if (llmSelect.value) localStorage.setItem("pic_selecter.llm_model", llmSelect.value);
+    if (llmSelect.value) localStorage.setItem("inkmoment.llm_model", llmSelect.value);
   });
 }
 const llmRefreshBtn = $("llm-model-refresh");
@@ -2651,7 +2686,7 @@ $("btn-redo-folder").addEventListener("click", async () => {
         near_seconds: s.near_seconds,
         prescreen_enabled: s.prescreen_enabled,
         prescreen_strength: s.prescreen_strength,
-        llm_model: s.llm_model || localStorage.getItem("pic_selecter.llm_model") || "",
+        llm_model: s.llm_model || localStorage.getItem("inkmoment.llm_model") || "",
       }),
     });
     currentMode = s.mode || "copy";
