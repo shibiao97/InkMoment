@@ -30,9 +30,14 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-GITHUB_OWNER = "zhaoyue4810"
-GITHUB_REPO = "pianke"
-GITHUB_BRANCH = "main"
+REMOTE_UPDATE_OWNER = os.environ.get("PIANKE_UPDATE_OWNER", "").strip()
+REMOTE_UPDATE_REPO = os.environ.get("PIANKE_UPDATE_REPO", "").strip()
+REMOTE_UPDATE_BRANCH = os.environ.get("PIANKE_UPDATE_BRANCH", "main").strip() or "main"
+REMOTE_UPDATE_ENABLED = (
+    os.environ.get("PIANKE_ENABLE_REMOTE_UPDATE", "0") == "1"
+    and bool(REMOTE_UPDATE_OWNER)
+    and bool(REMOTE_UPDATE_REPO)
+)
 
 ROOT = Path(__file__).resolve().parent.parent
 VENV = ROOT / ".venv"
@@ -79,6 +84,12 @@ MODE_PACKAGES = {
         "timm>=0.9",
     ],
     "tycoon": [
+        # 后端土豪模式不仅调用 LLM，还复用 DINOv2 + InsightFace 做分组。
+        "torch>=2.2",
+        "torchvision>=0.17",
+        "transformers>=4.40",
+        "insightface>=0.7",
+        "onnxruntime>=1.16",
         "openai>=1.40",
     ],
 }
@@ -86,7 +97,35 @@ MODE_PACKAGES = {
 MODE_LABELS = {
     "fast": "极速模式（纯本地，约 200MB，下载 1-3 分钟）",
     "expert": "专家模式（深度学习，约 2-3GB，下载 5-15 分钟）",
-    "tycoon": "土豪模式（LLM 判图，约 5MB，需自备 API key）",
+    "tycoon": "土豪模式（DINOv2 + 人脸分组 + LLM 判图，约 1-2GB，需自备 API key）",
+}
+
+PACKAGE_MODULES = {
+    "Pillow>=10.0": "PIL",
+    "pillow-heif>=0.16": "pillow_heif",
+    "numpy>=1.26": "numpy",
+    "scipy>=1.11": "scipy",
+    "flask>=3.0": "flask",
+    "imagehash>=4.3": "imagehash",
+    "opencv-contrib-python>=4.9": "cv2",
+    "rawpy>=0.18": "rawpy",
+    "piexif>=1.1.3": "piexif",
+    "torch>=2.2": "torch",
+    "torchvision>=0.17": "torchvision",
+    "transformers>=4.40": "transformers",
+    "insightface>=0.7": "insightface",
+    "onnxruntime>=1.16": "onnxruntime",
+    "pyiqa>=0.1.10": "pyiqa",
+    "timm>=0.9": "timm",
+    "openai>=1.40": "openai",
+}
+
+HF_MODELS = {
+    "facebook/dinov2-small": [
+        "config.json",
+        "preprocessor_config.json",
+        "model.safetensors",
+    ],
 }
 
 
@@ -194,7 +233,7 @@ def http_get(url: str, timeout: float = 8.0) -> bytes:
 
 def remote_commit_sha() -> str | None:
     info("正在向 GitHub 询问最新版本号...")
-    url = f"https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/commits/{GITHUB_BRANCH}"
+    url = f"https://api.github.com/repos/{REMOTE_UPDATE_OWNER}/{REMOTE_UPDATE_REPO}/commits/{REMOTE_UPDATE_BRANCH}"
     try:
         data = json.loads(http_get(url).decode("utf-8"))
         return data.get("sha")
@@ -205,7 +244,7 @@ def remote_commit_sha() -> str | None:
 
 
 def download_tarball(sha: str, dest: Path) -> bool:
-    url = f"https://codeload.github.com/{GITHUB_OWNER}/{GITHUB_REPO}/tar.gz/{sha}"
+    url = f"https://codeload.github.com/{REMOTE_UPDATE_OWNER}/{REMOTE_UPDATE_REPO}/tar.gz/{sha}"
     try:
         info("下载新版本...")
         data = http_get(url, timeout=60.0)
@@ -271,6 +310,9 @@ def apply_update(tar_path: Path) -> bool:
 
 
 def check_and_apply_update(install: dict) -> None:
+    if not REMOTE_UPDATE_ENABLED:
+        info("远程自动更新未配置，跳过")
+        return
     local_sha = install.get("commit_sha")
     remote_sha = remote_commit_sha()
     if not remote_sha:
@@ -332,7 +374,7 @@ def ensure_venv() -> None:
 MODE_TIME_ESTIMATE = {
     "fast": "1-3 分钟",
     "expert": "5-15 分钟（取决于网速；torch/insightface 加起来 ~2GB）",
-    "tycoon": "约 30 秒",
+    "tycoon": "5-15 分钟（需要 torch/torchvision/transformers/insightface/openai）",
 }
 
 
@@ -408,8 +450,59 @@ def packages_for_modes(modes: list[str]) -> list[str]:
     return list(seen.keys())
 
 
+def _missing_packages(packages: list[str]) -> list[str]:
+    missing: list[str] = []
+    for pkg in packages:
+        module = PACKAGE_MODULES.get(pkg)
+        if module is None or not _check_import(module):
+            missing.append(pkg)
+    return missing
+
+
+def _opencv_conflicts() -> list[str]:
+    rc = subprocess.run(
+        [str(PY_IN_VENV), "-c",
+         "import importlib.metadata as m; "
+         "names={'opencv-python', 'opencv-python-headless'}; "
+         "found=[n for n in names if any(d.metadata['Name'].lower()==n for d in m.distributions())]; "
+         "print('|'.join(found))"],
+        capture_output=True,
+        text=True,
+    )
+    return [s for s in (rc.stdout or "").strip().split("|") if s]
+
+
+def collect_diagnostics(modes: list[str]) -> dict:
+    packages = packages_for_modes(modes)
+    modules = []
+    for pkg in packages:
+        module = PACKAGE_MODULES.get(pkg)
+        if module and module not in modules:
+            modules.append(module)
+    module_status = {module: _check_import(module) for module in modules}
+    model_status = {}
+    if {"expert", "tycoon"} & set(modes):
+        model_status = {
+            model_id: _model_cache_status(model_id, files)
+            for model_id, files in HF_MODELS.items()
+        }
+    return {
+        "checked_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+        "modes": modes,
+        "python": str(PY_IN_VENV),
+        "modules": module_status,
+        "models": model_status,
+        "opencv_conflicts": _opencv_conflicts(),
+    }
+
+
+def save_diagnostics(install: dict, modes: list[str]) -> None:
+    install["diagnostics"] = collect_diagnostics(modes)
+    save_install(install)
+
+
 def ensure_dependencies(modes: list[str], install: dict, force: bool) -> None:
-    """按模式列表安装依赖。已装过且模式未变则跳过。"""
+    """按模式列表安装依赖。已存在的模块不重复交给 pip/uv。"""
     packages = packages_for_modes(modes)
     sig = "|".join(sorted(packages))
     last_sig = install.get("packages_sig")
@@ -417,21 +510,133 @@ def ensure_dependencies(modes: list[str], install: dict, force: bool) -> None:
         info("依赖已是最新，跳过安装")
         return
 
+    missing = packages if force else _missing_packages(packages)
+    if not missing:
+        info("依赖模块已存在，跳过安装")
+        install["packages_sig"] = sig
+        install["modes"] = modes
+        save_install(install)
+        _ensure_opencv_single()
+        return
+
     est = "、".join(f"{m}（{MODE_TIME_ESTIMATE[m]}）" for m in modes)
-    info(f"准备安装 {len(packages)} 个 pip 包，预计耗时：{est}")
-    pip_install(packages)
+    info(f"检测到缺失依赖 {len(missing)} 个，预计耗时：{est}")
+    info("缺失包：" + ", ".join(missing))
+    pip_install(missing)
     install["packages_sig"] = sig
     install["modes"] = modes
     save_install(install)
     info("依赖安装完成 ✓")
 
 
+def _check_import(module: str, timeout: float = 20.0) -> bool:
+    try:
+        rc = subprocess.run(
+            [str(PY_IN_VENV), "-c", f"import {module}"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=timeout,
+        )
+        return rc.returncode == 0
+    except Exception:
+        return False
+
+
+def _model_cache_status(model_id: str, files: list[str]) -> dict:
+    if not _check_import("huggingface_hub"):
+        return {"model": model_id, "cached": False, "missing": files, "error": "missing huggingface_hub"}
+    code = (
+        "from huggingface_hub import try_to_load_from_cache\n"
+        f"model={model_id!r}\n"
+        f"files={files!r}\n"
+        "missing=[]\n"
+        "for f in files:\n"
+        "    p=try_to_load_from_cache(model, f)\n"
+        "    if not isinstance(p, str): missing.append(f)\n"
+        "print('|'.join(missing))\n"
+    )
+    try:
+        rc = subprocess.run(
+            [str(PY_IN_VENV), "-c", code],
+            capture_output=True,
+            text=True,
+            timeout=20.0,
+        )
+    except Exception as e:
+        return {"model": model_id, "cached": False, "missing": files, "error": f"{type(e).__name__}: {e}"}
+    if rc.returncode != 0:
+        return {"model": model_id, "cached": False, "missing": files, "error": (rc.stderr or "").strip()}
+    missing = [s for s in (rc.stdout or "").strip().split("|") if s]
+    return {"model": model_id, "cached": not missing, "missing": missing, "error": None}
+
+
+def ensure_models_cached(modes: list[str]) -> None:
+    if not ({"expert", "tycoon"} & set(modes)):
+        return
+    missing_models = []
+    for model_id, files in HF_MODELS.items():
+        status = _model_cache_status(model_id, files)
+        if status["cached"]:
+            info(f"模型缓存已存在：{model_id}")
+        else:
+            missing_models.append(model_id)
+            warn(f"模型缓存缺失：{model_id}（缺少 {', '.join(status['missing'])}）")
+    if not missing_models:
+        return
+
+    script = ROOT / "scripts" / "download_models.py"
+    if not script.exists():
+        warn(f"未找到模型预下载脚本：{script}")
+        return
+    info("准备预下载专家/土豪模式所需模型；只会下载缺失模型，已缓存的不会重复下载。")
+    cmd = [str(PY_IN_VENV), str(script)]
+    for model_id in missing_models:
+        cmd += ["--model", model_id]
+    try:
+        subprocess.check_call(cmd, cwd=str(ROOT))
+    except subprocess.CalledProcessError as e:
+        warn(f"模型预下载失败（退出码 {e.returncode}）。稍后运行时仍会尝试自动下载。")
+
+
+def diagnose_runtime(modes: list[str]) -> None:
+    """启动前做轻量导入检查，避免用户等到 app.py 才看到缺依赖。"""
+    modules = ["flask", "PIL", "cv2", "numpy"]
+    if "expert" in modes:
+        modules += ["torch", "transformers", "insightface", "onnxruntime", "pyiqa", "timm"]
+    if "tycoon" in modes:
+        modules += ["torch", "torchvision", "transformers", "insightface", "onnxruntime", "openai"]
+
+    seen: list[str] = []
+    for m in modules:
+        if m not in seen:
+            seen.append(m)
+
+    info("检查关键 Python 模块是否可导入...")
+    missing = [m for m in seen if not _check_import(m)]
+    if missing:
+        warn(f"以下模块仍不可用：{', '.join(missing)}")
+        warn("建议删除 .pic_selecter_install.json 后重新运行启动器，或手动在 .venv 中安装缺失依赖。")
+    else:
+        info("关键模块检查通过 ✓")
+    if {"expert", "tycoon"} & set(modes):
+        for model_id, files in HF_MODELS.items():
+            status = _model_cache_status(model_id, files)
+            if status["cached"]:
+                info(f"模型缓存检查通过：{model_id}")
+            else:
+                warn(f"模型缓存仍缺失：{model_id}（缺少 {', '.join(status['missing'])}）")
+    conflicts = _opencv_conflicts()
+    if conflicts:
+        warn(f"OpenCV 冲突包仍存在：{', '.join(conflicts)}")
+
+
 # ---------- 启动 app ----------
 
 def run_app(port: int) -> int:
     info(f"启动 Flask 服务于 http://localhost:{port}")
-    if "expert" in (load_install().get("modes") or []):
-        info("专家模式首次启动会加载 DINOv2/NIMA/InsightFace 模型（约 10-30 秒）...")
+    modes = load_install().get("modes") or []
+    if "expert" in modes or "tycoon" in modes:
+        info("首次使用专家/土豪模式会加载或下载 DINOv2/InsightFace 等本地模型，终端有输出即为正常。")
         if USE_MIRROR:
             info(f"使用 HuggingFace 镜像 {HF_MIRROR}（如已下载过模型则跳过）")
     print()
@@ -456,7 +661,7 @@ def run_app(port: int) -> int:
 def main() -> int:
     banner("片刻 · 启动器")
     print()
-    print("  本启动器会自动：检查更新 → 选模式 → 装依赖 → 起服务 → 开浏览器")
+    print("  本启动器会自动：检查远程更新配置 → 选模式 → 装依赖 → 起服务 → 开浏览器")
     if USE_MIRROR:
         print("  当前已开启国内镜像加速（清华 PyPI + hf-mirror.com）")
         print("  海外网络环境请关闭：export PIANKE_NO_MIRROR=1 后重启")
@@ -483,6 +688,9 @@ def main() -> int:
     step(3, 4, "准备 Python 虚拟环境与依赖")
     ensure_venv()
     ensure_dependencies(modes, install, force=False)
+    ensure_models_cached(modes)
+    diagnose_runtime(modes)
+    save_diagnostics(install, modes)
 
     # 步骤 4：启动
     step(4, 4, "启动应用")

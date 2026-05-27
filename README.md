@@ -33,7 +33,7 @@
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **极速 (Fast)** | 纯本地、极速、适合低配设备 | 本地轻量通用算法 | 本地图像比对 (感知哈希等) | 约 200MB 依赖 | **完全不需要** |
 | **专家 (Expert)** | 本地 AI、识人更准 | 本地 AI 模型（人脸、技术美学质量） | 本地 AI 模型 (DINOv2) + 人脸识别 + EXIF 融合 | 约 2-3GB 依赖 / 首次需下载 600MB 模型 | 仅首次下载模型 |
-| **土豪 (Tycoon)** | 大模型视觉判定、人话解说 | 远程多模态大模型 (火山/GPT-4V/Qwen等) | 与专家模式相同 | 约 5MB 依赖 / 配置 API Key | 每张图调用 LLM 接口 |
+| **土豪 (Tycoon)** | 大模型视觉判定、人话解说 | 兼容 OpenAI 协议的远程多模态大模型 | 与专家模式相同 | 约 1-2GB 依赖 / 配置服务地址和 API Key | 每张图调用 LLM 接口 |
 
 > 💡 **选择建议**：
 > - **拍物/风景/低配电脑** ➔ 推荐 **极速 (Fast)** 模式，对多角度、静物及产品图有非常稳定的分组表现。
@@ -54,7 +54,7 @@
 
 适合未安装 Python 环境或不熟悉命令行的用户。
 
-1. [下载项目 ZIP 压缩包](https://github.com/zhaoyue4810/pianke/archive/refs/heads/main.zip) 并解压到本地。
+1. 获取项目 ZIP 压缩包并解压到本地。
 2. 双击运行对应的启动器脚本：
 
 | 系统 | 启动脚本 | 首次运行安全提示过白方式 |
@@ -177,13 +177,22 @@ python app.py --port 8080 --no-browser
 </details>
 
 <details>
-<summary><b>4. 土豪 (Tycoon) 模式如何配置 API Key？</b></summary>
-本模式支持兼容 OpenAI 协议的视觉大模型（如火山引擎豆包等）。
-启动前在系统环境变量中设置 <code>ARK_API_KEY=你的key</code>（或在网页端弹窗输入，Key 仅安全保存在本地 <code>~/.config/pic_selecter/ark_key</code>）。
+<summary><b>4. 土豪 (Tycoon) 模式如何配置模型服务地址和 API Key？</b></summary>
+本模式支持兼容 OpenAI 协议的视觉大模型服务。推荐直接在网页首页切到“土豪模式”，点击“设置 Key”，填写：
+<ul>
+  <li><b>模型服务地址</b>：默认使用 OpenAI 官方地址 <code>https://api.openai.com/v1</code>。如果只填根域名（例如 <code>https://api.openai.com</code>），后端会自动补成 <code>/v1</code>。</li>
+  <li><b>API Key</b>：只粘贴平台生成的 key 本体，不要带说明文字、空格、引号或状态符号。</li>
+</ul>
+配置会保存到本机 <code>~/.config/pic_selecter/</code>：Key 保存在 <code>ark_key</code>，模型服务地址保存在 <code>llm_config.json</code>。也可以通过环境变量覆盖：<code>ARK_BASE_URL</code> 和 <code>ARK_API_KEY</code>。
 </details>
 
 <details>
-<summary><b>5. 极速模式与专家模式在质量初筛上有什么区别？</b></summary>
+<summary><b>5. 如何修改应用名称和首页文案？</b></summary>
+项目根目录提供 <code>branding.json</code>，可配置应用名、浏览器标题后缀、首页标语和主标题文案。修改后重启服务即可生效。
+</details>
+
+<details>
+<summary><b>6. 极速模式与专家模式在质量初筛上有什么区别？</b></summary>
 两者的质量评估维度不同：
 <ul>
   <li><b>极速模式</b>：侧重检测“整张图片偏软/手抖/失焦”等全局性模糊。</li>
@@ -192,20 +201,21 @@ python app.py --port 8080 --no-browser
 </details>
 
 <details>
-<summary><b>6. 如何彻底卸载和清理缓存？</b></summary>
+<summary><b>7. 如何彻底卸载和清理缓存？</b></summary>
 <ul>
   <li><b>清理照片缓存</b>：直接删除对应照片目录下的 <code>winners/</code>、<code>losers/</code>、<code>.pic_selecter_state.json</code> 及 <code>_pic_selecter/</code> 文件夹（移动模式下请先移回照片）。</li>
   <li><b>完全卸载程序</b>：删除解压出的项目文件夹，并清理本地全局工具缓存：
     <ul>
       <li>macOS: <code>rm -rf ~/.local/bin/uv ~/.local/share/uv/</code></li>
       <li>Windows: 删除 <code>%USERPROFILE%\.local\bin\uv.exe</code> 和 <code>%USERPROFILE%\.local\share\uv\</code></li>
+      <li>模型服务配置: 删除 <code>~/.config/pic_selecter/</code></li>
     </ul>
   </li>
 </ul>
 </details>
 
 <details>
-<summary><b>7. HEIC 格式图片在网页上无法预览？</b></summary>
+<summary><b>8. HEIC 格式图片在网页上无法预览？</b></summary>
 Windows 系统可能需要安装微软官方的 HEIF 扩展才能正常在浏览器中预览该格式；片刻工具在后端能够正常分析处理该格式。
 </details>
 
@@ -217,12 +227,3 @@ Windows 系统可能需要安装微软官方的 HEIF 扩展才能正常在浏览
 2. Web 服务器仅绑定本地 `127.0.0.1` 环回地址，局域网及外网设备均无法访问。
 3. 接口提供严格的 Origin 和 Referer 校验，防止跨站请求伪造 (CSRF/DNS Rebinding)。如果需要对脚本访问开启 token 鉴权，可在运行前设置环境变量 `PIC_SELECTER_TOKEN=your_token`。
 4. ⚠️ **土豪模式例外**：该模式下，照片的缩略图会被发送至你配置的大模型服务商接口。如果对数据隐私有极高要求，请仅使用**极速**或**专家**模式。
-
----
-
-## 反馈与贡献
-
-欢迎通过 [GitHub Issues](https://github.com/zhaoyue4810/pianke/issues) 提交反馈或建议。
-
-# 个人微信
-15828377122

@@ -21,6 +21,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import threading
 from pathlib import Path
 from typing import List, Tuple
@@ -28,11 +29,20 @@ from typing import List, Tuple
 import numpy as np
 from PIL import Image
 
+# 默认走国内镜像下载 HuggingFace 模型（DINOv2 等）。
+# 经 launcher 启动时它已设过；直接运行 app.py 时这里兜底，否则会直连
+# huggingface.co 在国内常超时/被墙，报 "Can't load image processor"。
+# 海外网络可设 PIANKE_NO_MIRROR=1 关闭；setdefault 尊重已显式设置的 HF_ENDPOINT。
+if os.environ.get("PIANKE_NO_MIRROR", "0") != "1":
+    os.environ.setdefault("HF_ENDPOINT", "https://hf-mirror.com")
+
 logger = logging.getLogger("pic_selecter")
 
 _LOCK = threading.Lock()
 _models: dict = {}
 _DEVICE = None
+DINO_MODEL_ID = "facebook/dinov2-small"
+DINO_REQUIRED_FILES = ["config.json", "preprocessor_config.json", "model.safetensors"]
 
 
 class VisionUnavailable(RuntimeError):
@@ -62,6 +72,36 @@ def _cache_dir() -> Path:
     return d
 
 
+def hf_model_cache_status(model_id: str = DINO_MODEL_ID,
+                          files: list[str] | None = None) -> dict:
+    """返回 HuggingFace 模型关键文件缓存状态，不触发下载。"""
+    files = files or DINO_REQUIRED_FILES
+    try:
+        from huggingface_hub import try_to_load_from_cache
+    except ImportError as e:
+        return {
+            "model": model_id,
+            "cached": False,
+            "missing": files,
+            "error": f"huggingface_hub 未安装：{e}",
+        }
+    missing = []
+    paths = {}
+    for filename in files:
+        path = try_to_load_from_cache(model_id, filename)
+        if isinstance(path, str) and Path(path).exists():
+            paths[filename] = path
+        else:
+            missing.append(filename)
+    return {
+        "model": model_id,
+        "cached": not missing,
+        "missing": missing,
+        "paths": paths,
+        "error": None,
+    }
+
+
 # =============================================================
 # DINOv2-small：384 维语义特征（不变）
 # =============================================================
@@ -83,14 +123,25 @@ def _ensure_dinov2():
         # 优先用本地缓存（HF 在国内常 SSL EOF；缓存命中时绕开 HEAD 校验）
         try:
             processor = AutoImageProcessor.from_pretrained(
-                "facebook/dinov2-small", local_files_only=True
+                DINO_MODEL_ID, local_files_only=True
             )
             model = AutoModel.from_pretrained(
-                "facebook/dinov2-small", local_files_only=True
+                DINO_MODEL_ID, local_files_only=True
             ).to(_device()).eval()
         except Exception:
-            processor = AutoImageProcessor.from_pretrained("facebook/dinov2-small")
-            model = AutoModel.from_pretrained("facebook/dinov2-small").to(_device()).eval()
+            try:
+                processor = AutoImageProcessor.from_pretrained(DINO_MODEL_ID)
+                model = AutoModel.from_pretrained(DINO_MODEL_ID).to(_device()).eval()
+            except Exception as e:
+                endpoint = os.environ.get("HF_ENDPOINT", "https://huggingface.co")
+                cache = hf_model_cache_status()
+                missing = ", ".join(cache.get("missing") or DINO_REQUIRED_FILES)
+                raise VisionUnavailable(
+                    f"DINOv2 模型未就绪（缺少 {missing}）。"
+                    f"当前镜像源：{endpoint}。"
+                    "请保持启动器窗口打开让它预下载模型，或运行 "
+                    "`.venv/bin/python scripts/download_models.py --model facebook/dinov2-small` 后重试。"
+                ) from e
         _models["dinov2"] = (model, processor)
         logger.info("vision: DINOv2-small 就绪")
     return _models["dinov2"]
