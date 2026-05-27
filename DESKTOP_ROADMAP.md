@@ -102,6 +102,8 @@ server/
 - 已迁移会话状态汇总和回首页重置逻辑到 `server.services.session_service`；`SESSION` 和 `LAST_INFOS` 仍由 `app.py` 持有并通过回调注入。
 - 已迁移分组预览路由 `server.routes.grouping`，覆盖 `/api/grouping_progress`、`/api/regroup` 与 `/api/preview_groups`。
 - 已迁移分组进度响应、重新分组和预览组序列化到 `server.services.grouping_service`；`/api/confirm_prescreen` 的异步线程启动逻辑暂留 `app.py`。
+- 已迁移只读结果路由 `server.routes.results`，覆盖 `/api/winners` 与 `/api/auto_rejected`。
+- 已迁移胜出照片列表和自动放手照片列表序列化到 `server.services.result_service`；`/api/restore_rejected` 因涉及文件搬运与状态回写暂留 `app.py`。
 - `app.py` 仍保留大部分全局状态和业务路由，后续建议继续按 folder/job/image/selection/result 逐块拆分。
 
 ### Phase 4: Tauri 桌面壳

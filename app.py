@@ -43,6 +43,7 @@ from server.routes.folder import create_folder_blueprint
 from server.routes.grouping import create_grouping_blueprint
 from server.routes.job import create_job_blueprint
 from server.routes.llm import llm_bp
+from server.routes.results import create_results_blueprint
 from server.routes.session import create_session_blueprint
 from server.routes.system import system_bp
 from server.services.llm_service import load_llm_config_from_file
@@ -1557,6 +1558,11 @@ app.register_blueprint(create_grouping_blueprint(
     },
 ))
 app.register_blueprint(llm_bp)
+app.register_blueprint(create_results_blueprint(
+    lambda: SESSION,
+    winners_dir,
+    losers_dir,
+))
 app.register_blueprint(create_session_blueprint(
     lambda: SESSION,
     _clear_session_state,
@@ -2647,33 +2653,6 @@ def api_image_original():
 
 # ---------------- 其它接口 ----------------
 
-@app.route("/api/winners")
-def api_winners():
-    if SESSION is None:
-        return jsonify({"winners": []})
-    out = []
-    for i, g in enumerate(SESSION.groups):
-        winners_in_group = []
-        if g.winner:
-            winners_in_group.append(g.winner)
-        winners_in_group.extend(g.extra_winners)
-        for w in winners_in_group:
-            actual = w
-            if not Path(actual).exists():
-                candidate = winners_dir(SESSION.folder) / Path(actual).name
-                if candidate.exists():
-                    actual = str(candidate)
-            out.append({
-                "path": actual,
-                "name": Path(w).name,
-                "group_index": i,
-                "group_id": g.id,
-                "group_size": len(g.images),
-                "applied": g.applied,
-            })
-    return jsonify({"winners": out})
-
-
 def _actual_auto_rejected_path(group: GroupState, original: str, folder: str) -> str:
     if Path(original).exists():
         return original
@@ -2709,44 +2688,6 @@ def _find_prescreen_rejected(raw_path: str) -> Optional[str]:
         if raw_path == str(candidate):
             return original
     return None
-
-
-@app.route("/api/auto_rejected")
-def api_auto_rejected():
-    if SESSION is None:
-        return jsonify({"items": []})
-    items = []
-    if SESSION.prescreen_rejected:
-        for original in SESSION.prescreen_rejected:
-            candidate = losers_dir(SESSION.folder) / Path(original).name
-            actual = str(candidate) if candidate.exists() else original
-            items.append({
-                "path": actual,
-                "original_path": original,
-                "name": Path(original).name,
-                "group_index": -1,
-                "group_id": "__prescreen__",
-                "group_size": 1,
-                "reason": SESSION.prescreen_reject_reasons.get(original, "智能初筛"),
-                "restored": original in SESSION.prescreen_restored,
-                "datetime": (SESSION.meta.get(original) or {}).get("datetime"),
-            })
-        return jsonify({"items": items})
-    for i, group in enumerate(SESSION.groups):
-        for original in group.auto_rejected:
-            actual = _actual_auto_rejected_path(group, original, SESSION.folder)
-            items.append({
-                "path": actual,
-                "original_path": original,
-                "name": Path(original).name,
-                "group_index": i,
-                "group_id": group.id,
-                "group_size": len(group.images),
-                "reason": group.auto_reject_reasons.get(original, "智能初筛"),
-                "restored": original in group.manual_restored,
-                "datetime": (SESSION.meta.get(original) or {}).get("datetime"),
-            })
-    return jsonify({"items": items})
 
 
 @app.route("/api/restore_rejected", methods=["POST"])
