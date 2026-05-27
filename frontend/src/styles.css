@@ -26,8 +26,18 @@ body {
 }
 
 button,
+input,
 select {
   font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled,
+input:disabled {
+  cursor: not-allowed;
 }
 
 .app-shell {
@@ -35,6 +45,36 @@ select {
   min-height: 100vh;
   margin: 0 auto;
   padding: 28px 0 40px;
+}
+
+.status-badge {
+  position: fixed;
+  top: 18px;
+  right: 18px;
+  z-index: 10;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  color: #303b33;
+  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid #d1ddcc;
+  border-radius: 999px;
+  box-shadow: 0 10px 28px rgba(31, 41, 34, 0.08);
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 12px;
+}
+
+.status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: #78a881;
+}
+
+.status-badge.is-busy .status-dot {
+  background: var(--accent);
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
 .topbar {
@@ -45,6 +85,7 @@ select {
 }
 
 .brand,
+.top-actions,
 .theme-picker {
   display: inline-flex;
   align-items: center;
@@ -63,14 +104,20 @@ select {
 }
 
 .brand-name {
+  color: #1f2922;
   font-size: 22px;
   font-weight: 760;
   letter-spacing: 0.08em;
 }
 
-.theme-picker {
+.site-tag,
+.theme-picker,
+.field-label,
+.option-label {
   color: #607063;
-  font-size: 13px;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 12px;
+  letter-spacing: 0.04em;
 }
 
 .theme-picker select {
@@ -90,7 +137,7 @@ select {
 
 .hero {
   max-width: 720px;
-  padding: 110px 0 64px;
+  padding: 84px 0 36px;
 }
 
 .eyebrow {
@@ -118,38 +165,227 @@ select {
   line-height: 1.7;
 }
 
-.migration-board {
+.start-form {
+  max-width: 760px;
+}
+
+.engine-switch {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 14px;
+  gap: 10px;
+  margin-bottom: 24px;
 }
 
-.migration-board article {
-  min-height: 180px;
-  padding: 22px;
-  background: rgba(255, 255, 255, 0.76);
-  border: 1px solid #dbe6d4;
+.engine-opt {
+  min-height: 118px;
+  padding: 16px;
+  text-align: left;
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid #d1ddcc;
   border-radius: 12px;
-  box-shadow: 0 12px 30px rgba(31, 41, 34, 0.06);
+  box-shadow: 0 10px 26px rgba(31, 41, 34, 0.05);
 }
 
-.step {
-  color: var(--accent);
-  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  font-size: 13px;
+.engine-opt.is-active {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--accent) 18%, transparent), rgba(255,255,255,0.72)),
+    #ffffff;
+  border-color: var(--accent);
+}
+
+.engine-opt.is-disabled {
+  opacity: 0.54;
+}
+
+.engine-title,
+.engine-desc {
+  display: block;
+}
+
+.engine-title {
+  color: #303b33;
+  font-size: 15px;
   font-weight: 700;
 }
 
-.migration-board h2 {
-  margin: 18px 0 8px;
-  color: #303b33;
-  font-size: 18px;
+.engine-desc {
+  margin-top: 7px;
+  color: #607063;
+  font-size: 12.5px;
+  line-height: 1.5;
 }
 
-.migration-board p {
-  margin: 0;
+.field-label {
+  display: block;
+  margin-bottom: 10px;
+}
+
+.field-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 6px;
+  background: #ffffff;
+  border: 1px solid #d1ddcc;
+  border-radius: 12px;
+  box-shadow: 0 10px 26px rgba(31, 41, 34, 0.06);
+}
+
+.field-row:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+.field-row input {
+  min-width: 0;
+  flex: 1;
+  padding: 12px 10px;
+  color: #1f2922;
+  background: transparent;
+  border: 0;
+  outline: 0;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 14px;
+}
+
+.btn-primary {
+  flex-shrink: 0;
+  padding: 11px 22px;
+  color: #fbfcf4;
+  background: #1f2922;
+  border: 0;
+  border-radius: 10px;
+}
+
+.btn-primary:disabled {
+  background: #97a493;
+}
+
+.folder-snapshot {
+  margin: 12px 0 4px;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid #dbe6d4;
+  border-radius: 12px;
+}
+
+.snap-row {
+  display: grid;
+  grid-template-columns: auto 1px 1fr 1px 1fr;
+  gap: 16px;
+  align-items: center;
+}
+
+.snap-divider {
+  align-self: stretch;
+  width: 1px;
+  background: #dbe6d4;
+}
+
+.snap-num {
+  color: #1f2922;
+  font-size: 30px;
+  font-weight: 760;
+  line-height: 1;
+}
+
+.snap-cap,
+.snap-line-sub {
+  color: #97a493;
+  font-size: 12px;
+}
+
+.snap-line {
+  color: #303b33;
+  font-size: 13px;
+}
+
+.snap-samples {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.snap-samples img {
+  width: 76px;
+  height: 58px;
+  object-fit: cover;
+  border: 1px solid #dbe6d4;
+  border-radius: 8px;
+}
+
+.advanced {
+  margin-top: 22px;
+}
+
+.advanced summary {
   color: #607063;
-  line-height: 1.65;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.advanced-body {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.option-section {
+  display: grid;
+  gap: 9px;
+  padding: 14px;
+  background: rgba(255,255,255,0.62);
+  border: 1px dashed #dbe6d4;
+  border-radius: 12px;
+}
+
+.option-section.is-disabled {
+  opacity: 0.58;
+}
+
+.radio-row,
+.check-row,
+.sliders label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #303b33;
+  font-size: 14px;
+}
+
+.radio-row input,
+.check-row input {
+  accent-color: var(--accent);
+}
+
+.sliders label {
+  display: grid;
+  grid-template-columns: 160px 1fr 32px;
+}
+
+.sliders input {
+  accent-color: var(--accent);
+}
+
+.sliders output {
+  color: #607063;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  text-align: right;
+}
+
+.form-error,
+.start-note {
+  min-height: 20px;
+  margin: 12px 0 0;
+  font-size: 13px;
+}
+
+.form-error {
+  color: #c77d78;
+}
+
+.start-note {
+  color: #477453;
 }
 
 @media (max-width: 760px) {
@@ -158,16 +394,31 @@ select {
     padding-top: 20px;
   }
 
-  .topbar {
+  .topbar,
+  .top-actions {
     align-items: flex-start;
     flex-direction: column;
   }
 
   .hero {
-    padding: 72px 0 44px;
+    padding: 64px 0 32px;
   }
 
-  .migration-board {
+  .engine-switch,
+  .snap-row {
+    grid-template-columns: 1fr;
+  }
+
+  .snap-divider {
+    display: none;
+  }
+
+  .field-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .sliders label {
     grid-template-columns: 1fr;
   }
 }
