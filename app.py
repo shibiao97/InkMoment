@@ -9,8 +9,6 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
-import io
 import json
 import logging
 import os
@@ -26,8 +24,8 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Callable, Optional
 
-from flask import Flask, Response, abort, jsonify, request, send_file, send_from_directory
-from PIL import Image, ImageOps
+from flask import Flask, jsonify, request, send_from_directory
+from PIL import Image
 
 from inkmoment import grouper
 from inkmoment.grouper import (
@@ -41,6 +39,7 @@ from inkmoment.grouper import (
 )
 from server.routes.folder import create_folder_blueprint
 from server.routes.grouping import create_grouping_blueprint
+from server.routes.image import create_image_blueprint
 from server.routes.job import create_job_blueprint
 from server.routes.llm import llm_bp
 from server.routes.results import create_results_blueprint
@@ -68,17 +67,6 @@ DEV_ORIGINS = {
     for origin in os.environ.get("INKMOMENT_DEV_ORIGINS", "").split(",")
     if origin.strip()
 }
-
-# 静态占位图（解码失败时给前端）
-_BROKEN_PLACEHOLDER_SVG = """<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 480 360'>
-<rect width='100%' height='100%' fill='#efeadd'/>
-<g transform='translate(240 160)' fill='none' stroke='#cc785c' stroke-width='4' stroke-linecap='round'>
-<circle r='44'/><line x1='-22' y1='-22' x2='22' y2='22'/><line x1='22' y1='-22' x2='-22' y2='22'/>
-</g>
-<text x='50%' y='75%' text-anchor='middle' font-family='-apple-system, sans-serif'
-font-size='22' fill='#6b6256'>无法读取</text>
-</svg>""".encode("utf-8")
-
 
 # ---------------- 状态 ----------------
 
@@ -1475,48 +1463,6 @@ def reopen_group(group: GroupState, folder: str, mode: str,
     return {"failed": failed}
 
 
-# ---------------- 图片读取 / 缩略图缓存 ----------------
-
-def _safe_open_image(path: Path) -> Optional[Image.Image]:
-    """打开并返回 PIL Image（已 verify）。失败返回 None。
-
-    RAW 文件（grouper.RAW_EXTS）走 rawpy.extract_thumb() 提取内嵌 JPEG——
-    用户访问 /api/image?path=xxx.cr2 时仍能看到缩略图。
-    """
-    suffix = path.suffix.lower()
-    try:
-        from inkmoment.grouper import RAW_EXTS
-    except Exception:
-        RAW_EXTS = set()
-    if suffix in RAW_EXTS:
-        try:
-            import rawpy
-            with rawpy.imread(str(path)) as raw:
-                thumb = raw.extract_thumb()
-            if thumb.format == rawpy.ThumbFormat.JPEG:
-                img = Image.open(io.BytesIO(thumb.data))
-                img.load()
-                return img
-            if thumb.format == rawpy.ThumbFormat.BITMAP:
-                return Image.fromarray(thumb.data)
-        except Exception:
-            return None
-        return None
-    try:
-        with Image.open(path) as probe:
-            probe.verify()  # 只做语法验证
-        img = Image.open(path)
-        img.load()
-        return img
-    except Exception:
-        return None
-
-
-def _thumb_cache_key(rel: str, mtime: float, size: int, max_side: int) -> str:
-    s = f"{rel}|{int(mtime * 1000)}|{size}|{max_side}".encode("utf-8")
-    return hashlib.sha1(s).hexdigest()
-
-
 def _clear_session_state() -> None:
     global SESSION, LAST_INFOS
     with LOCK:
@@ -1556,6 +1502,9 @@ app.register_blueprint(create_grouping_blueprint(
         "threshold_far": THRESHOLD_FAR,
         "near_seconds": NEAR_SECONDS,
     },
+))
+app.register_blueprint(create_image_blueprint(
+    lambda: SESSION.folder if SESSION is not None else None,
 ))
 app.register_blueprint(llm_bp)
 app.register_blueprint(create_results_blueprint(
@@ -2534,121 +2483,6 @@ def api_reopen_group():
     payload["reopened"] = True
     payload["failed"] = result["failed"]
     return jsonify(payload)
-
-
-# ---------------- 图片接口 ----------------
-
-def _placeholder_response() -> Response:
-    resp = Response(_BROKEN_PLACEHOLDER_SVG, mimetype="image/svg+xml")
-    resp.headers["X-Image-Status"] = "failed"
-    resp.headers["Cache-Control"] = "no-store"
-    return resp
-
-
-def _validate_path_under_folder(raw: str) -> Optional[Path]:
-    if SESSION is None:
-        return None
-    p = Path(raw).resolve()
-    base = Path(SESSION.folder).resolve()
-    try:
-        p.relative_to(base)
-    except ValueError:
-        return None
-    if not p.exists():
-        return None
-    return p
-
-
-@app.route("/api/image")
-def api_image():
-    """每次都现解、不写盘缓存。SESSION 不存在时也允许（着陆页样图 / 处理页流缩略图）。"""
-    raw = request.args.get("path", "")
-    if not raw:
-        return _placeholder_response()
-    try:
-        max_side = int(request.args.get("w", THUMB_MAX))
-    except ValueError:
-        max_side = THUMB_MAX
-    max_side = max(64, min(max_side, THUMB_MAX))
-
-    p = Path(raw).resolve()
-    # 有 session 时校验路径必须在 folder 内（防止 session 期间被钓鱼路径打到任意文件）；
-    # 没 session 时只要文件存在即可（着陆页 peek 样图 / 处理页流缩略图）
-    if SESSION is not None:
-        try:
-            p.relative_to(Path(SESSION.folder).resolve())
-        except ValueError:
-            return _placeholder_response()
-    if not p.exists() or not p.is_file():
-        return _placeholder_response()
-
-    try:
-        # _safe_open_image 内部已经处理 RAW（走 rawpy.extract_thumb），
-        # 这里走它能拿到统一的 PIL Image，下面缩放/编码逻辑就跟普通图一样。
-        img = _safe_open_image(p)
-        if img is None:
-            return _placeholder_response()
-        try:
-            img = ImageOps.exif_transpose(img)
-            if max(img.size) > max_side:
-                img.thumbnail((max_side, max_side), Image.LANCZOS)
-            if img.mode in ("RGBA", "P"):
-                img = img.convert("RGB")
-            buf = io.BytesIO()
-            img.save(buf, "JPEG", quality=86)
-            data_bytes = buf.getvalue()
-            resp = Response(data_bytes, mimetype="image/jpeg")
-            resp.headers["Cache-Control"] = "no-store"
-            return resp
-        finally:
-            try:
-                img.close()
-            except Exception:
-                pass
-    except Exception as e:
-        logger.warning(f"图片解码失败 {p}: {e}")
-        return _placeholder_response()
-
-
-@app.route("/api/image_original")
-def api_image_original():
-    if SESSION is None:
-        abort(400)
-    raw = request.args.get("path", "")
-    if not raw:
-        abort(400)
-    p = _validate_path_under_folder(raw)
-    if p is None:
-        abort(404)
-    try:
-        from inkmoment.grouper import RAW_EXTS
-    except Exception:
-        RAW_EXTS = set()
-    # RAW 文件浏览器原生不支持渲染；提取内嵌全分辨率 JPEG 替代。
-    # 这样灯箱"查看原图"和放大缩放对 RAW 也能用。
-    if p.suffix.lower() in RAW_EXTS:
-        img = _safe_open_image(p)
-        if img is None:
-            abort(500)
-        try:
-            if img.mode in ("RGBA", "P"):
-                img = img.convert("RGB")
-            buf = io.BytesIO()
-            img.save(buf, "JPEG", quality=95)
-            return Response(buf.getvalue(), mimetype="image/jpeg",
-                            headers={"Cache-Control": "max-age=86400"})
-        finally:
-            try:
-                img.close()
-            except Exception:
-                pass
-    try:
-        st = p.stat()
-        etag = _thumb_cache_key(p.name, st.st_mtime, st.st_size, 0)
-        return send_file(p, max_age=86400, etag=etag, last_modified=st.st_mtime,
-                         conditional=True)
-    except Exception:
-        abort(500)
 
 
 # ---------------- 其它接口 ----------------
