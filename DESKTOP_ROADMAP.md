@@ -94,6 +94,8 @@ server/
 - 已迁移品牌配置读取到 `server.services.branding_service`，初筛能力探测到 `server.services.capability_service`。
 - 已迁移低风险文件夹路由 `server.routes.folder`，覆盖 `/api/browse_folder` 与 `/api/peek_folder`。
 - 已迁移原生文件夹选择和轻量目录快照到 `server.services.folder_service`；`/api/open_folder` 因依赖当前 `SESSION` 暂留 `app.py`。
+- 已迁移任务状态路由 `server.routes.job`，覆盖 `/api/job` 与 `/api/cancel_job`。
+- 已迁移任务状态序列化和取消逻辑到 `server.services.job_service`；`/api/start` 因依赖线程启动、`SESSION`、`LAST_INFOS` 和任务日志暂留 `app.py`。
 - `app.py` 仍保留大部分全局状态和业务路由，后续建议继续按 folder/job/image/selection/result 逐块拆分。
 
 ### Phase 4: Tauri 桌面壳

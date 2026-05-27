@@ -41,6 +41,7 @@ from inkmoment.grouper import (
     group_infos,
 )
 from server.routes.folder import folder_bp
+from server.routes.job import create_job_blueprint
 from server.routes.system import system_bp
 
 try:
@@ -1686,6 +1687,7 @@ def _thumb_cache_key(rel: str, mtime: float, size: int, max_side: int) -> str:
 
 app = Flask(__name__, static_folder="static", static_url_path="/static")
 app.register_blueprint(folder_bp)
+app.register_blueprint(create_job_blueprint(lambda: JOB, lambda: JOB_LOG))
 app.register_blueprint(system_bp)
 SESSION: Optional[SessionState] = None
 JOB: Optional[JobState] = None
@@ -2563,62 +2565,6 @@ def api_reset_session():
         SESSION = None
         LAST_INFOS = None
     return jsonify({"ok": True})
-
-
-@app.route("/api/cancel_job", methods=["POST"])
-def api_cancel_job():
-    """中止当前任务。幂等友好：JOB 不在（已结束/服务重启）也返回 ok，
-    因为"停止处理"的意图在那种情况下天然已满足。"""
-    if JOB is None:
-        return jsonify({"ok": True, "note": "no active job"})
-    if JOB.status not in ("pending", "scanning", "hashing", "grouping", "checking"):
-        # 已经是 done / error / cancelled —— 视为已停止
-        return jsonify({"ok": True, "note": f"job already {JOB.status}"})
-    JOB.cancel_requested = True
-    # 立刻把状态翻成 cancelled，前端轮询能马上感知到。
-    # 后台 worker 线程仍然会把已经在跑的图片处理完（无法强制中断），但
-    # _run_job 的 except CancelledError 路径会跳过分组步骤、不发布结果。
-    JOB.status = "cancelled"
-    JOB.label = "已取消"
-    JOB.finished_at = time.time()
-    if JOB_LOG is not None:
-        JOB_LOG.event("CANCEL", "用户请求中止")
-    return jsonify({"ok": True})
-
-
-@app.route("/api/job")
-def api_job():
-    if JOB is None:
-        return jsonify({"status": "idle"})
-    # 前端可传 since=N 拉增量；默认给最近 30 条
-    try:
-        since = int(request.args.get("since", "0"))
-    except ValueError:
-        since = 0
-    events = [e for e in JOB.recent_events if e.get("seq", 0) > since][-30:]
-    rejected_total = sum(1 for e in JOB.recent_events if e.get("reject"))
-    return jsonify({
-        "status": JOB.status,
-        "folder": JOB.folder,
-        "dry_run": JOB.dry_run,
-        "mode": JOB.mode,
-        "engine": JOB.engine,
-        "prescreen_enabled": JOB.prescreen_enabled,
-        "prescreen_strength": JOB.prescreen_strength,
-        "done": JOB.done,
-        "total": JOB.total,
-        "label": JOB.label,
-        "error": JOB.error,
-        "error_info": JOB.error_info,
-        "skipped_count": len(JOB.skipped),
-        "skipped_sample": [
-            {"path": p, "reason": r} for p, r in JOB.skipped[:8]
-        ],
-        "elapsed": (JOB.finished_at or time.time()) - (JOB.started_at or time.time()),
-        "events": events,
-        "event_seq": JOB.event_seq,
-        "rejected_running": rejected_total,
-    })
 
 
 @app.route("/api/status")
