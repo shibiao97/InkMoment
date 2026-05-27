@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { imageUrl } from "../api/http";
 import StatusBadge from "../components/StatusBadge.vue";
 import { formatMeta, useArenaGroup } from "../composables/useArenaGroup";
@@ -36,6 +36,13 @@ const leftMeta = computed(() => formatMeta(group.value?.left_meta, group.value?.
 const rightMeta = computed(() => formatMeta(group.value?.right_meta, group.value?.left_meta));
 const canUndo = computed(() => Boolean(group.value?.can_undo));
 const disableActions = computed(() => loading.value || busy.value || done.value || !group.value);
+const zoomTarget = ref(null);
+const zoomScale = ref(1);
+const zoomedPath = computed(() => {
+  if (!group.value || !zoomTarget.value) return "";
+  return zoomTarget.value === "left" ? group.value.left : group.value.right;
+});
+const zoomedName = computed(() => basename(zoomedPath.value));
 
 function basename(path) {
   if (!path) return "无图";
@@ -51,7 +58,83 @@ function chooseRight() {
   return choose("left");
 }
 
-onMounted(load);
+function openZoom(side) {
+  if (!group.value?.[side]) return;
+  zoomTarget.value = side;
+  zoomScale.value = 1;
+}
+
+function closeZoom() {
+  zoomTarget.value = null;
+  zoomScale.value = 1;
+}
+
+function setZoom(nextScale) {
+  zoomScale.value = Math.max(1, Math.min(4, Number(nextScale.toFixed(2))));
+}
+
+function handleKeydown(event) {
+  if (event.defaultPrevented) return;
+  const target = event.target;
+  const isTyping = target && ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName);
+  if (isTyping) return;
+
+  if (event.key === "Escape" && zoomTarget.value) {
+    event.preventDefault();
+    closeZoom();
+    return;
+  }
+  if (zoomTarget.value) {
+    if (event.key === "+" || event.key === "=") {
+      event.preventDefault();
+      setZoom(zoomScale.value + 0.5);
+    } else if (event.key === "-" || event.key === "_") {
+      event.preventDefault();
+      setZoom(zoomScale.value - 0.5);
+    } else if (event.key === "0") {
+      event.preventDefault();
+      setZoom(1);
+    }
+    return;
+  }
+
+  if (disableActions.value) return;
+  const key = event.key.toLowerCase();
+  if (event.key === "ArrowLeft" || key === "l") {
+    event.preventDefault();
+    chooseLeft();
+  } else if (event.key === "ArrowRight" || key === "r") {
+    event.preventDefault();
+    chooseRight();
+  } else if (key === "b") {
+    event.preventDefault();
+    choose("neither");
+  } else if (key === "n") {
+    event.preventDefault();
+    choose("both");
+  } else if (key === "s") {
+    event.preventDefault();
+    skip();
+  } else if (key === "u" && canUndo.value) {
+    event.preventDefault();
+    undo();
+  } else if (key === "1") {
+    event.preventDefault();
+    openZoom("left");
+  } else if (key === "2") {
+    event.preventDefault();
+    openZoom("right");
+  }
+}
+
+onMounted(() => {
+  load();
+  window.addEventListener("keydown", handleKeydown);
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener("keydown", handleKeydown);
+});
 </script>
 
 <template>
@@ -105,7 +188,14 @@ onMounted(load);
     <section v-else class="arena-stage">
       <article class="arena-side">
         <div class="arena-photo">
-          <img v-if="group.left" :src="imageUrl(group.left, 1200)" :alt="basename(group.left)">
+          <button
+            v-if="group.left"
+            class="arena-photo-button"
+            type="button"
+            @click="openZoom('left')"
+          >
+            <img :src="imageUrl(group.left, 1200)" :alt="basename(group.left)">
+          </button>
         </div>
         <div class="arena-meta">
           <h2>{{ basename(group.left) }}</h2>
@@ -126,7 +216,14 @@ onMounted(load);
 
       <article class="arena-side" :class="{ empty: !group.right }">
         <div class="arena-photo">
-          <img v-if="group.right" :src="imageUrl(group.right, 1200)" :alt="basename(group.right)">
+          <button
+            v-if="group.right"
+            class="arena-photo-button"
+            type="button"
+            @click="openZoom('right')"
+          >
+            <img :src="imageUrl(group.right, 1200)" :alt="basename(group.right)">
+          </button>
           <span v-else>右侧无图</span>
         </div>
         <div class="arena-meta">
@@ -162,6 +259,16 @@ onMounted(load);
       </button>
     </section>
 
+    <section v-if="group && !done" class="arena-shortcuts">
+      <span>←/L 留左</span>
+      <span>→/R 留右</span>
+      <span>B 都保留</span>
+      <span>N 都放手</span>
+      <span>S 稍后</span>
+      <span>U 撤销</span>
+      <span>1/2 放大</span>
+    </section>
+
     <section v-if="group?.members?.length" class="arena-strip">
       <article
         v-for="member in group.members"
@@ -173,5 +280,35 @@ onMounted(load);
         <img :src="imageUrl(member.path, 160)" :alt="member.name" loading="lazy">
       </article>
     </section>
+
+    <Teleport to="body">
+      <div
+        v-if="zoomTarget && zoomedPath"
+        class="zoom-overlay"
+        role="dialog"
+        aria-modal="true"
+        @click.self="closeZoom"
+      >
+        <div class="zoom-topbar">
+          <div>
+            <span>{{ zoomTarget === "left" ? "左图" : "右图" }}</span>
+            <strong>{{ zoomedName }}</strong>
+          </div>
+          <div class="zoom-actions">
+            <button class="btn-ghost" type="button" @click="setZoom(zoomScale - 0.5)">缩小</button>
+            <button class="btn-ghost" type="button" @click="setZoom(1)">{{ zoomScale.toFixed(1) }}×</button>
+            <button class="btn-ghost" type="button" @click="setZoom(zoomScale + 0.5)">放大</button>
+            <button class="btn-primary" type="button" @click="closeZoom">关闭</button>
+          </div>
+        </div>
+        <div class="zoom-stage">
+          <img
+            :src="imageUrl(zoomedPath, 1800)"
+            :alt="zoomedName"
+            :style="{ transform: `scale(${zoomScale})` }"
+          >
+        </div>
+      </div>
+    </Teleport>
   </main>
 </template>

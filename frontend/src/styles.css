@@ -1227,7 +1227,22 @@ input:disabled {
   border-radius: 10px;
 }
 
-.arena-photo img {
+.arena-photo-button {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  padding: 0;
+  background: transparent;
+  border: 0;
+}
+
+.arena-photo-button:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--accent) 52%, transparent);
+  outline-offset: -3px;
+}
+
+.arena-photo img,
+.arena-photo-button img {
   width: 100%;
   max-height: min(58vh, 620px);
   object-fit: contain;
@@ -1271,6 +1286,23 @@ input:disabled {
   margin: 14px 0;
 }
 
+.arena-shortcuts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: -2px 0 12px;
+}
+
+.arena-shortcuts span {
+  padding: 6px 9px;
+  color: #607063;
+  background: rgba(255, 255, 255, 0.62);
+  border: 1px solid #dbe6d4;
+  border-radius: 999px;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 11px;
+}
+
 .arena-empty {
   padding: 28px 0;
   color: #607063;
@@ -1309,6 +1341,68 @@ input:disabled {
   width: 100%;
   aspect-ratio: 1;
   object-fit: cover;
+}
+
+.zoom-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 12px;
+  padding: 18px;
+  background: rgba(31, 41, 34, 0.88);
+}
+
+.zoom-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  color: #fbfcf4;
+}
+
+.zoom-topbar span,
+.zoom-topbar strong {
+  display: block;
+}
+
+.zoom-topbar span {
+  color: #dbe6d4;
+  font-size: 12px;
+}
+
+.zoom-topbar strong {
+  max-width: min(56vw, 760px);
+  margin-top: 4px;
+  overflow: hidden;
+  font-size: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.zoom-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.zoom-stage {
+  display: grid;
+  place-items: center;
+  min-height: 0;
+  overflow: auto;
+  background: #111711;
+  border: 1px solid rgba(219, 230, 212, 0.22);
+  border-radius: 12px;
+}
+
+.zoom-stage img {
+  max-width: 96%;
+  max-height: 96%;
+  object-fit: contain;
+  transform-origin: center center;
 }
 
 .done-shell-vue {

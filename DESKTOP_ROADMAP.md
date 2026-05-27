@@ -51,11 +51,11 @@
 - 已新增 `useNextStep()` 与 `NextStepPanel`，ProcessingView 完成后会读取 `/api/status` 并判断下一步是初筛复核、分组预览、继续选片还是完成页。
 - 已新增 `PrescreenView` 和 `usePrescreenReview()`，接入 `/api/auto_rejected`、`/api/restore_rejected`、`/api/confirm_prescreen` 与 `/api/grouping_progress`，支持查看自动放手照片、按原因筛选、单张/全部恢复、确认后轮询异步分组状态。
 - 已新增 `PreviewView` 和 `usePreviewGroups()`，接入 `/api/preview_groups` 与 `/api/regroup`，支持按拍摄时间章节查看连拍分组、标记 AI 候选、调整阈值后重新分组。
-- 已新增 `ArenaView` 和 `useArenaGroup()`，接入 `/api/group`、`/api/choose`、`/api/skip_group` 与 `/api/undo`，支持基础双图选择、都留/都放手、跳过本组、撤销和组内缩略条。
+- 已新增 `ArenaView` 和 `useArenaGroup()`，接入 `/api/group`、`/api/choose`、`/api/skip_group` 与 `/api/undo`，支持双图选择、都留/都放手、跳过本组、撤销、快捷键、缩放查看和组内缩略条。
 - 已新增 `DoneView` 和 `useDoneResults()`，接入 `/api/status`、`/api/winners`、`/api/skipped` 与 `/api/open_folder`，支持基础结果统计、胜出照片网格、输出目录路径和无法读取列表。
 - Vue 开发联调需要通过 `INKMOMENT_DEV_ORIGINS=http://127.0.0.1:5173` 显式允许 Vite 开发源访问 Flask API。
 - 土豪模式的模型服务地址/API Key 管理已迁移到 Vue 首页，接入 `/api/ark_key`、`/api/llm_models`、`/api/llm_concurrency` 与 `/api/diagnostics`，可保存配置、刷新模型并选择视觉模型启动任务。
-- ProcessingView 目前是基础进度页，PrescreenView 是基础复核页，PreviewView 是基础分组预览页，ArenaView 是基础双图选片页，DoneView 是基础完成页；照片墙动画、高级选片交互、水印和重做流程仍由原生 `static/` 页面承载。
+- ProcessingView 目前是基础进度页，PrescreenView 是基础复核页，PreviewView 是基础分组预览页，ArenaView 已覆盖常用双图选片、快捷键和缩放查看，DoneView 是基础完成页；照片墙动画、水印、重做流程、单图组处理细节和跨组反悔入口仍需继续迁移。
 
 ### Phase 3: Flask 后端模块化
 
@@ -145,6 +145,26 @@ server/
 - 现在不直接引入 Tauri。先稳定 Vue 与 API 边界，避免三条技术线同时变动。
 - 构建产物先放 `static/vue/`，后续再决定是否替换根入口。
 - 桌面壳路线锁定为 Tauri 2 + Vue 3 + Python sidecar：Tauri 负责窗口、权限和进程生命周期；Flask 只作为本地 API 进程存在；图像算法继续留在 Python 包内。
+- 本地持久化后续优先补 SQLite，用于项目记录、用户设置、任务历史和桌面版恢复现场；先不引入远端数据库。
+
+## 推荐技术栈落地计划
+
+目标形态：
+
+```text
+Vue 3 + Vite UI
+  -> 本地 HTTP API
+  -> Tauri 2 桌面壳
+  -> Python Flask sidecar
+  -> inkmoment 图像算法包 + SQLite 本地状态
+```
+
+分阶段原则：
+
+1. 先让 Vue 主流程替代原生页面，保证桌面壳接入前已有稳定 UI。
+2. 再把 Flask 维持为 API-only sidecar，启动、健康检查和运行态边界保持清晰。
+3. 然后接入 Tauri 最小壳，只验证窗口、资源加载、sidecar 启动和退出释放。
+4. 最后做安装包、自动更新、崩溃日志和跨平台打包。
 
 ## 桌面化开发迭代计划
 
@@ -174,7 +194,7 @@ Task:
 Task:
 
 - [x] 迁移土豪模式配置 UI，接入 `/api/ark_key`、`/api/llm_models`、`/api/llm_concurrency` 与 `/api/diagnostics`。
-- [ ] 补齐 ArenaView 高级交互：快捷键、缩放、单图组处理、跨组反悔入口。
+- [ ] 补齐 ArenaView 高级交互：快捷键与缩放查看已完成；继续补单图组处理和跨组反悔入口。
 - [ ] 迁移水印导出流程，接入 `/api/watermark/*`。
 - [ ] 统一长任务 loading、错误提示、取消和回首页重置。
 
@@ -225,7 +245,7 @@ Task:
 建议顺序：
 
 1. 迁移土豪模式的模型服务配置 UI，接入现有 `/api/ark_key`、`/api/llm_models`、`/api/llm_concurrency` 与 `/api/diagnostics`。
-2. 补齐 ArenaView 的高级交互：快捷键提示、缩放查看、单图组处理、跨组反悔入口。
+2. 补齐 ArenaView 的高级交互：快捷键提示和缩放查看已完成；继续补单图组处理、跨组反悔入口。
 3. 迁移水印结果流程，接入 `/api/watermark/*`。
 4. 统一错误提示、任务取消、回首页重置和长任务 loading 状态。
 
