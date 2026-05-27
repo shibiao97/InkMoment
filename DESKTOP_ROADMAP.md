@@ -110,7 +110,7 @@ server/
 - 已迁移会话状态路由 `server.routes.session`，覆盖 `/api/status` 与 `/api/reset_session`。
 - 已迁移会话状态汇总和回首页重置逻辑到 `server.services.session_service`；session 和 last infos 仍由 `app.py` runtime 持有并通过回调注入。
 - 已迁移分组路由 `server.routes.grouping`，覆盖 `/api/grouping_progress`、`/api/regroup`、`/api/preview_groups` 与 `/api/confirm_prescreen`。
-- 已迁移分组进度响应、重新分组和预览组序列化到 `server.services.grouping_service`，预览组复用 `server.services.selection_service` 的质量候选/时间排序 helper；`/api/confirm_prescreen` 的异步线程启动逻辑暂留 `app.py` 并通过回调注入。
+- 已迁移分组进度响应、重新分组、预览组序列化和 `/api/confirm_prescreen` 异步分组状态机到 `server.services.grouping_service`，预览组复用 `server.services.selection_service` 的质量候选/时间排序 helper；`app.py` 仅负责注入 runtime、锁和构建回调。
 - 已迁移结果路由 `server.routes.results`，覆盖 `/api/winners`、`/api/auto_rejected` 与 `/api/restore_rejected`。
 - 已迁移胜出照片列表、自动放手照片列表序列化和 `/api/restore_rejected` 的文件搬运/状态回写逻辑到 `server.services.result_service`；session、锁、目录工厂和状态保存仍由 `app.py` runtime 回调注入。
 - 已迁移图片读取路由 `server.routes.image`，覆盖 `/api/image` 与 `/api/image_original`。
@@ -154,7 +154,7 @@ Task:
 
 - [x] 增加 `create_app()` 工厂，集中注册 Flask hook 与 blueprint。
 - [x] 把 `SESSION`、`JOB`、`LAST_INFOS`、`WATERMARK_JOB` 等全局运行态收敛成显式 runtime 容器。
-- [ ] 把 `_run_grouping_async` 和 confirm prescreen 后续状态机下沉到 service。
+- [x] 把 `_run_grouping_async` 和 confirm prescreen 后续状态机下沉到 service。
 - [ ] 给 sidecar 增加健康检查接口或启动探活约定。
 - [ ] 增加面向 sidecar 的启动参数：动态端口、禁用浏览器、结构化启动日志。
 

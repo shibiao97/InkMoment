@@ -58,10 +58,9 @@ from server.services.job_runner_service import (
     write_job_header,
     write_status_footer,
 )
+from server.services.grouping_service import create_confirm_prescreen_handler
 from server.services.selection_service import (
     create_selection_handlers,
-    group_best_path,
-    group_earliest_dt,
     serialize_group,
 )
 from server.services.start_service import (
@@ -1837,141 +1836,6 @@ def _start_job_payload(data: dict) -> tuple[dict, int]:
     return {"ok": True}, 200
 
 
-def _run_grouping_async(accepted_infos, old_session_snapshot):
-    """后台线程：运行分组 → 逐个推送到 runtime.grouping → 构建 session。
-
-    所有 session 数据从 old_session_snapshot 读取，不依赖 runtime.session
-    （分组期间用户可能已启动新任务，runtime.session 可能被置 None 或替换）。
-    """
-    snap = old_session_snapshot
-    try:
-        raw_groups = group_infos(
-            accepted_infos,
-            threshold_near=snap["threshold_near"],
-            threshold_far=snap["threshold_far"],
-            near_seconds=snap["near_seconds"],
-            engine=snap["engine"],
-        )
-
-        with RUNTIME.lock:
-            new_session = build_session_from_groups(
-                snap["folder"],
-                snap["dry_run"],
-                snap["mode"],
-                raw_groups,
-                accepted_infos,
-                snap["threshold_near"],
-                snap["threshold_far"],
-                snap["near_seconds"],
-                prescreen_enabled=False,
-                prescreen_strength=snap["prescreen_strength"],
-                engine=snap["engine"],
-            )
-            new_session.prescreen_enabled = snap["prescreen_enabled"]
-            new_session.prescreen_strength = snap["prescreen_strength"]
-            new_session.prescreen_rejected = list(snap["prescreen_rejected"])
-            new_session.prescreen_reject_reasons = dict(snap["prescreen_reject_reasons"])
-            new_session.prescreen_restored = list(snap["prescreen_restored"])
-            new_session.meta.update(snap["meta"])
-
-            restored = set(snap["prescreen_restored"])
-            for path in snap["prescreen_rejected"]:
-                if path in restored:
-                    continue
-                g = GroupState(images=[path])
-                g.losers = [path]
-                g.finished = True
-                g.auto_selected = True
-                g.auto_rejected = [path]
-                g.auto_reject_reasons[path] = snap["prescreen_reject_reasons"].get(path, "智能初筛")
-                new_session.groups.append(g)
-
-            new_session.prescreen_reviewed = True
-            apply_pending_groups(new_session)
-            save_state(new_session)
-            RUNTIME.session = new_session
-
-        multi_groups = [g for g in new_session.groups if len(g.images) > 1]
-        multi_groups.sort(key=lambda g: group_earliest_dt(new_session, g) or "9999")
-        for g in multi_groups[:24]:
-            best = group_best_path(new_session, g)
-            ordered = list(g.images)
-            if best and best in ordered:
-                ordered.remove(best)
-                ordered.insert(0, best)
-            RUNTIME.grouping["groups"].append({
-                "id": g.id,
-                "size": len(g.images),
-                "samples": ordered[:4],
-                "best_path": best,
-            })
-            time.sleep(0.05)
-
-        RUNTIME.grouping["total"] = len(new_session.groups)
-        RUNTIME.grouping["multi"] = len(multi_groups)
-        RUNTIME.grouping["status"] = "done"
-    except Exception as e:
-        logger.error(f"异步分组失败: {e}", exc_info=True)
-        RUNTIME.grouping["error"] = str(e)
-        RUNTIME.grouping["status"] = "error"
-
-
-def _confirm_prescreen_payload() -> tuple[dict, int]:
-    session = RUNTIME.session
-    if session is None:
-        return {"error": "no session"}, 400
-    with RUNTIME.lock:
-        session = RUNTIME.session
-        if session is None:
-            return {"error": "no session"}, 400
-        if session.groups:
-            session.prescreen_reviewed = True
-            save_state(session)
-            return {"ok": True, "async": False}, 200
-
-        infos = _infos_from_memory_or_cache(session.folder)
-        if not infos:
-            return {"error": "缓存丢失，请重新开始"}, 400
-        restored = set(session.prescreen_restored)
-        rejected = set(session.prescreen_rejected)
-        accepted_infos = [
-            info for info in infos
-            if info.path not in rejected or info.path in restored
-        ]
-        all_paths = [info.path for info in accepted_infos]
-
-        RUNTIME.grouping["status"] = "running"
-        RUNTIME.grouping["groups"] = []
-        RUNTIME.grouping["all_paths"] = all_paths
-        RUNTIME.grouping["total"] = 0
-        RUNTIME.grouping["multi"] = 0
-        RUNTIME.grouping["error"] = None
-
-        snapshot = {
-            "threshold_near": session.threshold_near,
-            "threshold_far": session.threshold_far,
-            "near_seconds": session.near_seconds,
-            "engine": session.engine,
-            "folder": session.folder,
-            "dry_run": session.dry_run,
-            "mode": session.mode,
-            "prescreen_enabled": session.prescreen_enabled,
-            "prescreen_strength": session.prescreen_strength,
-            "prescreen_rejected": list(session.prescreen_rejected),
-            "prescreen_reject_reasons": dict(session.prescreen_reject_reasons),
-            "prescreen_restored": list(session.prescreen_restored),
-            "meta": dict(session.meta),
-        }
-
-    t = threading.Thread(
-        target=_run_grouping_async,
-        args=(accepted_infos, snapshot),
-        daemon=True,
-    )
-    t.start()
-    return {"ok": True, "async": True, "all_paths": all_paths}, 200
-
-
 def _set_watermark_job(job: WatermarkJobState) -> None:
     RUNTIME.watermark_job = job
 
@@ -2050,6 +1914,20 @@ def create_app() -> Flask:
     def index():
         return send_from_directory(flask_app.static_folder, "index.html")
 
+    confirm_prescreen = create_confirm_prescreen_handler(
+        get_session=lambda: RUNTIME.session,
+        get_infos=_infos_from_memory_or_cache,
+        grouping_state=RUNTIME.grouping,
+        lock=RUNTIME.lock,
+        group_infos_fn=group_infos,
+        build_session_fn=build_session_from_groups,
+        group_state_cls=GroupState,
+        apply_pending_groups_fn=apply_pending_groups,
+        save_state_fn=save_state,
+        set_session_unlocked=lambda session: setattr(RUNTIME, "session", session),
+        log_error=logger.error,
+    )
+
     flask_app.register_blueprint(create_folder_blueprint(
         lambda: RUNTIME.session,
         pic_dir,
@@ -2073,7 +1951,7 @@ def create_app() -> Flask:
             "threshold_far": THRESHOLD_FAR,
             "near_seconds": NEAR_SECONDS,
         },
-        lambda: _confirm_prescreen_payload(),
+        confirm_prescreen,
     ))
     flask_app.register_blueprint(create_image_blueprint(
         lambda: RUNTIME.session.folder if RUNTIME.session is not None else None,
