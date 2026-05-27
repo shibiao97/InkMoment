@@ -1,6 +1,94 @@
 from typing import Callable
 
 
+def advance(group, loser_side: str) -> None:
+    if group.finished:
+        return
+
+    # 全要 / 全不要会清空两侧。如果 pending 里只剩奇数张漏到一侧，那张
+    # 用户其实"还没看见"，不能像 pick-* 那样把当前 left/right 当成 user 已选
+    # 直接钦定为 winner。drained_both 用来跳过这种情况下的 auto-finalize。
+    drained_both = loser_side in ("both", "neither")
+
+    if loser_side == "both":
+        if group.left:
+            group.losers.append(group.left)
+        if group.right:
+            group.losers.append(group.right)
+        group.left = None
+        group.right = None
+    elif loser_side == "neither":
+        # 全要：左右都进 extra_winners
+        if group.left:
+            group.extra_winners.append(group.left)
+        if group.right:
+            group.extra_winners.append(group.right)
+        group.left = None
+        group.right = None
+    elif loser_side == "left":
+        if group.left:
+            group.losers.append(group.left)
+        group.left = None
+    elif loser_side == "right":
+        if group.right:
+            group.losers.append(group.right)
+        group.right = None
+    else:
+        return
+
+    if group.pending and group.left is None:
+        group.left = group.pending.pop(0)
+    if group.pending and group.right is None:
+        group.right = group.pending.pop(0)
+
+    if not group.pending:
+        if group.left and not group.right:
+            if drained_both:
+                # 漏检：用户没看过这张，停在单张待决态等用户决定
+                return
+            group.winner = group.left
+            group.finished = True
+        elif group.right and not group.left:
+            if drained_both:
+                return
+            group.winner = group.right
+            group.finished = True
+        elif not group.left and not group.right:
+            group.winner = None
+            group.finished = True
+
+
+def kick_side(group, side: str) -> bool:
+    """单独把某一侧丢入 losers。返回是否动作成功。"""
+    if group.finished:
+        return False
+    if side == "left" and group.left:
+        group.losers.append(group.left)
+        group.left = None
+    elif side == "right" and group.right:
+        group.losers.append(group.right)
+        group.right = None
+    else:
+        return False
+
+    if group.pending and group.left is None:
+        group.left = group.pending.pop(0)
+    if group.pending and group.right is None:
+        group.right = group.pending.pop(0)
+
+    if not group.pending:
+        if group.left and not group.right:
+            group.winner = group.left
+            group.finished = True
+        elif group.right and not group.left:
+            group.winner = group.right
+            group.finished = True
+        elif not group.left and not group.right:
+            group.winner = None
+            group.finished = True
+    return True
+
+
 def current_group_payload(
     session,
     skip_finished: Callable[[], None],
