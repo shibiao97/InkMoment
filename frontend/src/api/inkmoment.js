@@ -86,3 +86,18 @@ export function undoGroup() {
     method: "POST",
   });
 }
+
+export function getWinners() {
+  return fetchJSON("/api/winners");
+}
+
+export function getSkipped() {
+  return fetchJSON("/api/skipped");
+}
+
+export function openFolder(payload = {}) {
+  return fetchJSON("/api/open_folder", {
+    method: "POST",
+    body: payload,
+  });
+}

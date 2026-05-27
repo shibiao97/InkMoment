@@ -5,7 +5,7 @@ import StatusBadge from "../components/StatusBadge.vue";
 import { formatMeta, useArenaGroup } from "../composables/useArenaGroup";
 import { useTheme } from "../composables/useTheme";
 
-const emit = defineEmits(["back-home"]);
+const emit = defineEmits(["back-home", "done"]);
 
 const { theme } = useTheme();
 const {
@@ -93,7 +93,8 @@ onMounted(load);
     </section>
 
     <section v-if="done" class="arena-empty">
-      选片已经完成。完成页还在迁移中，当前可先回首页或使用原页面查看结果。
+      <span>选片已经完成。</span>
+      <button class="btn-primary" type="button" @click="emit('done')">查看结果</button>
     </section>
     <section v-else-if="loading" class="arena-empty">
       正在读取当前组...
