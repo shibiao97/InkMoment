@@ -59,6 +59,8 @@ from server.services.job_runner_service import (
     prepare_grouping_result,
     prepare_prescreen_result,
     run_info_scan,
+    setup_job_runner_resources,
+    teardown_job_runner_resources,
     write_grouping_footer,
     write_job_event,
     write_job_header,
@@ -2031,11 +2033,17 @@ def _run_job(folder: str, dry_run: bool, mode: str, wipe_cache: bool,
     job = JOB
     assert job is not None
     # 一次性运行：每次 start 都清掉旧的 state.json / winners / losers / 缩略图盘缓存。
-    _wipe_caches(folder)
     LAST_INFOS = None
-    setup_logger(folder)
     # 单任务日志（每次 /api/start 一个文件，便于复盘单次运行的数据）
-    jlog = _open_job_log(folder, engine, llm_model)
+    resources = setup_job_runner_resources(
+        folder,
+        engine,
+        llm_model,
+        _wipe_caches,
+        setup_logger,
+        _open_job_log,
+    )
+    jlog = resources.job_log
     write_job_header(
         jlog,
         folder,
@@ -2134,7 +2142,7 @@ def _run_job(folder: str, dry_run: bool, mode: str, wipe_cache: bool,
         mark_job_error(job, e, _classify_job_error)
         write_status_footer(jlog, "error", str(e))
     finally:
-        _close_job_log()
+        teardown_job_runner_resources(resources, _close_job_log)
 
 
 # ---------------- API ----------------

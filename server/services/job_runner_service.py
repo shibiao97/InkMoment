@@ -1,6 +1,29 @@
 import time
 from collections import Counter
+from dataclasses import dataclass
 from typing import Callable, Optional
+
+
+@dataclass
+class JobRunnerResources:
+    job_log: object | None
+
+
+def setup_job_runner_resources(
+    folder: str,
+    engine: str,
+    llm_model: Optional[str],
+    wipe_caches: Callable,
+    setup_logger: Callable,
+    open_job_log: Callable,
+) -> JobRunnerResources:
+    wipe_caches(folder)
+    setup_logger(folder)
+    return JobRunnerResources(job_log=open_job_log(folder, engine, llm_model))
+
+
+def teardown_job_runner_resources(resources: JobRunnerResources, close_job_log: Callable) -> None:
+    close_job_log()
 
 
 def write_job_header(

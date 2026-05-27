@@ -102,6 +102,7 @@ server/
 - 已迁移 `_run_job` 的初筛结果准备到 `server.services.job_runner_service.prepare_prescreen_result`，封装自动淘汰统计、初筛日志汇总和 prescreen session 构建。
 - 已迁移 `_run_job` 的非初筛分组结果准备到 `server.services.job_runner_service.prepare_grouping_result`，封装分组、session 构建、prescreen reviewed 标记和状态保存。
 - 已迁移 `_run_job` 的 per-job 日志 header、CHECK event 和 footer 写入到 `server.services.job_runner_service`，`app.py` 只保留 log 文件打开/关闭。
+- 已迁移 `_run_job` 的 runner 资源 setup/teardown 编排到 `server.services.job_runner_service`，封装缓存清理、logger 初始化和 job log 打开/关闭调用顺序。
 - 已迁移模型服务配置路由 `server.routes.llm`，覆盖 `/api/ark_key`、`/api/llm_models`、`/api/llm_concurrency` 与 `/api/diagnostics`。
 - 已迁移模型服务配置读写、base URL 归一化、Key 脱敏、模型列表探测、环境诊断和启动期配置加载到 `server.services.llm_service`。
 - 已迁移会话状态路由 `server.routes.session`，覆盖 `/api/status` 与 `/api/reset_session`。
