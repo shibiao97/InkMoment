@@ -1,4 +1,5 @@
 import time
+from collections import Counter
 from typing import Callable, Optional
 
 
@@ -65,6 +66,44 @@ def mark_job_prescreen_done(
         job.label = f"扫描 {infos_count} 张，未发现失败照片"
     job.done = job.total = infos_count
     job.finished_at = now()
+
+
+def prepare_prescreen_result(
+    infos,
+    folder: str,
+    dry_run: bool,
+    mode: str,
+    threshold_near: int,
+    threshold_far: int,
+    near_seconds: int,
+    prescreen_enabled: bool,
+    prescreen_strength: str,
+    engine: str,
+    prescreen_rejections: Callable,
+    build_prescreen_session: Callable,
+    logger,
+):
+    rejected, reasons = prescreen_rejections(infos)
+    reason_counts = Counter(reasons.values())
+    logger.info(
+        f"[{engine}] 初筛汇总：共 {len(infos)} 张，自动 reject {len(rejected)} 张"
+    )
+    for reason, count in reason_counts.most_common():
+        logger.info(f"[{engine}]   · {reason}: {count} 张")
+
+    session = build_prescreen_session(
+        folder,
+        dry_run,
+        mode,
+        infos,
+        threshold_near,
+        threshold_far,
+        near_seconds,
+        prescreen_enabled,
+        prescreen_strength,
+        engine=engine,
+    )
+    return session, rejected
 
 
 def mark_job_grouping(job) -> None:

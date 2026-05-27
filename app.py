@@ -57,6 +57,7 @@ from server.services.job_runner_service import (
     mark_job_grouping_done,
     mark_job_prescreen_done,
     mark_job_started,
+    prepare_prescreen_result,
     run_info_scan,
 )
 from server.services.selection_service import current_group_payload
@@ -2070,19 +2071,20 @@ def _run_job(folder: str, dry_run: bool, mode: str, wipe_cache: bool,
         _record_skipped(folder, skipped)
 
         if prescreen_enabled:
-            rejected, reasons = _prescreen_rejections(infos)
-            # 落总结到 log.txt：每个 reject 一行，便于复盘
-            from collections import Counter
-            reason_counts = Counter(reasons.values())
-            logger.info(
-                f"[{engine}] 初筛汇总：共 {len(infos)} 张，自动 reject {len(rejected)} 张"
-            )
-            for r, n in reason_counts.most_common():
-                logger.info(f"[{engine}]   · {r}: {n} 张")
-            sess = build_prescreen_session_from_infos(
-                folder, dry_run, mode, infos,
-                threshold_near, threshold_far, near_seconds,
-                prescreen_enabled, prescreen_strength, engine=engine,
+            sess, rejected = prepare_prescreen_result(
+                infos,
+                folder,
+                dry_run,
+                mode,
+                threshold_near,
+                threshold_far,
+                near_seconds,
+                prescreen_enabled,
+                prescreen_strength,
+                engine,
+                _prescreen_rejections,
+                build_prescreen_session_from_infos,
+                logger,
             )
             if _cancel_check() or job.status == "cancelled":
                 raise CancelledError()
