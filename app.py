@@ -67,6 +67,8 @@ from server.services.selection_service import (
     group_earliest_dt,
     kick_side,
     kick_group_payload,
+    push_undo_snapshot,
+    record_preference,
     reopen_group_payload,
     serialize_group,
     skip_group_payload,
@@ -2062,13 +2064,7 @@ def _current_group_payload_locked() -> tuple[dict, int]:
 
 
 def _push_undo_locked() -> None:
-    g = SESSION.groups[SESSION.current_group]
-    SESSION.undo_stack.append({
-        "group_index": SESSION.current_group,
-        "snapshot": asdict(g),
-    })
-    if len(SESSION.undo_stack) > 50:
-        SESSION.undo_stack = SESSION.undo_stack[-50:]
+    push_undo_snapshot(SESSION)
 
 
 def _finalize_group_locked() -> None:
@@ -2088,50 +2084,7 @@ def _finalize_group_locked() -> None:
 
 def _record_preference(left_path: Optional[str], right_path: Optional[str],
                         loser_side: str) -> None:
-    """擂台每决一次，记一次用户在三维度上的倾向。"""
-    if SESSION is None:
-        return
-    if loser_side not in ("left", "right"):
-        return  # "both" / "neither" 不是双图择一，不计偏好
-    if not left_path or not right_path:
-        return
-    lm = SESSION.meta.get(left_path) or {}
-    rm = SESSION.meta.get(right_path) or {}
-    winner_meta = rm if loser_side == "left" else lm
-    loser_meta = lm if loser_side == "left" else rm
-
-    def _f(d, k):
-        v = d.get(k)
-        try:
-            return float(v) if v is not None else None
-        except (TypeError, ValueError):
-            return None
-
-    SESSION.pref_decisions += 1
-    # 美学分
-    wa, la = _f(winner_meta, "aesthetic_score"), _f(loser_meta, "aesthetic_score")
-    if wa is not None and la is not None and abs(wa - la) > 0.2:
-        if wa > la:
-            SESSION.pref_aesthetic_chosen += 1
-        else:
-            SESSION.pref_aesthetic_passed += 1
-    # 主体锐度（脸 > 显著区 > 整图）
-    def _sharp(m):
-        return (_f(m, "face_sharpness") or _f(m, "salient_sharpness") or
-                _f(m, "blur_score") or 0.0)
-    ws, ls = _sharp(winner_meta), _sharp(loser_meta)
-    if abs(ws - ls) > 5:
-        if ws > ls:
-            SESSION.pref_sharper_chosen += 1
-        else:
-            SESSION.pref_sharper_passed += 1
-    # 亮度
-    wb, lb = _f(winner_meta, "brightness_mean"), _f(loser_meta, "brightness_mean")
-    if wb is not None and lb is not None and abs(wb - lb) > 5:
-        if wb > lb:
-            SESSION.pref_brighter_chosen += 1
-        else:
-            SESSION.pref_brighter_passed += 1
+    record_preference(SESSION, left_path, right_path, loser_side)
 
 
 app.register_blueprint(create_selection_blueprint(

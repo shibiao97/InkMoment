@@ -1,3 +1,4 @@
+from dataclasses import asdict
 from pathlib import Path
 from typing import Callable
 
@@ -183,6 +184,84 @@ def serialize_group(session, group, index: int) -> dict:
         "applied": group.applied,
         "can_undo": can_undo,
     }
+
+
+def push_undo_snapshot(session) -> None:
+    group = session.groups[session.current_group]
+    session.undo_stack.append({
+        "group_index": session.current_group,
+        "snapshot": asdict(group),
+    })
+    if len(session.undo_stack) > 50:
+        session.undo_stack = session.undo_stack[-50:]
+
+
+def record_preference(
+    session,
+    left_path: str | None,
+    right_path: str | None,
+    loser_side: str,
+) -> None:
+    """擂台每决一次，记一次用户在三维度上的倾向。"""
+    if session is None:
+        return
+    if loser_side not in ("left", "right"):
+        return  # "both" / "neither" 不是双图择一，不计偏好
+    if not left_path or not right_path:
+        return
+    left_meta = session.meta.get(left_path) or {}
+    right_meta = session.meta.get(right_path) or {}
+    winner_meta = right_meta if loser_side == "left" else left_meta
+    loser_meta = left_meta if loser_side == "left" else right_meta
+
+    def meta_float(data, key):
+        value = data.get(key)
+        try:
+            return float(value) if value is not None else None
+        except (TypeError, ValueError):
+            return None
+
+    session.pref_decisions += 1
+
+    winner_aesthetic = meta_float(winner_meta, "aesthetic_score")
+    loser_aesthetic = meta_float(loser_meta, "aesthetic_score")
+    if (
+        winner_aesthetic is not None and
+        loser_aesthetic is not None and
+        abs(winner_aesthetic - loser_aesthetic) > 0.2
+    ):
+        if winner_aesthetic > loser_aesthetic:
+            session.pref_aesthetic_chosen += 1
+        else:
+            session.pref_aesthetic_passed += 1
+
+    def sharpness(meta):
+        return (
+            meta_float(meta, "face_sharpness") or
+            meta_float(meta, "salient_sharpness") or
+            meta_float(meta, "blur_score") or
+            0.0
+        )
+
+    winner_sharpness = sharpness(winner_meta)
+    loser_sharpness = sharpness(loser_meta)
+    if abs(winner_sharpness - loser_sharpness) > 5:
+        if winner_sharpness > loser_sharpness:
+            session.pref_sharper_chosen += 1
+        else:
+            session.pref_sharper_passed += 1
+
+    winner_brightness = meta_float(winner_meta, "brightness_mean")
+    loser_brightness = meta_float(loser_meta, "brightness_mean")
+    if (
+        winner_brightness is not None and
+        loser_brightness is not None and
+        abs(winner_brightness - loser_brightness) > 5
+    ):
+        if winner_brightness > loser_brightness:
+            session.pref_brighter_chosen += 1
+        else:
+            session.pref_brighter_passed += 1
 
 
 def current_group_payload(
