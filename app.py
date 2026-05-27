@@ -42,6 +42,7 @@ from inkmoment.grouper import (
 from server.routes.folder import folder_bp
 from server.routes.job import create_job_blueprint
 from server.routes.llm import llm_bp
+from server.routes.session import create_session_blueprint
 from server.routes.system import system_bp
 from server.services.llm_service import load_llm_config_from_file
 
@@ -1514,6 +1515,13 @@ def _thumb_cache_key(rel: str, mtime: float, size: int, max_side: int) -> str:
     return hashlib.sha1(s).hexdigest()
 
 
+def _clear_session_state() -> None:
+    global SESSION, LAST_INFOS
+    with LOCK:
+        SESSION = None
+        LAST_INFOS = None
+
+
 # ---------------- Flask ----------------
 
 app = Flask(__name__, static_folder="static", static_url_path="/static")
@@ -1525,6 +1533,13 @@ app.register_blueprint(create_job_blueprint(
     lambda folder: pic_dir(folder) / "jobs",
 ))
 app.register_blueprint(llm_bp)
+app.register_blueprint(create_session_blueprint(
+    lambda: SESSION,
+    _clear_session_state,
+    lambda: JOB,
+    lambda: JOB_LOG,
+    _infos_from_memory_or_cache,
+))
 app.register_blueprint(system_bp)
 SESSION: Optional[SessionState] = None
 JOB: Optional[JobState] = None
@@ -2217,92 +2232,6 @@ def api_start():
     )
     t.start()
     return jsonify({"ok": True})
-
-
-@app.route("/api/reset_session", methods=["POST"])
-def api_reset_session():
-    """完全重置：中止运行中的任务、清空 SESSION/LAST_INFOS。
-    用户从任意页面"回主页"时调用——不动磁盘文件（winners/losers 已搬的留着）。"""
-    global SESSION, LAST_INFOS
-    # 1. 中止 JOB（如果还在跑）
-    if JOB is not None and JOB.status in ("pending", "scanning", "hashing", "grouping", "checking"):
-        JOB.cancel_requested = True
-        JOB.status = "cancelled"
-        JOB.label = "用户重置"
-        JOB.finished_at = time.time()
-        if JOB_LOG is not None:
-            JOB_LOG.event("RESET", "用户回主页，任务取消")
-    # 2. 清 SESSION & LAST_INFOS
-    with LOCK:
-        SESSION = None
-        LAST_INFOS = None
-    return jsonify({"ok": True})
-
-
-@app.route("/api/status")
-def api_status():
-    if SESSION is None:
-        return jsonify({"ready": False})
-    finished = sum(1 for g in SESSION.groups if g.finished)
-    winners = sum((1 if g.winner else 0) + len(g.extra_winners) for g in SESSION.groups)
-    losers = sum(len(g.losers) for g in SESSION.groups)
-    image_count = sum(len(g.images) for g in SESSION.groups)
-    if image_count == 0 and (SESSION.prescreen_rejected or not SESSION.prescreen_reviewed):
-        image_count = len(_infos_from_memory_or_cache(SESSION.folder))
-    auto_rejected = (
-        len(SESSION.prescreen_rejected) or
-        sum(len(g.auto_rejected) for g in SESSION.groups)
-    )
-    auto_restored = (
-        len(SESSION.prescreen_restored) or
-        sum(len(g.manual_restored) for g in SESSION.groups)
-    )
-    multi = sum(1 for g in SESSION.groups if len(g.images) > 1)
-    finished_multi = sum(1 for g in SESSION.groups
-                         if g.finished and len(g.images) > 1)
-    unfinished = len(SESSION.groups) - finished
-    selection_started = (
-        SESSION.current_group > 0 or
-        any(g.finished and len(g.images) > 1 and not g.auto_selected for g in SESSION.groups)
-    )
-    return jsonify({
-        "ready": True,
-        "folder": SESSION.folder,
-        "dry_run": SESSION.dry_run,
-        "mode": SESSION.mode,
-        "engine": SESSION.engine,
-        "total_groups": len(SESSION.groups),
-        "image_count": image_count,
-        "multi_groups": multi,
-        "finished_groups": finished,
-        # 仅"需决策的组"里已决定的数量；前端进度条用这个，不会被
-        # 单图组反悔(reopen)拖累
-        "finished_multi_groups": finished_multi,
-        "winner_count": winners,
-        "loser_count": losers,
-        "current_group": SESSION.current_group,
-        "unfinished_groups": unfinished,
-        "threshold_near": SESSION.threshold_near,
-        "threshold_far": SESSION.threshold_far,
-        "near_seconds": SESSION.near_seconds,
-        "prescreen_enabled": SESSION.prescreen_enabled,
-        "prescreen_strength": SESSION.prescreen_strength,
-        "prescreen_reviewed": SESSION.prescreen_reviewed,
-        "prescreen_auto_rejected_count": auto_rejected,
-        "prescreen_restored_count": auto_restored,
-        "prescreen_pending_count": max(0, auto_rejected - auto_restored),
-        "selection_started": selection_started,
-        # 偏好学习：让前端在擂台里给"AI 建议"加一句"与近期选择一致"
-        "preferences": {
-            "decisions": SESSION.pref_decisions,
-            "aesthetic_chosen": SESSION.pref_aesthetic_chosen,
-            "aesthetic_passed": SESSION.pref_aesthetic_passed,
-            "sharper_chosen": SESSION.pref_sharper_chosen,
-            "sharper_passed": SESSION.pref_sharper_passed,
-            "brighter_chosen": SESSION.pref_brighter_chosen,
-            "brighter_passed": SESSION.pref_brighter_passed,
-        },
-    })
 
 
 def _skip_finished_locked() -> None:
