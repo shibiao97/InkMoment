@@ -1,9 +1,9 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, Response, jsonify, request
 
-from server.services.job_service import cancel_job, serialize_job
+from server.services.job_service import cancel_job, list_job_logs, read_job_log, serialize_job
 
 
-def create_job_blueprint(get_job, get_job_log):
+def create_job_blueprint(get_job, get_job_log, get_session=None, jobs_dir_factory=None):
     job_bp = Blueprint("job", __name__)
 
     @job_bp.route("/api/cancel_job", methods=["POST"])
@@ -21,5 +21,19 @@ def create_job_blueprint(get_job, get_job_log):
         except ValueError:
             since = 0
         return jsonify(serialize_job(job, since))
+
+    @job_bp.route("/api/job_log", methods=["GET"])
+    def api_job_log():
+        """列出或读取当前 SESSION 文件夹下的 per-job 日志。"""
+        if get_session is None or jobs_dir_factory is None:
+            return jsonify({"error": "no session"}), 400
+        name = request.args.get("name", "").strip()
+        if name:
+            payload, status = read_job_log(get_session(), name, jobs_dir_factory)
+            if "content" in payload:
+                return Response(payload["content"], mimetype="text/plain; charset=utf-8")
+            return jsonify(payload), status
+        payload, status = list_job_logs(get_session(), jobs_dir_factory)
+        return jsonify(payload), status
 
     return job_bp

@@ -1518,7 +1518,12 @@ def _thumb_cache_key(rel: str, mtime: float, size: int, max_side: int) -> str:
 
 app = Flask(__name__, static_folder="static", static_url_path="/static")
 app.register_blueprint(folder_bp)
-app.register_blueprint(create_job_blueprint(lambda: JOB, lambda: JOB_LOG))
+app.register_blueprint(create_job_blueprint(
+    lambda: JOB,
+    lambda: JOB_LOG,
+    lambda: SESSION,
+    lambda folder: pic_dir(folder) / "jobs",
+))
 app.register_blueprint(llm_bp)
 app.register_blueprint(system_bp)
 SESSION: Optional[SessionState] = None
@@ -2148,42 +2153,6 @@ def _run_job(folder: str, dry_run: bool, mode: str, wipe_cache: bool,
 @app.route("/")
 def index():
     return send_from_directory(app.static_folder, "index.html")
-
-
-@app.route("/api/job_log", methods=["GET"])
-def api_job_log():
-    """列出当前 SESSION 文件夹下所有 per-job 日志，按时间倒序。
-    带 ?name=... 时直接返回那个文件的内容。"""
-    if SESSION is None:
-        return jsonify({"error": "no session"}), 400
-    jobs_dir = pic_dir(SESSION.folder) / "jobs"
-    if not jobs_dir.exists():
-        return jsonify({"logs": []})
-
-    name = request.args.get("name", "").strip()
-    if name:
-        # 安全：只接受 jobs/ 目录里的简单文件名
-        if "/" in name or ".." in name or not name.endswith(".log"):
-            return jsonify({"error": "非法文件名"}), 400
-        target = jobs_dir / name
-        if not target.exists():
-            return jsonify({"error": "文件不存在"}), 404
-        try:
-            content = target.read_text(encoding="utf-8")
-        except OSError as e:
-            return jsonify({"error": str(e)}), 500
-        return Response(content, mimetype="text/plain; charset=utf-8")
-
-    files = sorted(jobs_dir.glob("*.log"), key=lambda p: p.stat().st_mtime, reverse=True)
-    return jsonify({
-        "logs": [
-            {
-                "name": f.name,
-                "size": f.stat().st_size,
-                "mtime": f.stat().st_mtime,
-            } for f in files[:50]
-        ],
-    })
 
 
 @app.route("/api/start", methods=["POST"])

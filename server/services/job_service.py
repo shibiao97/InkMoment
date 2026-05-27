@@ -47,3 +47,38 @@ def cancel_job(job, job_log: Optional[object] = None, now: Callable[[], float] =
     if job_log is not None:
         job_log.event("CANCEL", "用户请求中止")
     return {"ok": True}
+
+
+def list_job_logs(session, jobs_dir_factory: Callable[[str], object]) -> tuple[dict, int]:
+    if session is None:
+        return {"error": "no session"}, 400
+    jobs_dir = jobs_dir_factory(session.folder)
+    if not jobs_dir.exists():
+        return {"logs": []}, 200
+
+    files = sorted(jobs_dir.glob("*.log"), key=lambda path: path.stat().st_mtime, reverse=True)
+    return {
+        "logs": [
+            {
+                "name": path.name,
+                "size": path.stat().st_size,
+                "mtime": path.stat().st_mtime,
+            } for path in files[:50]
+        ],
+    }, 200
+
+
+def read_job_log(session, name: str, jobs_dir_factory: Callable[[str], object]) -> tuple[dict, int]:
+    if session is None:
+        return {"error": "no session"}, 400
+    name = (name or "").strip()
+    if "/" in name or ".." in name or not name.endswith(".log"):
+        return {"error": "非法文件名"}, 400
+
+    target = jobs_dir_factory(session.folder) / name
+    if not target.exists():
+        return {"error": "文件不存在"}, 404
+    try:
+        return {"content": target.read_text(encoding="utf-8")}, 200
+    except OSError as exc:
+        return {"error": str(exc)}, 500
