@@ -2,6 +2,8 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Callable
 
+from PIL import Image
+
 
 def advance(group, loser_side: str) -> None:
     if group.finished:
@@ -298,6 +300,28 @@ def skip_finished_groups(session) -> None:
         session.groups[session.current_group].finished
     ):
         session.current_group += 1
+
+
+def decode_ok(path: str) -> bool:
+    """擂台两边的图能否解码。RAW 走 rawpy 内嵌预览的可用性判断。"""
+    try:
+        from inkmoment.grouper import RAW_EXTS
+    except Exception:
+        RAW_EXTS = set()
+    if Path(path).suffix.lower() in RAW_EXTS:
+        try:
+            import rawpy
+            with rawpy.imread(path) as raw:
+                raw.extract_thumb()  # 只验证能取出，不真展开成图
+            return True
+        except Exception:
+            return False
+    try:
+        with Image.open(path) as image:
+            image.verify()
+        return True
+    except Exception:
+        return False
 
 
 def validate_current_pair(

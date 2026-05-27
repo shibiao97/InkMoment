@@ -24,7 +24,6 @@ from pathlib import Path
 from typing import Callable, Optional
 
 from flask import Flask, jsonify, request, send_from_directory
-from PIL import Image
 
 from inkmoment import grouper
 from inkmoment.grouper import (
@@ -63,6 +62,7 @@ from server.services.selection_service import (
     advance,
     choose_group_payload,
     current_group_payload,
+    decode_ok,
     finalize_current_group,
     group_best_path,
     group_earliest_dt,
@@ -1994,33 +1994,11 @@ def _skip_finished_locked() -> None:
 def _validate_current_pair_locked() -> None:
     validate_current_pair(
         SESSION,
-        _decode_ok,
+        decode_ok,
         _record_skipped,
         apply_group,
         save_state,
     )
-
-
-def _decode_ok(path: str) -> bool:
-    """擂台两边的图能否解码。RAW 走 rawpy 内嵌预览的可用性判断。"""
-    try:
-        from inkmoment.grouper import RAW_EXTS
-    except Exception:
-        RAW_EXTS = set()
-    if Path(path).suffix.lower() in RAW_EXTS:
-        try:
-            import rawpy
-            with rawpy.imread(path) as raw:
-                raw.extract_thumb()  # 只验证能取出，不真展开成图
-            return True
-        except Exception:
-            return False
-    try:
-        with Image.open(path) as img:
-            img.verify()
-        return True
-    except Exception:
-        return False
 
 
 def _current_group_payload_locked() -> tuple[dict, int]:
