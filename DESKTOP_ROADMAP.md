@@ -235,6 +235,7 @@ Task:
 - 已补齐本机桌面打包环境的 `pip` 与 `PyInstaller`，生成 `inkmoment-sidecar-aarch64-apple-darwin`，验证冻结后二进制的 `--json-ready` 与 `/api/health` 通过，并确认 `npm run tauri:build:sidecar -- --debug` 可将 sidecar 放入 `.app/Contents/MacOS/inkmoment-sidecar`。
 - Tauri 启动时会自动检测资源目录里的 bundled sidecar；如果存在则优先使用，开发态没有 bundled sidecar 时才回退到 `.venv`/`INKMOMENT_PYTHON` 启动 `app.py`。
 - 已接入 Tauri dialog 插件，Vue 首页在桌面壳中支持原生选择照片文件夹，并保留浏览器环境的手动路径输入。
+- 已接入 Tauri opener 插件，桌面壳中的完成页和水印输出目录优先用系统原生能力打开，失败时回落到既有 Flask API。
 
 验收：
 
@@ -285,7 +286,7 @@ Task:
 1. 新增 `src-tauri/`，先只加载 Vue build，不启动 Python sidecar。已完成最小壳。
 2. 增加 Tauri 配置，限制窗口、权限和资源路径。已完成基础窗口、资源和默认权限配置。
 3. 将 Flask 启动封装成稳定的 sidecar 命令，支持动态端口和健康检查。开发态与正式 bundled sidecar 均已验证。
-4. 加入后端异常退出提示、退出时释放 sidecar、打开目录等桌面能力。sidecar 释放、异常提示和首页原生选择照片文件夹已完成；桌面原生打开输出目录能力待继续增强。
+4. 加入后端异常退出提示、退出时释放 sidecar、打开目录等桌面能力。sidecar 释放、异常提示、首页原生选择照片文件夹和完成页/水印目录原生打开已完成。
 
 完成标准：
 

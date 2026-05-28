@@ -7,6 +7,7 @@ import {
   previewWatermark,
   startWatermark,
 } from "../api/inkmoment";
+import { openDesktopPath } from "../api/runtime";
 
 const POLL_RUNNING_MS = 500;
 const POLL_RETRY_MS = 1500;
@@ -164,11 +165,21 @@ export function useWatermarkExport() {
   async function openOutputFolder() {
     opening.value = true;
     error.value = "";
+    let desktopError = null;
     try {
+      if (job.value?.out_dir) {
+        try {
+          if (await openDesktopPath(job.value.out_dir)) {
+            return true;
+          }
+        } catch (err) {
+          desktopError = err;
+        }
+      }
       await openWatermarkOutputFolder();
       return true;
     } catch (err) {
-      error.value = err.message || "打开水印导出目录失败";
+      error.value = err.message || desktopError?.message || "打开水印导出目录失败";
       return false;
     } finally {
       opening.value = false;

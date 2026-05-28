@@ -1,5 +1,6 @@
 import { computed, ref } from "vue";
 import { getSkipped, getStatus, getWinners, openFolder, reopenGroup } from "../api/inkmoment";
+import { openDesktopPath } from "../api/runtime";
 
 function groupBySize(winners) {
   const buckets = new Map();
@@ -78,11 +79,21 @@ export function useDoneResults() {
   async function openOutputFolder() {
     opening.value = true;
     error.value = "";
+    let desktopError = null;
     try {
+      if (status.value?.folder) {
+        try {
+          if (await openDesktopPath(status.value.folder)) {
+            return true;
+          }
+        } catch (err) {
+          desktopError = err;
+        }
+      }
       await openFolder();
       return true;
     } catch (err) {
-      error.value = err.message || "打开文件夹失败";
+      error.value = err.message || desktopError?.message || "打开文件夹失败";
       return false;
     } finally {
       opening.value = false;

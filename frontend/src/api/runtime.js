@@ -58,3 +58,14 @@ export async function pickDesktopFolder() {
 
   return typeof selected === "string" ? selected : null;
 }
+
+export async function openDesktopPath(path) {
+  const target = String(path || "").trim();
+  if (!target || !isTauriRuntime()) {
+    return false;
+  }
+
+  const { openPath } = await import("@tauri-apps/plugin-opener");
+  await openPath(target);
+  return true;
+}
