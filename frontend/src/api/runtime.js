@@ -39,3 +39,22 @@ export async function getDesktopBackendStatus() {
 export function getDesktopBackendInfo() {
   return desktopBackendInfo;
 }
+
+export async function pickDesktopFolder() {
+  if (!isTauriRuntime()) {
+    return null;
+  }
+
+  const { open } = await import("@tauri-apps/plugin-dialog");
+  const selected = await open({
+    directory: true,
+    multiple: false,
+    title: "选择照片文件夹",
+  });
+
+  if (Array.isArray(selected)) {
+    return selected[0] || null;
+  }
+
+  return typeof selected === "string" ? selected : null;
+}

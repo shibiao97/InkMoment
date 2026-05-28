@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref } from "vue";
 import { startJob } from "../api/inkmoment";
+import { isTauriRuntime, pickDesktopFolder } from "../api/runtime";
 import EngineSwitch from "../components/EngineSwitch.vue";
 import FolderSnapshot from "../components/FolderSnapshot.vue";
 import ThemePicker from "../components/ThemePicker.vue";
@@ -26,8 +27,10 @@ const thresholdFar = ref(6);
 const nearMinutes = ref(5);
 const startError = ref("");
 const isStarting = ref(false);
+const isPickingFolder = ref(false);
 const lastStartPayload = ref(null);
 const showLlmConfig = ref(false);
+const canPickFolder = isTauriRuntime();
 
 const {
   snapshot,
@@ -58,6 +61,22 @@ const {
 const faceAwareDisabled = computed(() => !prescreenEnabled.value || engine.value === "fast");
 const llmPanelVisible = computed(() => engine.value === "tycoon" || showLlmConfig.value);
 const tycoonReady = computed(() => engine.value !== "tycoon" || llmModelReady.value);
+
+async function handlePickFolder() {
+  startError.value = "";
+  isPickingFolder.value = true;
+
+  try {
+    const selected = await pickDesktopFolder();
+    if (selected) {
+      folder.value = selected;
+    }
+  } catch (error) {
+    startError.value = error.message || "选择文件夹失败";
+  } finally {
+    isPickingFolder.value = false;
+  }
+}
 
 async function handleStart() {
   startError.value = "";
@@ -216,6 +235,15 @@ async function handleStart() {
           spellcheck="false"
           required
         >
+        <button
+          v-if="canPickFolder"
+          class="btn-ghost"
+          type="button"
+          :disabled="isPickingFolder || isStarting"
+          @click="handlePickFolder"
+        >
+          {{ isPickingFolder ? "选择中" : "选择文件夹" }}
+        </button>
         <button class="btn-primary" type="submit" :disabled="isStarting || !tycoonReady">
           {{ isStarting ? "启动中" : "开始" }}
         </button>

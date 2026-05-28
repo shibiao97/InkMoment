@@ -152,6 +152,7 @@ fn backend_status(state: State<'_, BackendState>) -> Result<BackendStatus, Strin
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .manage(BackendState {
             process: Mutex::new(None),
             startup_error: Mutex::new(None),
