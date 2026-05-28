@@ -58,7 +58,7 @@
 - 已新增 Vue 启动状态恢复：入口加载时读取 `/api/job` 与 `/api/status`，自动恢复到处理中、初筛复核、分组预览、选片、完成页或首页。
 - Vue 开发联调需要通过 `INKMOMENT_DEV_ORIGINS=http://127.0.0.1:5173` 显式允许 Vite 开发源访问 Flask API。
 - 土豪模式的模型服务地址/API Key 管理已迁移到 Vue 首页，接入 `/api/ark_key`、`/api/llm_models`、`/api/llm_concurrency` 与 `/api/diagnostics`，可保存配置、刷新模型并选择视觉模型启动任务。
-- ProcessingView 目前是基础进度页，PrescreenView 是基础复核页，PreviewView 是基础分组预览页，ArenaView 已覆盖常用双图选片、单图复核、快捷键和缩放查看，DoneView 已覆盖基础完成结果、水印导出和跨组反悔入口；Vue 主流程已具备统一回首页重置、回首页 loading 状态、共享错误提示和启动状态恢复；照片墙动画、重做流程和长任务 loading 细节仍需继续迁移。
+- ProcessingView 目前是基础进度页，PrescreenView 是基础复核页，PreviewView 是基础分组预览页，ArenaView 已覆盖常用双图选片、单图复核、快捷键和缩放查看，DoneView 已覆盖基础完成结果、水印导出和跨组反悔入口；Vue 主流程已具备统一回首页重置、回首页 loading 状态、共享错误提示、共享 loading 状态和启动状态恢复；照片墙动画和重做流程仍需继续迁移。
 
 ### Phase 3: Flask 后端模块化
 
@@ -199,7 +199,7 @@ Task:
 - [x] 迁移土豪模式配置 UI，接入 `/api/ark_key`、`/api/llm_models`、`/api/llm_concurrency` 与 `/api/diagnostics`。
 - [x] 补齐 ArenaView 高级交互：快捷键、缩放查看、跨组反悔入口和单图组处理细节已完成。
 - [x] 迁移水印导出流程，接入 `/api/watermark/*`。
-- [ ] 统一长任务 loading、错误提示、取消和回首页重置：回首页重置、回首页 loading 状态和共享错误提示已完成；继续收敛长任务 loading。
+- [x] 统一长任务 loading、错误提示、取消和回首页重置：回首页重置、回首页 loading 状态、共享错误提示和共享 loading 状态已完成。
 - [x] 增加 Vue 启动状态恢复，支持桌面窗口重开后回到当前流程位置。
 
 验收：
@@ -269,7 +269,7 @@ Task:
 1. 迁移土豪模式的模型服务配置 UI，接入现有 `/api/ark_key`、`/api/llm_models`、`/api/llm_concurrency` 与 `/api/diagnostics`。
 2. 补齐 ArenaView 的高级交互：快捷键提示、缩放查看、跨组反悔入口和单图组处理细节已完成。
 3. 迁移水印结果流程，接入 `/api/watermark/*`。已完成基础模板选择、预览、导出、轮询和打开目录。
-4. 统一错误提示、任务取消、回首页重置和长任务 loading 状态。回首页重置、回首页 loading 状态和共享错误提示已完成；继续收敛长任务 loading。
+4. 统一错误提示、任务取消、回首页重置和长任务 loading 状态。回首页重置、回首页 loading 状态、共享错误提示和共享 loading 状态已完成。
 
 完成标准：
 

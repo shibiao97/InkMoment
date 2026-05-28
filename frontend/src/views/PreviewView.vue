@@ -2,6 +2,7 @@
 import { computed, onMounted } from "vue";
 import { imageUrl } from "../api/http";
 import ErrorPanel from "../components/ErrorPanel.vue";
+import LoadingState from "../components/LoadingState.vue";
 import StatusBadge from "../components/StatusBadge.vue";
 import { formatBurstSpan, usePreviewGroups } from "../composables/usePreviewGroups";
 import { useTheme } from "../composables/useTheme";
@@ -91,9 +92,11 @@ onMounted(load);
 
     <ErrorPanel title="分组预览失败" :message="error" />
 
-    <section v-if="loading" class="preview-empty">
-      正在读取分组预览...
-    </section>
+    <LoadingState
+      v-if="loading"
+      title="正在读取分组预览"
+      description="正在加载连拍分组和 AI 候选照片。"
+    />
     <section v-else-if="!groupCount" class="preview-empty">
       没有需要人工选片的相似组，每张照片都已经独立成组。
     </section>

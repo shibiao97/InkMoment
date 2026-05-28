@@ -2,6 +2,7 @@
 import { computed, onMounted } from "vue";
 import { imageUrl } from "../api/http";
 import ErrorPanel from "../components/ErrorPanel.vue";
+import LoadingState from "../components/LoadingState.vue";
 import StatusBadge from "../components/StatusBadge.vue";
 import { usePrescreenReview } from "../composables/usePrescreenReview";
 import { useTheme } from "../composables/useTheme";
@@ -177,9 +178,11 @@ onMounted(load);
       </button>
     </nav>
 
-    <section v-if="loading" class="prescreen-empty">
-      正在读取初筛结果...
-    </section>
+    <LoadingState
+      v-if="loading"
+      title="正在读取初筛结果"
+      description="稍等片刻，正在整理自动放手的照片。"
+    />
     <section v-else-if="!filteredItems.length" class="prescreen-empty">
       当前没有需要复核的自动放手照片。
     </section>

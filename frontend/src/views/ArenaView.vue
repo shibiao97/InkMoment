@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { imageUrl } from "../api/http";
 import ErrorPanel from "../components/ErrorPanel.vue";
+import LoadingState from "../components/LoadingState.vue";
 import StatusBadge from "../components/StatusBadge.vue";
 import { formatMeta, useArenaGroup } from "../composables/useArenaGroup";
 import { useTheme } from "../composables/useTheme";
@@ -208,9 +209,11 @@ onBeforeUnmount(() => {
       <span>选片已经完成。</span>
       <button class="btn-primary" type="button" @click="emit('done')">查看结果</button>
     </section>
-    <section v-else-if="loading" class="arena-empty">
-      正在读取当前组...
-    </section>
+    <LoadingState
+      v-else-if="loading"
+      title="正在读取当前组"
+      description="正在准备下一组需要人工判断的照片。"
+    />
     <section v-else-if="!group" class="arena-empty">
       暂时没有可选的分组。
     </section>

@@ -585,7 +585,8 @@ input:disabled {
 
 .progress-panel,
 .event-panel,
-.error-panel {
+.error-panel,
+.loading-state {
   background: rgba(255, 255, 255, 0.78);
   border: 1px solid #dbe6d4;
   border-radius: 14px;
@@ -666,6 +667,25 @@ input:disabled {
 }
 
 .error-panel p {
+  margin: 6px 0 0;
+}
+
+.loading-state {
+  margin-top: 14px;
+  padding: 18px;
+  color: #607063;
+}
+
+.loading-state .progress-bar {
+  margin: 0 0 14px;
+}
+
+.loading-state strong {
+  display: block;
+  color: #1f2922;
+}
+
+.loading-state p {
   margin: 6px 0 0;
 }
 

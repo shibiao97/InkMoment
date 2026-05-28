@@ -2,6 +2,7 @@
 import { computed, onMounted } from "vue";
 import { imageUrl } from "../api/http";
 import ErrorPanel from "../components/ErrorPanel.vue";
+import LoadingState from "../components/LoadingState.vue";
 import StatusBadge from "../components/StatusBadge.vue";
 import { useDoneResults } from "../composables/useDoneResults";
 import { useTheme } from "../composables/useTheme";
@@ -274,9 +275,11 @@ onMounted(loadPage);
       </div>
     </section>
 
-    <section v-if="loading" class="done-empty">
-      正在读取完成结果...
-    </section>
+    <LoadingState
+      v-if="loading"
+      title="正在读取完成结果"
+      description="正在汇总胜出照片、跳过记录和水印状态。"
+    />
     <section v-else-if="!winners.length" class="done-empty">
       暂时没有胜出的照片。
     </section>
