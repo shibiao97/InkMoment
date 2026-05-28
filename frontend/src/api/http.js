@@ -1,3 +1,5 @@
+import { resolveApiUrl } from "./runtime";
+
 export async function fetchJSON(url, options = {}) {
   const headers = { ...(options.headers || {}) };
   const body = options.body && typeof options.body === "object"
@@ -8,7 +10,7 @@ export async function fetchJSON(url, options = {}) {
     headers["Content-Type"] = "application/json";
   }
 
-  const response = await fetch(url, { ...options, body, headers });
+  const response = await fetch(resolveApiUrl(url), { ...options, body, headers });
   const text = await response.text();
   let data = null;
 
@@ -29,5 +31,5 @@ export async function fetchJSON(url, options = {}) {
 export function imageUrl(path, width) {
   const params = new URLSearchParams({ path });
   if (width) params.set("w", String(width));
-  return `/api/image?${params.toString()}`;
+  return resolveApiUrl(`/api/image?${params.toString()}`);
 }

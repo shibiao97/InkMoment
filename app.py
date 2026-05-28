@@ -1843,12 +1843,30 @@ def _set_watermark_job(job: WatermarkJobState) -> None:
 
 # ---------------- Flask app factory ----------------
 
+def _allowed_origins_for_request() -> set[str]:
+    host = request.host
+    port = host.rsplit(":", 1)[-1] if ":" in host else ""
+    allowed_origins = set()
+    if port:
+        allowed_origins |= {f"http://127.0.0.1:{port}", f"http://localhost:{port}"}
+    allowed_origins.add(f"http://{host}")
+    allowed_origins |= DEV_ORIGINS
+    return allowed_origins
+
+
 def _no_cache_static(resp):
     """前端三件套不让浏览器缓存，避免 token bug 这种"304 拿旧版"的坑。"""
     if request.path == "/" or request.path.startswith("/static/"):
         resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
         resp.headers["Pragma"] = "no-cache"
         resp.headers["Expires"] = "0"
+
+    origin = request.headers.get("Origin", "")
+    if origin and origin in _allowed_origins_for_request():
+        resp.headers["Access-Control-Allow-Origin"] = origin
+        resp.headers["Access-Control-Allow-Headers"] = "Content-Type, X-Token"
+        resp.headers["Access-Control-Allow-Methods"] = "GET, POST, DELETE, OPTIONS"
+        resp.headers["Vary"] = "Origin"
     return resp
 
 
@@ -1864,13 +1882,7 @@ def _security_check():
     if request.path == "/" or request.path.startswith("/static/"):
         return None
 
-    host = request.host
-    port = host.rsplit(":", 1)[-1] if ":" in host else ""
-    allowed_origins = set()
-    if port:
-        allowed_origins |= {f"http://127.0.0.1:{port}", f"http://localhost:{port}"}
-    allowed_origins.add(f"http://{host}")
-    allowed_origins |= DEV_ORIGINS
+    allowed_origins = _allowed_origins_for_request()
 
     origin = request.headers.get("Origin", "")
     referer = request.headers.get("Referer", "")

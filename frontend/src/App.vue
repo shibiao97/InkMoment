@@ -7,6 +7,7 @@ import PrescreenView from "./views/PrescreenView.vue";
 import PreviewView from "./views/PreviewView.vue";
 import ProcessingView from "./views/ProcessingView.vue";
 import { getJob, getStatus } from "./api/inkmoment";
+import { initDesktopBackend } from "./api/runtime";
 import { resolveNextStep } from "./composables/useNextStep";
 import { useSessionReset } from "./composables/useSessionReset";
 
@@ -85,6 +86,7 @@ async function resumeFromBackend() {
   booting.value = true;
   bootError.value = "";
   try {
+    await initDesktopBackend();
     const job = await getJob();
     if (ACTIVE_JOB_STATUSES.has(job?.status)) {
       startedPayload.value = {
