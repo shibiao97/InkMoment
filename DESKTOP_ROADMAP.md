@@ -148,7 +148,7 @@ server/
 - Tauri 已进入预接入阶段：先完成最小桌面壳加载 Vue build，Python sidecar 启动与完整打包链继续分步推进。
 - 构建产物先放 `static/vue/`，后续再决定是否替换根入口。
 - 桌面壳路线锁定为 Tauri 2 + Vue 3 + Python sidecar：Tauri 负责窗口、权限和进程生命周期；Flask 只作为本地 API 进程存在；图像算法继续留在 Python 包内。
-- 本地持久化后续优先补 SQLite，用于项目记录、用户设置、任务历史和桌面版恢复现场；先不引入远端数据库。
+- 本地持久化已新增 SQLite 骨架，用于后续项目记录、用户设置、任务历史和桌面版恢复现场；先不引入远端数据库。
 
 ## 推荐技术栈落地计划
 
@@ -258,9 +258,30 @@ Task:
 
 - `app.py` 中只剩 `/` 或更少的直接 route。
 - 所有已迁移 API 的路径、请求体和返回结构保持兼容。
-- 每次迁移至少跑 `py_compile`、`npm run frontend:build` 和对应 Flask smoke test。
 
-### Iteration B: Vue 入口补齐桌面主流程
+### Iteration B: 本地持久化落点
+
+目标：为桌面版项目记录、用户设置、任务历史和恢复现场提供明确的本地状态边界。
+
+当前进展：
+
+- 已新增 `server.state.local_store.LocalStateStore`，使用 Python 标准库 SQLite 管理本地状态库。
+- 已提供跨平台默认数据库路径解析、schema 初始化、键值设置读写和任务历史写入/查询。
+- 已补充单元测试覆盖路径约定、schema 迁移记录、设置 round-trip、任务历史更新和必填字段校验。
+
+后续建议：
+
+1. 将主题、最近文件夹、模型服务非敏感设置迁入 `settings`。
+2. 在任务开始/完成/失败时写入 `task_history`，供桌面首页展示最近项目。
+3. 设计恢复现场字段后，再替代当前分散的 JSON 进度状态。
+
+完成标准：
+
+- 可以在测试临时目录初始化 SQLite schema。
+- 可以读写设置并记录最近任务，不影响现有 `/api` 行为。
+- 每次接入主流程时至少跑 `py_compile`、相关单元测试、`npm run frontend:build` 和对应 Flask smoke test。
+
+### Iteration C: Vue 入口补齐桌面主流程
 
 目标：让 Vue 入口承担日常使用主链路，减少对原生 `static/app.js` 页面的依赖。
 
@@ -277,7 +298,7 @@ Task:
 - 原生页面只作为回退入口，不再承载唯一主流程。
 - Vite dev、Vue build 和 Flask API 联调路径稳定。
 
-### Iteration C: Tauri 预接入
+### Iteration D: Tauri 预接入
 
 目标：在 Web 主流程稳定后再加入桌面壳，避免打包链影响业务迭代。
 

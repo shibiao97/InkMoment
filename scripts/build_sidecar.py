@@ -95,6 +95,7 @@ def main() -> int:
         "server.services.session_service",
         "server.services.start_service",
         "server.services.watermark_service",
+        "server.state.local_store",
     ]
     cmd = [
         python,
