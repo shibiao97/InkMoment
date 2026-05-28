@@ -218,7 +218,7 @@ Task:
 - [x] 配置窗口、权限和资源路径。
 - [x] 打通 Tauri 启动开发态 Python sidecar、动态端口注入和健康检查。
 - [ ] 将 Python 后端打包为正式 Tauri sidecar binary。
-- [ ] 退出应用时释放 sidecar，后端异常时 UI 展示可理解错误。
+- [x] 退出应用时释放 sidecar，后端异常时 UI 展示可理解错误。
 
 当前进展：
 
@@ -229,7 +229,8 @@ Task:
 - 已新增 Tauri 后端启动器：优先使用 `INKMOMENT_PYTHON`，其次使用项目 `.venv`，以 `--port 0 --json-ready` 启动 Flask 后端，读取动态端口并轮询 `/api/health`。
 - 已新增 Vue 桌面运行时 API base 注入：Tauri 环境调用 `backend_info` 后，将所有 `/api/*` 和图片 URL 指向动态 Flask 端口。
 - 已通过 Tauri 状态容器持有 Python 子进程，窗口退出时随状态释放；启动失败会透传到 Vue 顶部错误提示。
-- 已验证 `cargo check`、`npm run frontend:build`、`npm run tauri:build -- --debug` 和 Python ready/health smoke 通过；正式 sidecar binary 打包、运行中异常监控仍待实现。
+- 已新增 `backend_status` Tauri command，Vue 桌面运行时会轮询 sidecar 状态；如果 Python 进程退出或 `/api/health` 失败，会在顶部 banner 显示可理解错误。
+- 已验证 `cargo check`、`npm run frontend:build`、`npm run tauri:build -- --debug` 和 Python ready/health smoke 通过；正式 sidecar binary 打包仍待实现。
 
 验收：
 
@@ -280,7 +281,7 @@ Task:
 1. 新增 `src-tauri/`，先只加载 Vue build，不启动 Python sidecar。已完成最小壳。
 2. 增加 Tauri 配置，限制窗口、权限和资源路径。已完成基础窗口、资源和默认权限配置。
 3. 将 Flask 启动封装成稳定的 sidecar 命令，支持动态端口和健康检查。开发态已完成；正式 binary 打包待完成。
-4. 加入后端异常退出提示、退出时释放 sidecar、打开目录等桌面能力。
+4. 加入后端异常退出提示、退出时释放 sidecar、打开目录等桌面能力。sidecar 释放和异常提示已完成；桌面原生打开目录能力待继续增强。
 
 完成标准：
 

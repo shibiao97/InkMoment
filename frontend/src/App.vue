@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref } from "vue";
 import ArenaView from "./views/ArenaView.vue";
 import DoneView from "./views/DoneView.vue";
 import LandingView from "./views/LandingView.vue";
@@ -7,25 +7,28 @@ import PrescreenView from "./views/PrescreenView.vue";
 import PreviewView from "./views/PreviewView.vue";
 import ProcessingView from "./views/ProcessingView.vue";
 import { getJob, getStatus } from "./api/inkmoment";
-import { initDesktopBackend } from "./api/runtime";
+import { getDesktopBackendStatus, initDesktopBackend, isTauriRuntime } from "./api/runtime";
 import { resolveNextStep } from "./composables/useNextStep";
 import { useSessionReset } from "./composables/useSessionReset";
 
 const ACTIVE_JOB_STATUSES = new Set(["pending", "scanning", "hashing", "grouping", "checking"]);
+const BACKEND_STATUS_POLL_MS = 3000;
 
 const currentView = ref("landing");
 const startedPayload = ref(null);
 const booting = ref(true);
 const bootError = ref("");
+const desktopBackendError = ref("");
 const { resetting, resetError, resetCurrentSession } = useSessionReset();
+let desktopBackendTimer = null;
 
 const bannerText = computed(() => {
   if (booting.value) return "正在恢复上次进度...";
   if (resetting.value) return "正在回首页...";
-  return resetError.value || bootError.value;
+  return resetError.value || desktopBackendError.value || bootError.value;
 });
 
-const bannerError = computed(() => Boolean(resetError.value || bootError.value));
+const bannerError = computed(() => Boolean(resetError.value || desktopBackendError.value || bootError.value));
 
 function enterProcessing(payload) {
   startedPayload.value = payload;
@@ -86,7 +89,8 @@ async function resumeFromBackend() {
   booting.value = true;
   bootError.value = "";
   try {
-    await initDesktopBackend();
+    const backend = await initDesktopBackend();
+    if (backend) startDesktopBackendMonitor();
     const job = await getJob();
     if (ACTIVE_JOB_STATUSES.has(job?.status)) {
       startedPayload.value = {
@@ -109,6 +113,22 @@ async function resumeFromBackend() {
   }
 }
 
+function startDesktopBackendMonitor() {
+  if (!isTauriRuntime() || desktopBackendTimer) return;
+  desktopBackendTimer = window.setInterval(async () => {
+    try {
+      const status = await getDesktopBackendStatus();
+      if (!status || status.ready) {
+        desktopBackendError.value = "";
+        return;
+      }
+      desktopBackendError.value = status.error || "桌面后端不可用";
+    } catch (err) {
+      desktopBackendError.value = err.message || "桌面后端状态检查失败";
+    }
+  }, BACKEND_STATUS_POLL_MS);
+}
+
 function enterPreview() {
   currentView.value = "preview";
 }
@@ -122,6 +142,13 @@ function enterDone() {
 }
 
 onMounted(resumeFromBackend);
+
+onUnmounted(() => {
+  if (desktopBackendTimer) {
+    window.clearInterval(desktopBackendTimer);
+    desktopBackendTimer = null;
+  }
+});
 </script>
 
 <template>

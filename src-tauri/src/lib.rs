@@ -27,6 +27,18 @@ struct BackendInfo {
     pid: u32,
 }
 
+#[derive(Clone, Debug, Serialize)]
+struct BackendStatus {
+    ready: bool,
+    running: bool,
+    url: Option<String>,
+    health_url: Option<String>,
+    port: Option<u16>,
+    pid: Option<u32>,
+    error: Option<String>,
+    exit_status: Option<String>,
+}
+
 #[derive(Debug, Deserialize)]
 struct ReadyPayload {
     event: String,
@@ -71,6 +83,72 @@ fn backend_info(state: State<'_, BackendState>) -> Result<BackendInfo, String> {
     Err(error)
 }
 
+#[tauri::command]
+fn backend_status(state: State<'_, BackendState>) -> Result<BackendStatus, String> {
+    let mut process = state
+        .process
+        .lock()
+        .map_err(|_| "后端状态锁已损坏".to_string())?;
+
+    if let Some(backend) = process.as_mut() {
+        let info = backend.info.clone();
+        match backend
+            .child
+            .try_wait()
+            .map_err(|err| format!("检查后端进程状态失败：{err}"))?
+        {
+            Some(status) => {
+                let message = format!("后端进程已退出：{status}");
+                *state
+                    .startup_error
+                    .lock()
+                    .map_err(|_| "后端错误状态锁已损坏".to_string())? = Some(message.clone());
+                *process = None;
+                return Ok(BackendStatus {
+                    ready: false,
+                    running: false,
+                    url: Some(info.url),
+                    health_url: Some(info.health_url),
+                    port: Some(info.port),
+                    pid: Some(info.pid),
+                    error: Some(message),
+                    exit_status: Some(status.to_string()),
+                });
+            }
+            None => {
+                let health_error = check_health_once(&info.health_url).err();
+                return Ok(BackendStatus {
+                    ready: health_error.is_none(),
+                    running: true,
+                    url: Some(info.url),
+                    health_url: Some(info.health_url),
+                    port: Some(info.port),
+                    pid: Some(info.pid),
+                    error: health_error,
+                    exit_status: None,
+                });
+            }
+        }
+    }
+
+    let error = state
+        .startup_error
+        .lock()
+        .ok()
+        .and_then(|guard| guard.clone())
+        .unwrap_or_else(|| "后端尚未启动".to_string());
+    Ok(BackendStatus {
+        ready: false,
+        running: false,
+        url: None,
+        health_url: None,
+        port: None,
+        pid: None,
+        error: Some(error),
+        exit_status: None,
+    })
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -91,7 +169,7 @@ pub fn run() {
             }
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![backend_info])
+        .invoke_handler(tauri::generate_handler![backend_info, backend_status])
         .run(tauri::generate_context!())
         .expect("error while running InkMoment desktop shell");
 }

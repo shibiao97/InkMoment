@@ -27,6 +27,15 @@ export async function initDesktopBackend() {
   return desktopBackendInfo;
 }
 
+export async function getDesktopBackendStatus() {
+  if (!isTauriRuntime()) {
+    return null;
+  }
+
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke("backend_status");
+}
+
 export function getDesktopBackendInfo() {
   return desktopBackendInfo;
 }
