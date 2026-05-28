@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted } from "vue";
 import { imageUrl } from "../api/http";
+import ErrorPanel from "../components/ErrorPanel.vue";
 import StatusBadge from "../components/StatusBadge.vue";
 import { useDoneResults } from "../composables/useDoneResults";
 import { useTheme } from "../composables/useTheme";
@@ -145,10 +146,7 @@ onMounted(loadPage);
       </div>
     </section>
 
-    <section v-if="error" class="error-panel">
-      <strong>结果读取失败</strong>
-      <p>{{ error }}</p>
-    </section>
+    <ErrorPanel title="结果读取失败" :message="error" />
 
     <section class="done-paths-vue">
       <div>

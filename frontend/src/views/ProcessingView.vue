@@ -1,5 +1,6 @@
 <script setup>
 import { computed, onMounted, watch } from "vue";
+import ErrorPanel from "../components/ErrorPanel.vue";
 import NextStepPanel from "../components/NextStepPanel.vue";
 import StatusBadge from "../components/StatusBadge.vue";
 import { useJobPolling } from "../composables/useJobPolling";
@@ -71,6 +72,8 @@ const progressText = computed(() => {
 const recentEvents = computed(() => events.value.slice(-10).reverse());
 const rejectedCount = computed(() => job.value?.rejected_running || 0);
 const skippedCount = computed(() => job.value?.skipped_count || 0);
+const processingErrorTitle = computed(() => job.value?.error_info?.title || "处理失败");
+const processingErrorMessage = computed(() => job.value?.error_info?.message || job.value?.error || error.value || "");
 
 async function cancel() {
   await requestCancel();
@@ -139,10 +142,7 @@ onMounted(start);
       </div>
     </section>
 
-    <section v-if="job?.error || error" class="error-panel">
-      <strong>{{ job?.error_info?.title || "处理失败" }}</strong>
-      <p>{{ job?.error_info?.message || job?.error || error }}</p>
-    </section>
+    <ErrorPanel :title="processingErrorTitle" :message="processingErrorMessage" />
 
     <NextStepPanel
       v-if="job?.status === 'done'"

@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted } from "vue";
 import { imageUrl } from "../api/http";
+import ErrorPanel from "../components/ErrorPanel.vue";
 import StatusBadge from "../components/StatusBadge.vue";
 import { formatBurstSpan, usePreviewGroups } from "../composables/usePreviewGroups";
 import { useTheme } from "../composables/useTheme";
@@ -88,10 +89,7 @@ onMounted(load);
       </button>
     </section>
 
-    <section v-if="error" class="error-panel">
-      <strong>分组预览失败</strong>
-      <p>{{ error }}</p>
-    </section>
+    <ErrorPanel title="分组预览失败" :message="error" />
 
     <section v-if="loading" class="preview-empty">
       正在读取分组预览...

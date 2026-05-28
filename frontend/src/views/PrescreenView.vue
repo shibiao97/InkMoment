@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted } from "vue";
 import { imageUrl } from "../api/http";
+import ErrorPanel from "../components/ErrorPanel.vue";
 import StatusBadge from "../components/StatusBadge.vue";
 import { usePrescreenReview } from "../composables/usePrescreenReview";
 import { useTheme } from "../composables/useTheme";
@@ -119,10 +120,7 @@ onMounted(load);
       </div>
     </section>
 
-    <section v-if="error" class="error-panel">
-      <strong>读取或操作失败</strong>
-      <p>{{ error }}</p>
-    </section>
+    <ErrorPanel title="读取或操作失败" :message="error" />
 
     <section class="prescreen-confirm">
       <div>

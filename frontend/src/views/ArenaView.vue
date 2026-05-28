@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { imageUrl } from "../api/http";
+import ErrorPanel from "../components/ErrorPanel.vue";
 import StatusBadge from "../components/StatusBadge.vue";
 import { formatMeta, useArenaGroup } from "../composables/useArenaGroup";
 import { useTheme } from "../composables/useTheme";
@@ -201,10 +202,7 @@ onBeforeUnmount(() => {
       </div>
     </section>
 
-    <section v-if="error" class="error-panel">
-      <strong>选片操作失败</strong>
-      <p>{{ error }}</p>
-    </section>
+    <ErrorPanel title="选片操作失败" :message="error" />
 
     <section v-if="done" class="arena-empty">
       <span>选片已经完成。</span>
