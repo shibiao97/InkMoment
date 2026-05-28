@@ -1245,6 +1245,19 @@ input:disabled {
   gap: 16px;
 }
 
+.arena-stage.single-review {
+  grid-template-columns: minmax(0, 760px);
+  justify-content: center;
+}
+
+.arena-stage.single-review .arena-side {
+  grid-template-rows: auto minmax(74px, auto) auto;
+}
+
+.arena-stage.single-review .arena-photo {
+  min-height: 360px;
+}
+
 .arena-side {
   display: grid;
   grid-template-rows: auto minmax(82px, auto) auto;

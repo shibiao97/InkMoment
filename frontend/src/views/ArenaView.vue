@@ -28,6 +28,7 @@ const {
 const title = computed(() => {
   if (done.value) return "这轮选片已经完成";
   if (!group.value) return "准备进入选片";
+  if (group.value.left && !group.value.right && !group.value.finished) return "复核这张照片";
   if (group.value.earliest_dt) return `连拍 ${group.value.total_images || 0} 张`;
   return `组 #${group.value.id_short || ""}`;
 });
@@ -36,6 +37,7 @@ const leftMeta = computed(() => formatMeta(group.value?.left_meta, group.value?.
 const rightMeta = computed(() => formatMeta(group.value?.right_meta, group.value?.left_meta));
 const canUndo = computed(() => Boolean(group.value?.can_undo));
 const disableActions = computed(() => loading.value || busy.value || done.value || !group.value);
+const isSingleReview = computed(() => Boolean(group.value?.left && !group.value?.right && !group.value?.finished));
 const zoomTarget = ref(null);
 const zoomScale = ref(1);
 const zoomedPath = computed(() => {
@@ -100,6 +102,26 @@ function handleKeydown(event) {
 
   if (disableActions.value) return;
   const key = event.key.toLowerCase();
+  if (isSingleReview.value) {
+    if (event.key === "ArrowLeft" || event.key === "ArrowRight" || key === "l" || key === "r") {
+      event.preventDefault();
+      choose("neither");
+    } else if (key === "b" || key === "n") {
+      event.preventDefault();
+      choose("both");
+    } else if (key === "s") {
+      event.preventDefault();
+      skip();
+    } else if (key === "u" && canUndo.value) {
+      event.preventDefault();
+      undo();
+    } else if (key === "1") {
+      event.preventDefault();
+      openZoom("left");
+    }
+    return;
+  }
+
   if (event.key === "ArrowLeft" || key === "l") {
     event.preventDefault();
     chooseLeft();
@@ -185,7 +207,7 @@ onBeforeUnmount(() => {
     <section v-else-if="!group" class="arena-empty">
       暂时没有可选的分组。
     </section>
-    <section v-else class="arena-stage">
+    <section v-else class="arena-stage" :class="{ 'single-review': isSingleReview }">
       <article class="arena-side">
         <div class="arena-photo">
           <button
@@ -210,11 +232,11 @@ onBeforeUnmount(() => {
           </div>
         </div>
         <button class="btn-primary" type="button" :disabled="disableActions" @click="chooseLeft">
-          留左边
+          {{ isSingleReview ? "保留这张" : "留左边" }}
         </button>
       </article>
 
-      <article class="arena-side" :class="{ empty: !group.right }">
+      <article v-if="!isSingleReview" class="arena-side" :class="{ empty: !group.right }">
         <div class="arena-photo">
           <button
             v-if="group.right"
@@ -245,11 +267,11 @@ onBeforeUnmount(() => {
     </section>
 
     <section v-if="group && !done" class="arena-command-bar">
-      <button class="btn-ghost" type="button" :disabled="disableActions || !group.right" @click="choose('neither')">
-        都保留
+      <button class="btn-ghost" type="button" :disabled="disableActions || (!isSingleReview && !group.right)" @click="choose('neither')">
+        {{ isSingleReview ? "保留这张" : "都保留" }}
       </button>
       <button class="btn-ghost" type="button" :disabled="disableActions" @click="choose('both')">
-        都放手
+        {{ isSingleReview ? "放手这张" : "都放手" }}
       </button>
       <button class="btn-ghost" type="button" :disabled="disableActions" @click="skip">
         稍后再选
@@ -260,13 +282,22 @@ onBeforeUnmount(() => {
     </section>
 
     <section v-if="group && !done" class="arena-shortcuts">
-      <span>←/L 留左</span>
-      <span>→/R 留右</span>
-      <span>B 都保留</span>
-      <span>N 都放手</span>
-      <span>S 稍后</span>
-      <span>U 撤销</span>
-      <span>1/2 放大</span>
+      <template v-if="isSingleReview">
+        <span>←/→ 保留</span>
+        <span>B/N 放手</span>
+        <span>S 稍后</span>
+        <span>U 撤销</span>
+        <span>1 放大</span>
+      </template>
+      <template v-else>
+        <span>←/L 留左</span>
+        <span>→/R 留右</span>
+        <span>B 都保留</span>
+        <span>N 都放手</span>
+        <span>S 稍后</span>
+        <span>U 撤销</span>
+        <span>1/2 放大</span>
+      </template>
     </section>
 
     <section v-if="group?.members?.length" class="arena-strip">
