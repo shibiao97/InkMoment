@@ -10,6 +10,10 @@ const props = defineProps({
     type: Object,
     default: null,
   },
+  returningHome: {
+    type: Boolean,
+    default: false,
+  },
 });
 
 const emit = defineEmits(["back-home", "continue"]);
@@ -93,7 +97,9 @@ onMounted(start);
         <p class="processing-folder">{{ job?.folder || startedPayload?.folder }}</p>
       </div>
       <div class="processing-actions">
-        <button class="btn-ghost" type="button" @click="emit('back-home')">回首页</button>
+        <button class="btn-ghost" type="button" :disabled="returningHome" @click="emit('back-home')">
+          {{ returningHome ? "返回中" : "回首页" }}
+        </button>
         <button
           class="btn-ghost"
           type="button"
@@ -144,6 +150,7 @@ onMounted(start);
       :status="status"
       :loading="loadingNextStep"
       :error="nextStepError"
+      :returning-home="returningHome"
       @refresh="refreshStatus"
       @back-home="emit('back-home')"
       @continue="emit('continue', $event)"

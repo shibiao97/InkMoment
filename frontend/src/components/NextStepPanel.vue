@@ -18,6 +18,10 @@ const props = defineProps({
     type: String,
     default: "",
   },
+  returningHome: {
+    type: Boolean,
+    default: false,
+  },
 });
 
 const emit = defineEmits(["refresh", "back-home", "continue"]);
@@ -37,6 +41,7 @@ const primaryLabel = computed(() => {
 });
 
 function handlePrimary() {
+  if (props.returningHome) return;
   if (canContinue.value) {
     emit("continue", props.nextStep.kind);
     return;
@@ -70,8 +75,8 @@ function handlePrimary() {
 
     <div class="next-step-actions">
       <button class="btn-ghost" type="button" @click="emit('refresh')">刷新状态</button>
-      <button class="btn-primary" type="button" :disabled="loading" @click="handlePrimary">
-        {{ primaryLabel }}
+      <button class="btn-primary" type="button" :disabled="loading || returningHome" @click="handlePrimary">
+        {{ returningHome ? "返回中" : primaryLabel }}
       </button>
     </div>
   </section>

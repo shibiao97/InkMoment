@@ -5,6 +5,13 @@ import StatusBadge from "../components/StatusBadge.vue";
 import { formatBurstSpan, usePreviewGroups } from "../composables/usePreviewGroups";
 import { useTheme } from "../composables/useTheme";
 
+defineProps({
+  returningHome: {
+    type: Boolean,
+    default: false,
+  },
+});
+
 const emit = defineEmits(["back-home", "continue-arena"]);
 
 const { theme } = useTheme();
@@ -48,7 +55,9 @@ onMounted(load);
         </p>
       </div>
       <div class="preview-actions">
-        <button class="btn-ghost" type="button" @click="emit('back-home')">回首页</button>
+        <button class="btn-ghost" type="button" :disabled="returningHome" @click="emit('back-home')">
+          {{ returningHome ? "返回中" : "回首页" }}
+        </button>
         <button class="btn-ghost" type="button" :disabled="loading || regrouping" @click="load">
           刷新预览
         </button>

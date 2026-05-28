@@ -6,6 +6,13 @@ import { useDoneResults } from "../composables/useDoneResults";
 import { useTheme } from "../composables/useTheme";
 import { useWatermarkExport } from "../composables/useWatermarkExport";
 
+defineProps({
+  returningHome: {
+    type: Boolean,
+    default: false,
+  },
+});
+
 const emit = defineEmits(["back-home", "continue-arena"]);
 
 const { theme } = useTheme();
@@ -107,7 +114,9 @@ onMounted(loadPage);
         >
           水印预览
         </button>
-        <button class="btn-ghost" type="button" @click="emit('back-home')">回首页</button>
+        <button class="btn-ghost" type="button" :disabled="returningHome" @click="emit('back-home')">
+          {{ returningHome ? "返回中" : "回首页" }}
+        </button>
       </div>
     </header>
 

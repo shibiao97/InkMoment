@@ -159,26 +159,31 @@ onUnmounted(() => {
   <ProcessingView
     v-else-if="!booting && currentView === 'processing'"
     :started-payload="startedPayload"
+    :returning-home="resetting"
     @back-home="backHome"
     @continue="continueFromProcessing"
   />
   <PrescreenView
     v-else-if="!booting && currentView === 'prescreen'"
+    :returning-home="resetting"
     @back-home="backHome"
     @continue-preview="enterPreview"
   />
   <PreviewView
     v-else-if="!booting && currentView === 'preview'"
+    :returning-home="resetting"
     @back-home="backHome"
     @continue-arena="enterArena"
   />
   <ArenaView
     v-else-if="!booting && currentView === 'arena'"
+    :returning-home="resetting"
     @back-home="backHome"
     @done="enterDone"
   />
   <DoneView
     v-else-if="!booting"
+    :returning-home="resetting"
     @back-home="backHome"
     @continue-arena="enterArena"
   />

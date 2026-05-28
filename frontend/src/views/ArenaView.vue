@@ -5,6 +5,13 @@ import StatusBadge from "../components/StatusBadge.vue";
 import { formatMeta, useArenaGroup } from "../composables/useArenaGroup";
 import { useTheme } from "../composables/useTheme";
 
+defineProps({
+  returningHome: {
+    type: Boolean,
+    default: false,
+  },
+});
+
 const emit = defineEmits(["back-home", "done"]);
 
 const { theme } = useTheme();
@@ -170,7 +177,9 @@ onBeforeUnmount(() => {
         <p class="arena-folder">{{ status?.folder }}</p>
       </div>
       <div class="arena-actions">
-        <button class="btn-ghost" type="button" @click="emit('back-home')">回首页</button>
+        <button class="btn-ghost" type="button" :disabled="returningHome" @click="emit('back-home')">
+          {{ returningHome ? "返回中" : "回首页" }}
+        </button>
         <button class="btn-ghost" type="button" :disabled="loading || busy" @click="load">刷新</button>
       </div>
     </header>
