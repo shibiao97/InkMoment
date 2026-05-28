@@ -175,7 +175,7 @@ pub fn run() {
 }
 
 fn start_backend(app_handle: &AppHandle) -> Result<BackendProcess, String> {
-    if use_bundled_sidecar() {
+    if should_use_bundled_sidecar(app_handle) {
         return start_bundled_sidecar(app_handle);
     }
 
@@ -287,8 +287,21 @@ fn finish_backend_start(mut child: Child) -> Result<BackendProcess, String> {
     })
 }
 
-fn use_bundled_sidecar() -> bool {
-    matches!(env::var("INKMOMENT_USE_BUNDLED_SIDECAR"), Ok(value) if value == "1" || value.eq_ignore_ascii_case("true"))
+fn should_use_bundled_sidecar(app_handle: &AppHandle) -> bool {
+    if matches!(env::var("INKMOMENT_USE_BUNDLED_SIDECAR"), Ok(value) if value == "0" || value.eq_ignore_ascii_case("false"))
+    {
+        return false;
+    }
+    if matches!(env::var("INKMOMENT_USE_BUNDLED_SIDECAR"), Ok(value) if value == "1" || value.eq_ignore_ascii_case("true"))
+    {
+        return true;
+    }
+    app_handle
+        .path()
+        .resource_dir()
+        .ok()
+        .and_then(|resource_dir| bundled_sidecar_path(&resource_dir))
+        .is_some()
 }
 
 fn resolve_app_root() -> Result<PathBuf, String> {

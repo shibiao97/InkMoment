@@ -218,7 +218,7 @@ Task:
 - [x] 配置窗口、权限和资源路径。
 - [x] 打通 Tauri 启动开发态 Python sidecar、动态端口注入和健康检查。
 - [x] 增加 Python 后端正式 Tauri sidecar binary 打包脚本和配置。
-- [ ] 在具备 PyInstaller 的桌面打包环境中生成并验证正式 sidecar binary。
+- [x] 在具备 PyInstaller 的桌面打包环境中生成并验证正式 sidecar binary。
 - [x] 退出应用时释放 sidecar，后端异常时 UI 展示可理解错误。
 
 当前进展：
@@ -232,7 +232,8 @@ Task:
 - 已通过 Tauri 状态容器持有 Python 子进程，窗口退出时随状态释放；启动失败会透传到 Vue 顶部错误提示。
 - 已新增 `backend_status` Tauri command，Vue 桌面运行时会轮询 sidecar 状态；如果 Python 进程退出或 `/api/health` 失败，会在顶部 banner 显示可理解错误。
 - 已新增 `scripts/build_sidecar.py`、`requirements-desktop.txt`、`src-tauri/tauri.sidecar.conf.json`、`src-tauri/binaries/.gitkeep` 和 `npm run tauri:build:sidecar`，用于按 Tauri `externalBin` 约定生成 `inkmoment-sidecar-<target-triple>`。
-- 已验证 `cargo check`、`npm run frontend:build`、`npm run tauri:build -- --debug` 和 Python ready/health smoke 通过；当前本机 `.venv` 缺少 `pip`/`PyInstaller`，正式 sidecar binary 生成待补齐打包环境后验证。
+- 已补齐本机桌面打包环境的 `pip` 与 `PyInstaller`，生成 `inkmoment-sidecar-aarch64-apple-darwin`，验证冻结后二进制的 `--json-ready` 与 `/api/health` 通过，并确认 `npm run tauri:build:sidecar -- --debug` 可将 sidecar 放入 `.app/Contents/MacOS/inkmoment-sidecar`。
+- Tauri 启动时会自动检测资源目录里的 bundled sidecar；如果存在则优先使用，开发态没有 bundled sidecar 时才回退到 `.venv`/`INKMOMENT_PYTHON` 启动 `app.py`。
 
 验收：
 
@@ -282,7 +283,7 @@ Task:
 
 1. 新增 `src-tauri/`，先只加载 Vue build，不启动 Python sidecar。已完成最小壳。
 2. 增加 Tauri 配置，限制窗口、权限和资源路径。已完成基础窗口、资源和默认权限配置。
-3. 将 Flask 启动封装成稳定的 sidecar 命令，支持动态端口和健康检查。开发态已完成；正式 binary 打包脚本已接入，二进制生成待打包环境验证。
+3. 将 Flask 启动封装成稳定的 sidecar 命令，支持动态端口和健康检查。开发态与正式 bundled sidecar 均已验证。
 4. 加入后端异常退出提示、退出时释放 sidecar、打开目录等桌面能力。sidecar 释放和异常提示已完成；桌面原生打开目录能力待继续增强。
 
 完成标准：
