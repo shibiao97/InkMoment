@@ -23,6 +23,10 @@ static/vue/
 # ===== Tauri / Rust 构建产物 =====
 src-tauri/target/
 src-tauri/gen/schemas/
+src-tauri/binaries/*
+!src-tauri/binaries/.gitkeep
+build/
+dist/
 
 # ===== 依赖 stamp =====
 .inkmoment_deps.stamp

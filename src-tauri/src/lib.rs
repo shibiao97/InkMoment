@@ -9,7 +9,7 @@ use std::{
     thread,
     time::{Duration, Instant},
 };
-use tauri::{Manager, State};
+use tauri::{AppHandle, Manager, State};
 
 const DEFAULT_BACKEND_ORIGINS: &str = concat!(
     "http://127.0.0.1:5173,",
@@ -158,7 +158,7 @@ pub fn run() {
         })
         .setup(|app| {
             let state = app.state::<BackendState>();
-            match start_backend() {
+            match start_backend(app.handle()) {
                 Ok(backend) => {
                     *state.process.lock().expect("backend state lock") = Some(backend);
                 }
@@ -174,10 +174,14 @@ pub fn run() {
         .expect("error while running InkMoment desktop shell");
 }
 
-fn start_backend() -> Result<BackendProcess, String> {
+fn start_backend(app_handle: &AppHandle) -> Result<BackendProcess, String> {
+    if use_bundled_sidecar() {
+        return start_bundled_sidecar(app_handle);
+    }
+
     let app_root = resolve_app_root()?;
     let python = resolve_python(&app_root);
-    let mut child = Command::new(&python)
+    let child = Command::new(&python)
         .current_dir(&app_root)
         .arg("app.py")
         .args(["--host", "127.0.0.1", "--port", "0", "--no-browser", "--json-ready"])
@@ -195,6 +199,47 @@ fn start_backend() -> Result<BackendProcess, String> {
             )
         })?;
 
+    finish_backend_start(child)
+}
+
+fn start_bundled_sidecar(app_handle: &AppHandle) -> Result<BackendProcess, String> {
+    let resource_dir = app_handle
+        .path()
+        .resource_dir()
+        .map_err(|err| format!("无法解析 Tauri 资源目录：{err}"))?;
+    let sidecar = bundled_sidecar_path(&resource_dir)
+        .ok_or_else(|| format!("找不到打包后的 Python sidecar：{}", resource_dir.display()))?;
+
+    let child = Command::new(&sidecar)
+        .args(["--host", "127.0.0.1", "--port", "0", "--no-browser", "--json-ready"])
+        .env("INKMOMENT_DEV_ORIGINS", merged_backend_origins())
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|err| format!("无法启动打包后的 Python sidecar：{}；path={}", err, sidecar.display()))?;
+
+    finish_backend_start(child)
+}
+
+fn bundled_sidecar_path(resource_dir: &Path) -> Option<PathBuf> {
+    let mut base_names = vec!["inkmoment-sidecar".to_string()];
+    if let Some(target) = option_env!("TARGET") {
+        base_names.push(format!("inkmoment-sidecar-{target}"));
+    }
+    for base_name in base_names {
+        let mut candidate = resource_dir.join(base_name);
+        if cfg!(windows) {
+            candidate.set_extension("exe");
+        }
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+    }
+    None
+}
+
+fn finish_backend_start(mut child: Child) -> Result<BackendProcess, String> {
     let stdout = child
         .stdout
         .take()
@@ -240,6 +285,10 @@ fn start_backend() -> Result<BackendProcess, String> {
             pid: ready.pid,
         },
     })
+}
+
+fn use_bundled_sidecar() -> bool {
+    matches!(env::var("INKMOMENT_USE_BUNDLED_SIDECAR"), Ok(value) if value == "1" || value.eq_ignore_ascii_case("true"))
 }
 
 fn resolve_app_root() -> Result<PathBuf, String> {

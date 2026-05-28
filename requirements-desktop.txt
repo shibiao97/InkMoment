@@ -1,0 +1,2 @@
+# Desktop packaging only. Runtime dependencies stay in requirements.txt.
+pyinstaller>=6.10
