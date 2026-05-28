@@ -186,6 +186,7 @@ onUnmounted(() => {
     :returning-home="resetting"
     @back-home="backHome"
     @continue-arena="enterArena"
+    @job-started="enterProcessing"
   />
   <main v-else class="app-shell app-boot-shell">
     <div class="app-boot-panel">

@@ -1,5 +1,5 @@
 import { computed, ref } from "vue";
-import { getSkipped, getStatus, getWinners, openFolder, reopenGroup } from "../api/inkmoment";
+import { getSkipped, getStatus, getWinners, openFolder, reopenGroup, startJob } from "../api/inkmoment";
 import { openDesktopPath } from "../api/runtime";
 
 function groupBySize(winners) {
@@ -12,12 +12,38 @@ function groupBySize(winners) {
   return [...buckets.entries()].map(([title, items]) => ({ title, items }));
 }
 
+function addDefined(payload, key, value) {
+  if (value !== null && value !== undefined && value !== "") {
+    payload[key] = value;
+  }
+}
+
+function buildRedoPayload(currentStatus) {
+  if (!currentStatus?.folder) return null;
+  const payload = {
+    folder: currentStatus.folder,
+    dry_run: Boolean(currentStatus.dry_run),
+    wipe_cache: true,
+    mode: currentStatus.mode || "copy",
+    engine: currentStatus.engine || "fast",
+    prescreen_enabled: Boolean(currentStatus.prescreen_enabled),
+    face_aware: Boolean(currentStatus.face_aware),
+    llm_model: currentStatus.llm_model || "",
+  };
+  addDefined(payload, "threshold_near", currentStatus.threshold_near);
+  addDefined(payload, "threshold_far", currentStatus.threshold_far);
+  addDefined(payload, "near_seconds", currentStatus.near_seconds);
+  addDefined(payload, "prescreen_strength", currentStatus.prescreen_strength);
+  return payload;
+}
+
 export function useDoneResults() {
   const status = ref(null);
   const winners = ref([]);
   const skipped = ref([]);
   const loading = ref(false);
   const opening = ref(false);
+  const redoing = ref(false);
   const reopeningGroupId = ref("");
   const error = ref("");
 
@@ -47,13 +73,14 @@ export function useDoneResults() {
 
   const statusLabel = computed(() => {
     if (error.value) return "结果需要处理";
+    if (redoing.value) return "正在重做";
     if (loading.value) return "读取结果";
     return `留下 ${kept.value.toLocaleString()} 张`;
   });
 
   const statusState = computed(() => {
     if (error.value) return "error";
-    if (loading.value || opening.value || reopeningGroupId.value) return "busy";
+    if (loading.value || opening.value || redoing.value || reopeningGroupId.value) return "busy";
     return "done";
   });
 
@@ -115,6 +142,25 @@ export function useDoneResults() {
     }
   }
 
+  async function redoCurrentSession() {
+    const payload = buildRedoPayload(status.value);
+    if (!payload) {
+      error.value = "没有可重做的会话";
+      return null;
+    }
+    redoing.value = true;
+    error.value = "";
+    try {
+      await startJob(payload);
+      return payload;
+    } catch (err) {
+      error.value = err.message || "重做失败";
+      return null;
+    } finally {
+      redoing.value = false;
+    }
+  }
+
   return {
     status,
     winners,
@@ -129,10 +175,12 @@ export function useDoneResults() {
     statusState,
     loading,
     opening,
+    redoing,
     reopeningGroupId,
     error,
     load,
     openOutputFolder,
     reopenWinnerGroup,
+    redoCurrentSession,
   };
 }

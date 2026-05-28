@@ -15,7 +15,7 @@ defineProps({
   },
 });
 
-const emit = defineEmits(["back-home", "continue-arena"]);
+const emit = defineEmits(["back-home", "continue-arena", "job-started"]);
 
 const { theme } = useTheme();
 const {
@@ -31,11 +31,13 @@ const {
   statusState,
   loading,
   opening,
+  redoing,
   reopeningGroupId,
   error,
   load,
   openOutputFolder,
   reopenWinnerGroup,
+  redoCurrentSession,
 } = useDoneResults();
 const watermark = useWatermarkExport();
 
@@ -43,6 +45,7 @@ const winnersPath = computed(() => status.value?.folder ? `${status.value.folder
 const losersPath = computed(() => status.value?.folder ? `${status.value.folder}/losers` : "");
 const hasUnfinished = computed(() => (status.value?.unfinished_groups || 0) > 0);
 const canWatermark = computed(() => winners.value.length > 0 && !status.value?.dry_run);
+const canRedo = computed(() => Boolean(status.value?.folder) && !loading.value && !redoing.value);
 const watermarkPreviewSrc = computed(() => {
   return watermark.preview.value?.image_b64
     ? `data:image/jpeg;base64,${watermark.preview.value.image_b64}`
@@ -91,6 +94,18 @@ async function reopenGroupFromWinner(groupId) {
   }
 }
 
+async function redoCurrentFolder() {
+  if (!status.value?.folder || redoing.value) return;
+  const ok = window.confirm(
+    `重做这个文件夹\n\n将清掉 ${status.value.folder}/winners 与 /losers 子目录、所有缓存与本次进度，并用同样设置重新分析。此操作不可撤销。`,
+  );
+  if (!ok) return;
+  const payload = await redoCurrentSession();
+  if (payload) {
+    emit("job-started", payload);
+  }
+}
+
 onMounted(loadPage);
 </script>
 
@@ -107,6 +122,14 @@ onMounted(loadPage);
       <div class="done-actions">
         <button class="btn-ghost" type="button" :disabled="opening" @click="openOutputFolder">
           {{ opening ? "打开中" : "打开文件夹" }}
+        </button>
+        <button
+          class="btn-ghost"
+          type="button"
+          :disabled="!canRedo || returningHome"
+          @click="redoCurrentFolder"
+        >
+          {{ redoing ? "重做中" : "重做本次" }}
         </button>
         <button
           class="btn-primary"
