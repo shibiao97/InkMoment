@@ -321,7 +321,7 @@ async function handleStart() {
 
       <p class="form-error">{{ startError }}</p>
       <p v-if="lastStartPayload" class="start-note">
-        已向 Flask API 发起任务。Vue 迁移版的处理页将在后续迭代接入。
+        已向 Flask API 发起任务，正在进入 Vue 处理页。
       </p>
     </form>
   </main>

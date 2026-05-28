@@ -2,6 +2,7 @@
 import { computed, onMounted, watch } from "vue";
 import ErrorPanel from "../components/ErrorPanel.vue";
 import NextStepPanel from "../components/NextStepPanel.vue";
+import ProcessingPhotoWall from "../components/ProcessingPhotoWall.vue";
 import StatusBadge from "../components/StatusBadge.vue";
 import { useJobPolling } from "../composables/useJobPolling";
 import { useNextStep } from "../composables/useNextStep";
@@ -144,6 +145,8 @@ onMounted(start);
 
     <ErrorPanel :title="processingErrorTitle" :message="processingErrorMessage" />
 
+    <ProcessingPhotoWall :events="events" :status="job?.status || ''" />
+
     <NextStepPanel
       v-if="job?.status === 'done'"
       :next-step="nextStep"
@@ -177,7 +180,7 @@ onMounted(start);
     </section>
 
     <p class="start-note">
-      Vue 迁移版已接入基础处理进度和初筛复核入口。分组预览、擂台页将在后续迭代接入。
+      照片墙会跟随实时事件更新；进入分组阶段后会收拢展示，稍后进入下一步。
     </p>
   </main>
 </template>

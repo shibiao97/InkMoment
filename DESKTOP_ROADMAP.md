@@ -47,7 +47,7 @@
 
 - 已建立 `api/`、`composables/`、`components/`、`views/` 目录结构。
 - 已迁移 `LandingView` 的品牌配置、主题选择、模式选择、文件夹路径输入、文件夹快照和 `/api/start` 请求封装。
-- 已新增 `ProcessingView` 和 `useJobPolling()`，接入 `/api/job?since=` 增量轮询、基础进度条、计数器、实时事件列表和 `/api/cancel_job` 中止请求。
+- 已新增 `ProcessingView`、`ProcessingPhotoWall` 和 `useJobPolling()`，接入 `/api/job?since=` 增量轮询、基础进度条、计数器、实时事件列表、照片墙动画和 `/api/cancel_job` 中止请求。
 - 已新增 `useNextStep()` 与 `NextStepPanel`，ProcessingView 完成后会读取 `/api/status` 并判断下一步是初筛复核、分组预览、继续选片还是完成页。
 - 已新增 `PrescreenView` 和 `usePrescreenReview()`，接入 `/api/auto_rejected`、`/api/restore_rejected`、`/api/confirm_prescreen` 与 `/api/grouping_progress`，支持查看自动放手照片、按原因筛选、单张/全部恢复、确认后轮询异步分组状态。
 - 已新增 `PreviewView` 和 `usePreviewGroups()`，接入 `/api/preview_groups` 与 `/api/regroup`，支持按拍摄时间章节查看连拍分组、标记 AI 候选、调整阈值后重新分组。
@@ -58,7 +58,7 @@
 - 已新增 Vue 启动状态恢复：入口加载时读取 `/api/job` 与 `/api/status`，自动恢复到处理中、初筛复核、分组预览、选片、完成页或首页。
 - Vue 开发联调需要通过 `INKMOMENT_DEV_ORIGINS=http://127.0.0.1:5173` 显式允许 Vite 开发源访问 Flask API。
 - 土豪模式的模型服务地址/API Key 管理已迁移到 Vue 首页，接入 `/api/ark_key`、`/api/llm_models`、`/api/llm_concurrency` 与 `/api/diagnostics`，可保存配置、刷新模型并选择视觉模型启动任务。
-- ProcessingView 目前是基础进度页，PrescreenView 是基础复核页，PreviewView 是基础分组预览页，ArenaView 已覆盖常用双图选片、单图复核、快捷键和缩放查看，DoneView 已覆盖基础完成结果、水印导出、跨组反悔入口和重做本次流程；Vue 主流程已具备统一回首页重置、回首页 loading 状态、共享错误提示、共享 loading 状态和启动状态恢复；照片墙动画仍需继续迁移。
+- ProcessingView 已覆盖基础进度、实时事件、照片墙动画和中止分析，PrescreenView 是基础复核页，PreviewView 是基础分组预览页，ArenaView 已覆盖常用双图选片、单图复核、快捷键和缩放查看，DoneView 已覆盖基础完成结果、水印导出、跨组反悔入口和重做本次流程；Vue 主流程已具备统一回首页重置、回首页 loading 状态、共享错误提示、共享 loading 状态和启动状态恢复。
 
 ### Phase 3: Flask 后端模块化
 

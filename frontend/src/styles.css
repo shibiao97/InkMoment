@@ -1,6 +1,11 @@
 :root {
   color: #1f2922;
   background: #fbfcf4;
+  --cat-blur: #cc785c;
+  --cat-eyes: #7d5e8e;
+  --cat-exposure: #b58420;
+  --cat-comp: #4a6e7a;
+  --cat-format: #6b6256;
   font-family: -apple-system, BlinkMacSystemFont, "Inter", "PingFang SC", "Helvetica Neue", sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -584,6 +589,7 @@ input:disabled {
 }
 
 .progress-panel,
+.processing-wall-panel,
 .event-panel,
 .error-panel,
 .loading-state {
@@ -595,6 +601,242 @@ input:disabled {
 
 .progress-panel {
   padding: 18px;
+}
+
+.processing-wall-panel {
+  margin-top: 14px;
+  padding: 18px;
+}
+
+.processing-wall-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.processing-wall-head h2 {
+  margin: 0;
+  color: #1f2922;
+  font-size: 22px;
+}
+
+.processing-wall-head .eyebrow {
+  margin-bottom: 8px;
+}
+
+.processing-wall-head span {
+  color: #607063;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 12px;
+}
+
+.processing-photo-wall {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(10, minmax(0, 1fr));
+  gap: 8px;
+  min-height: 330px;
+  padding: 16px 0;
+  border-top: 1px solid #edf3e1;
+  border-bottom: 1px solid #edf3e1;
+}
+
+.wall-cell-vue {
+  position: relative;
+  aspect-ratio: 4 / 5;
+  overflow: hidden;
+  background: rgba(237, 243, 225, 0.45);
+  border: 1px dashed rgba(183, 201, 174, 0.7);
+  border-radius: 6px;
+  transition:
+    border-color 0.4s ease,
+    box-shadow 0.5s ease,
+    background-color 0.4s ease,
+    transform 0.7s ease,
+    opacity 0.5s ease;
+}
+
+.wall-cell-vue.loaded {
+  background: #ffffff;
+  border-color: transparent;
+  box-shadow:
+    0 1px 1px rgba(31, 41, 34, 0.04),
+    0 5px 16px rgba(31, 41, 34, 0.08);
+}
+
+.wall-cell-vue.leaving .wall-image-vue,
+.wall-cell-vue.leaving .wall-overlay-vue,
+.wall-cell-vue.leaving::before {
+  opacity: 0;
+  transition: opacity 0.22s ease;
+}
+
+.wall-image-vue {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  background: #edf3e1;
+  opacity: 0;
+  transition: opacity 0.5s ease;
+}
+
+.wall-cell-vue.loaded .wall-image-vue {
+  opacity: 1;
+}
+
+.wall-cell-vue.loaded.rejected .wall-image-vue,
+.wall-cell-vue.loaded.error .wall-image-vue {
+  filter: brightness(0.62) saturate(0.78) contrast(0.95);
+}
+
+.wall-cell-vue.rejected::before {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 3;
+  width: 3px;
+  background: var(--cell-cat, var(--accent));
+  content: "";
+  opacity: 0;
+  transition: opacity 0.5s ease 0.08s;
+}
+
+.wall-cell-vue.loaded.rejected::before {
+  opacity: 1;
+}
+
+.wall-cell-vue.cat-blur {
+  --cell-cat: var(--cat-blur);
+}
+
+.wall-cell-vue.cat-eyes {
+  --cell-cat: var(--cat-eyes);
+}
+
+.wall-cell-vue.cat-exposure {
+  --cell-cat: var(--cat-exposure);
+}
+
+.wall-cell-vue.cat-comp {
+  --cell-cat: var(--cat-comp);
+}
+
+.wall-cell-vue.cat-format {
+  --cell-cat: var(--cat-format);
+}
+
+.wall-cell-vue.cat-other {
+  --cell-cat: #607063;
+}
+
+.wall-overlay-vue {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  padding: 10px;
+  background:
+    linear-gradient(180deg, transparent 0%, rgba(31, 41, 34, 0) 38%, rgba(31, 41, 34, 0.72) 100%);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.5s ease 0.14s;
+}
+
+.wall-cell-vue.loaded.rejected .wall-overlay-vue,
+.wall-cell-vue.loaded.error .wall-overlay-vue {
+  opacity: 1;
+}
+
+.overlay-cat-vue,
+.overlay-reason-vue {
+  display: block;
+}
+
+.overlay-cat-vue {
+  margin-bottom: 2px;
+  color: var(--cell-cat, #dbe6d4);
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 9px;
+  letter-spacing: 0.16em;
+}
+
+.overlay-reason-vue {
+  display: -webkit-box;
+  overflow: hidden;
+  color: #fbfcf4;
+  font-size: 12px;
+  line-height: 1.25;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.42);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.wall-cell-vue.ok::after {
+  position: absolute;
+  top: 9px;
+  right: 9px;
+  z-index: 3;
+  width: 4px;
+  height: 4px;
+  background: #78a881;
+  border-radius: 50%;
+  content: "";
+  opacity: 0;
+  transition: opacity 0.4s ease 0.2s;
+}
+
+.wall-cell-vue.loaded.ok::after {
+  opacity: 0.55;
+}
+
+.processing-photo-wall.collecting {
+  pointer-events: none;
+}
+
+.processing-photo-wall.collecting .wall-cell-vue.loaded {
+  opacity: 0.68;
+  transform: scale(0.82) rotate(-1deg);
+}
+
+.processing-photo-wall.collecting .wall-cell-vue.loaded:nth-child(2n) {
+  transform: scale(0.82) rotate(1.2deg);
+}
+
+.wall-deck-overlay-vue {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: grid;
+  place-items: center;
+  background: rgba(251, 252, 244, 0.52);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.5s ease;
+}
+
+.wall-deck-overlay-vue.visible {
+  opacity: 1;
+}
+
+.deck-label-vue {
+  padding: 10px 14px;
+  color: #303b33;
+  background: rgba(255, 255, 255, 0.86);
+  border: 1px solid #dbe6d4;
+  border-radius: 999px;
+  box-shadow: 0 12px 28px rgba(31, 41, 34, 0.12);
+  font-size: 14px;
+  animation: deck-pulse-vue 1.8s ease-in-out infinite;
+}
+
+@keyframes deck-pulse-vue {
+  0%, 100% { opacity: 0.68; }
+  50% { opacity: 1; }
 }
 
 .progress-head,
@@ -1987,5 +2229,15 @@ input:disabled {
 
   .sliders label {
     grid-template-columns: 1fr;
+  }
+
+  .processing-photo-wall {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    min-height: 0;
+  }
+
+  .processing-wall-head {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
