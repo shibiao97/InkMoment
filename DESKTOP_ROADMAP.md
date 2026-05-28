@@ -145,7 +145,7 @@ server/
 ## 当前决策
 
 - 现在不迁 FastAPI。Flask 对本地单机工具足够，当前收益更高的是模块化。
-- 现在不直接引入 Tauri。先稳定 Vue 与 API 边界，避免三条技术线同时变动。
+- Tauri 已进入预接入阶段：先完成最小桌面壳加载 Vue build，Python sidecar 启动与完整打包链继续分步推进。
 - 构建产物先放 `static/vue/`，后续再决定是否替换根入口。
 - 桌面壳路线锁定为 Tauri 2 + Vue 3 + Python sidecar：Tauri 负责窗口、权限和进程生命周期；Flask 只作为本地 API 进程存在；图像算法继续留在 Python 包内。
 - 本地持久化后续优先补 SQLite，用于项目记录、用户设置、任务历史和桌面版恢复现场；先不引入远端数据库。
@@ -214,10 +214,18 @@ Task:
 
 Task:
 
-- [ ] 新增 `src-tauri/`，加载 Vue build。
-- [ ] 配置窗口、权限和资源路径。
+- [x] 新增 `src-tauri/`，加载 Vue build。
+- [x] 配置窗口、权限和资源路径。
 - [ ] 打通 Tauri 启动 Python sidecar、动态端口注入和健康检查。
 - [ ] 退出应用时释放 sidecar，后端异常时 UI 展示可理解错误。
+
+当前进展：
+
+- 已新增 Tauri 2 最小壳：`src-tauri/`、窗口配置、默认权限、Cargo 配置和 npm 启动脚本。
+- 已配置 Tauri dev 加载 Vite dev server，build 加载 `static/vue/`。
+- 已新增 `rust-toolchain.toml` 固定 Rust 1.88.0，满足当前 Tauri 2.11 依赖的最低编译版本。
+- 已使用项目默认 logo 补齐临时桌面图标，后续正式打包前再替换为完整 icon set。
+- 已验证 `cargo check` 和 `npm run frontend:build` 通过；Python sidecar 启动、动态端口注入和退出释放仍待实现。
 
 验收：
 
@@ -265,8 +273,8 @@ Task:
 
 建议顺序：
 
-1. 新增 `src-tauri/`，先只加载 Vue build，不启动 Python sidecar。
-2. 增加 Tauri 配置，限制窗口、权限和资源路径。
+1. 新增 `src-tauri/`，先只加载 Vue build，不启动 Python sidecar。已完成最小壳。
+2. 增加 Tauri 配置，限制窗口、权限和资源路径。已完成基础窗口、资源和默认权限配置。
 3. 将 Flask 启动封装成稳定的 sidecar 命令，支持动态端口和健康检查。
 4. 加入后端异常退出提示、退出时释放 sidecar、打开目录等桌面能力。
 

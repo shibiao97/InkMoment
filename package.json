@@ -7,6 +7,11 @@
   "scripts": {
     "frontend:dev": "npm --workspace frontend run dev",
     "frontend:build": "npm --workspace frontend run build",
-    "frontend:preview": "npm --workspace frontend run preview"
+    "frontend:preview": "npm --workspace frontend run preview",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.11.2"
   }
 }

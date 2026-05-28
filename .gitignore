@@ -20,6 +20,10 @@ node_modules/
 frontend/node_modules/
 static/vue/
 
+# ===== Tauri / Rust 构建产物 =====
+src-tauri/target/
+src-tauri/gen/schemas/
+
 # ===== 依赖 stamp =====
 .inkmoment_deps.stamp
 .inkmoment_install.json

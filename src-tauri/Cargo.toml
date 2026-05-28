@@ -1,0 +1,19 @@
+[package]
+name = "inkmoment"
+version = "0.1.0"
+description = "InkMoment desktop shell"
+authors = ["InkMoment"]
+edition = "2021"
+license = "MIT"
+
+[lib]
+name = "inkmoment_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.4.1", features = [] }
+
+[dependencies]
+tauri = { version = "2.11.2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
