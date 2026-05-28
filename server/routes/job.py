@@ -3,13 +3,23 @@ from flask import Blueprint, Response, jsonify, request
 from server.services.job_service import cancel_job, list_job_logs, read_job_log, serialize_job
 
 
-def create_job_blueprint(get_job, get_job_log, get_session=None, jobs_dir_factory=None):
+def create_job_blueprint(
+    get_job,
+    get_job_log,
+    get_session=None,
+    jobs_dir_factory=None,
+    after_cancel=None,
+):
     job_bp = Blueprint("job", __name__)
 
     @job_bp.route("/api/cancel_job", methods=["POST"])
     def api_cancel_job():
         """中止当前任务。JOB 不在或已经结束时也视为已满足停止意图。"""
-        return jsonify(cancel_job(get_job(), get_job_log()))
+        job = get_job()
+        payload = cancel_job(job, get_job_log())
+        if after_cancel is not None and job is not None:
+            after_cancel(job)
+        return jsonify(payload)
 
     @job_bp.route("/api/job")
     def api_job():

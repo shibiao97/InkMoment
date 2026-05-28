@@ -22,6 +22,10 @@ export function getJob(since = 0) {
   return fetchJSON(`/api/job?since=${encodeURIComponent(String(since))}`);
 }
 
+export function getTaskHistory(limit = 20) {
+  return fetchJSON(`/api/task_history?limit=${encodeURIComponent(String(limit))}`);
+}
+
 export function cancelJob() {
   return fetchJSON("/api/cancel_job", {
     method: "POST",

@@ -267,12 +267,14 @@ Task:
 
 - 已新增 `server.state.local_store.LocalStateStore`，使用 Python 标准库 SQLite 管理本地状态库。
 - 已提供跨平台默认数据库路径解析、schema 初始化、键值设置读写和任务历史写入/查询。
-- 已补充单元测试覆盖路径约定、schema 迁移记录、设置 round-trip、任务历史更新和必填字段校验。
+- 已新增 `server.services.task_history_service`，在 `/api/start` 创建任务时写入 running 记录，在 done/error/cancelled 终态更新同一条任务历史。
+- 已新增 `/api/task_history` 只读接口和前端 API 封装，供后续桌面首页展示最近项目。
+- 已补充单元测试覆盖路径约定、schema 迁移记录、设置 round-trip、任务历史更新、生命周期记录和必填字段校验。
 
 后续建议：
 
 1. 将主题、最近文件夹、模型服务非敏感设置迁入 `settings`。
-2. 在任务开始/完成/失败时写入 `task_history`，供桌面首页展示最近项目。
+2. 在 Vue 首页展示最近项目，并支持一键打开历史文件夹或继续当前会话。
 3. 设计恢复现场字段后，再替代当前分散的 JSON 进度状态。
 
 完成标准：

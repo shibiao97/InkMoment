@@ -2,6 +2,7 @@ import os
 import sqlite3
 import tempfile
 import unittest
+from contextlib import closing
 from pathlib import Path
 
 from server.state.local_store import (
@@ -9,6 +10,28 @@ from server.state.local_store import (
     LocalStateStore,
     default_state_dir,
 )
+from server.services.task_history_service import (
+    job_history_payload,
+    record_job_finished,
+    record_job_started,
+)
+
+
+class FakeJob:
+    task_id = "job-1"
+    folder = "/photos/a"
+    status = "done"
+    mode = "copy"
+    engine = "fast"
+    dry_run = False
+    started_at = 10.0
+    finished_at = 20.0
+    done = 3
+    total = 5
+    label = "完成"
+    skipped = [("/photos/a/bad.jpg", "decode_error")]
+    recent_events = [{"reject": True}, {"reject": False}]
+    error = None
 
 
 class LocalStateStoreTest(unittest.TestCase):
@@ -48,7 +71,7 @@ class LocalStateStoreTest(unittest.TestCase):
         self.assertEqual(store.get_setting("recent_folder"), str(self.tmp_path / "photos"))
         self.assertEqual(store.get_setting("missing", default="fallback"), "fallback")
 
-        with sqlite3.connect(store.path) as conn:
+        with closing(sqlite3.connect(store.path)) as conn:
             version = conn.execute("SELECT version FROM schema_migrations").fetchone()[0]
         self.assertEqual(version, 1)
 
@@ -111,6 +134,47 @@ class LocalStateStoreTest(unittest.TestCase):
                 "started_at": 1.0,
             })
 
+    def test_task_history_service_records_job_lifecycle(self):
+        store = LocalStateStore(self.tmp_path / DB_FILE_NAME)
+        job = FakeJob()
+        job.status = "pending"
+        job.finished_at = 0.0
+
+        record_job_started(store, job)
+        job.status = "done"
+        job.finished_at = 20.0
+        record_job_finished(store, job)
+
+        tasks = store.list_recent_tasks()
+        self.assertEqual(tasks[0]["id"], "job-1")
+        self.assertEqual(tasks[0]["status"], "done")
+        self.assertEqual(tasks[0]["summary"]["skipped_count"], 1)
+        self.assertEqual(tasks[0]["summary"]["rejected_running"], 1)
+
+    def test_task_history_service_updates_cancelled_job(self):
+        store = LocalStateStore(self.tmp_path / DB_FILE_NAME)
+        job = FakeJob()
+        job.status = "pending"
+        job.finished_at = 0.0
+
+        record_job_started(store, job)
+        job.status = "cancelled"
+        job.finished_at = 12.0
+        record_job_finished(store, job)
+
+        task = store.list_recent_tasks()[0]
+        self.assertEqual(task["status"], "cancelled")
+        self.assertEqual(task["finished_at"], 12.0)
+
+    def test_job_history_payload_uses_running_without_mutating_job(self):
+        job = FakeJob()
+        job.status = "pending"
+
+        payload = job_history_payload(job, status="running")
+
+        self.assertEqual(payload["status"], "running")
+        self.assertEqual(job.status, "pending")
+
     @staticmethod
     def _restore_env(name, value):
         if value is None:
@@ -121,4 +185,3 @@ class LocalStateStoreTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

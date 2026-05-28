@@ -46,6 +46,7 @@ from server.routes.selection import create_selection_blueprint
 from server.routes.session import create_session_blueprint
 from server.routes.start import create_start_blueprint
 from server.routes.system import create_system_blueprint
+from server.routes.task_history import create_task_history_blueprint
 from server.routes.watermark import create_watermark_blueprint
 from server.services.llm_service import load_llm_config_from_file
 from server.services.job_runner_service import (
@@ -69,6 +70,10 @@ from server.services.start_service import (
     build_pending_job,
     parse_start_request,
 )
+from server.services.task_history_service import (
+    record_job_finished,
+    record_job_started,
+)
 from server.services.watermark_service import (
     WatermarkJobState,
     watermark_cancel_payload,
@@ -79,6 +84,7 @@ from server.services.watermark_service import (
     watermark_templates_payload,
 )
 from server.services.result_service import restore_rejected_payload
+from server.state.local_store import LocalStateStore
 
 try:
     from pillow_heif import register_heif_opener
@@ -165,6 +171,7 @@ class JobState:
     """异步分组任务的进度。"""
     folder: str
     dry_run: bool
+    task_id: str = field(default_factory=lambda: uuid.uuid4().hex)
     mode: str = "copy"
     engine: str = "fast"
     status: str = "pending"  # pending | scanning | hashing | grouping | done | error | cancelled
@@ -479,9 +486,16 @@ class AppRuntime:
     grouping: dict = field(default_factory=_new_grouping_state)
     lock: object = field(default_factory=threading.Lock)
     job_log_lock: object = field(default_factory=threading.Lock)
+    state_store: Optional[LocalStateStore] = None
 
 
 RUNTIME = AppRuntime()
+
+
+def _state_store() -> LocalStateStore:
+    if RUNTIME.state_store is None:
+        RUNTIME.state_store = LocalStateStore()
+    return RUNTIME.state_store
 
 
 def _open_job_log(folder: str, engine: str, llm_model: Optional[str]) -> Optional[JobLogger]:
@@ -1793,14 +1807,17 @@ def _run_job(folder: str, dry_run: bool, mode: str, wipe_cache: bool,
     write_job_header(jlog, config)
     try:
         run_job_pipeline(job, config, jlog, callbacks)
+        record_job_finished(_state_store(), job, logger)
     except CancelledError:
         # 状态可能已由 api_cancel_job 提前置位
         mark_job_cancelled(job)
+        record_job_finished(_state_store(), job, logger)
         logger.info("job cancelled")
         write_status_footer(jlog, "cancelled")
     except Exception as e:
         logger.exception("job error")
         mark_job_error(job, e, _classify_job_error)
+        record_job_finished(_state_store(), job, logger)
         write_status_footer(jlog, "error", str(e))
     finally:
         teardown_job_runner_resources(resources, _close_job_log)
@@ -1826,7 +1843,10 @@ def _start_job_payload(data: dict) -> tuple[dict, int]:
         # 一次性运行：始终全新开始，不读旧 state，不复用缓存。
         # 旧的 state.json / winners / losers 由 _run_job 里的 _wipe_caches 清掉。
         RUNTIME.job = build_pending_job(JobState, start_request)
+        RUNTIME.job.started_at = time.time()
+        record_job_started(_state_store(), RUNTIME.job, logger)
         RUNTIME.session = None
+        task_id = RUNTIME.job.task_id
 
     t = threading.Thread(
         target=_run_job,
@@ -1834,7 +1854,7 @@ def _start_job_payload(data: dict) -> tuple[dict, int]:
         daemon=True,
     )
     t.start()
-    return {"ok": True}, 200
+    return {"ok": True, "task_id": task_id}, 200
 
 
 def _set_watermark_job(job: WatermarkJobState) -> None:
@@ -1951,6 +1971,7 @@ def create_app() -> Flask:
         lambda: RUNTIME.job_log,
         lambda: RUNTIME.session,
         lambda folder: pic_dir(folder) / "jobs",
+        after_cancel=lambda job: record_job_finished(_state_store(), job, logger),
     ))
     flask_app.register_blueprint(create_grouping_blueprint(
         lambda: RUNTIME.session,
@@ -1998,6 +2019,9 @@ def create_app() -> Flask:
     ))
     flask_app.register_blueprint(create_start_blueprint(
         lambda data: _start_job_payload(data),
+    ))
+    flask_app.register_blueprint(create_task_history_blueprint(
+        lambda limit: _state_store().list_recent_tasks(limit),
     ))
     flask_app.register_blueprint(create_watermark_blueprint(
         watermark_templates_payload,

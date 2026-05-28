@@ -5,7 +5,9 @@ import os
 import sqlite3
 import sys
 import time
+from contextlib import contextmanager
 from pathlib import Path
+from sqlite3 import Connection
 from typing import Any
 
 
@@ -43,7 +45,7 @@ class LocalStateStore:
 
     def initialize(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        with self.connect() as conn:
+        with self.connection() as conn:
             conn.executescript(
                 """
                 PRAGMA journal_mode = WAL;
@@ -86,8 +88,17 @@ class LocalStateStore:
         conn.row_factory = sqlite3.Row
         return conn
 
+    @contextmanager
+    def connection(self) -> Connection:
+        conn = self.connect()
+        try:
+            yield conn
+            conn.commit()
+        finally:
+            conn.close()
+
     def get_setting(self, key: str, default: Any = None) -> Any:
-        with self.connect() as conn:
+        with self.connection() as conn:
             row = conn.execute("SELECT value_json FROM settings WHERE key = ?", (key,)).fetchone()
         if row is None:
             return default
@@ -95,7 +106,7 @@ class LocalStateStore:
 
     def set_setting(self, key: str, value: Any) -> None:
         encoded = json.dumps(value, ensure_ascii=False, sort_keys=True)
-        with self.connect() as conn:
+        with self.connection() as conn:
             conn.execute(
                 """
                 INSERT INTO settings(key, value_json, updated_at)
@@ -114,7 +125,7 @@ class LocalStateStore:
             raise ValueError(f"task is missing required fields: {', '.join(missing)}")
 
         summary = task.get("summary") or {}
-        with self.connect() as conn:
+        with self.connection() as conn:
             conn.execute(
                 """
                 INSERT INTO task_history(
@@ -146,7 +157,7 @@ class LocalStateStore:
 
     def list_recent_tasks(self, limit: int = 20) -> list[dict[str, Any]]:
         bounded_limit = max(1, min(int(limit), 200))
-        with self.connect() as conn:
+        with self.connection() as conn:
             rows = conn.execute(
                 """
                 SELECT id, folder, status, mode, engine, dry_run, started_at, finished_at, summary_json

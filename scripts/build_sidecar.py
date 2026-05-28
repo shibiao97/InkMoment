@@ -80,6 +80,7 @@ def main() -> int:
         "server.routes.session",
         "server.routes.start",
         "server.routes.system",
+        "server.routes.task_history",
         "server.routes.watermark",
         "server.services.branding_service",
         "server.services.capability_service",
@@ -94,6 +95,7 @@ def main() -> int:
         "server.services.selection_service",
         "server.services.session_service",
         "server.services.start_service",
+        "server.services.task_history_service",
         "server.services.watermark_service",
         "server.state.local_store",
     ]
