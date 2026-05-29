@@ -7,6 +7,7 @@ from pathlib import Path
 
 from server.state.local_store import (
     DB_FILE_NAME,
+    SCHEMA_VERSION,
     LocalStateStore,
     default_state_dir,
 )
@@ -72,8 +73,8 @@ class LocalStateStoreTest(unittest.TestCase):
         self.assertEqual(store.get_setting("missing", default="fallback"), "fallback")
 
         with closing(sqlite3.connect(store.path)) as conn:
-            version = conn.execute("SELECT version FROM schema_migrations").fetchone()[0]
-        self.assertEqual(version, 1)
+            version = conn.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0]
+        self.assertEqual(version, SCHEMA_VERSION)
 
     def test_store_records_and_updates_task_history(self):
         store = LocalStateStore(self.tmp_path / DB_FILE_NAME)
@@ -133,6 +134,62 @@ class LocalStateStoreTest(unittest.TestCase):
                 "engine": "fast",
                 "started_at": 1.0,
             })
+
+    def test_image_analysis_cache_round_trips_and_invalidates_by_signature(self):
+        store = LocalStateStore(self.tmp_path / DB_FILE_NAME)
+        store.initialize()
+        photo = self.tmp_path / "photos" / "a.jpg"
+        photo.parent.mkdir()
+        photo.write_bytes(b"first")
+        signature = [{
+            "role": "primary",
+            "path": str(photo),
+            "size": photo.stat().st_size,
+            "mtime_ns": photo.stat().st_mtime_ns,
+        }]
+        payload = {
+            "path": str(photo),
+            "phash": "0" * 16,
+            "quality": {"quality_score": 72.5, "flags": ["blurry"]},
+        }
+
+        store.put_image_analysis(
+            path=str(photo),
+            folder=str(photo.parent),
+            engine="fast",
+            strength="standard",
+            face_aware=False,
+            llm_model=None,
+            input_signature=signature,
+            payload=payload,
+        )
+
+        cached = store.get_image_analysis(
+            path=str(photo),
+            engine="fast",
+            strength="standard",
+            face_aware=False,
+            llm_model=None,
+            input_signature=signature,
+        )
+        self.assertEqual(cached["quality"]["quality_score"], 72.5)
+        self.assertEqual(cached["quality"]["flags"], ["blurry"])
+
+        stale_signature = [dict(signature[0], size=999)]
+        self.assertIsNone(store.get_image_analysis(
+            path=str(photo),
+            engine="fast",
+            strength="standard",
+            face_aware=False,
+            llm_model=None,
+            input_signature=stale_signature,
+        ))
+
+        stats = store.image_analysis_stats(str(photo.parent))
+        self.assertEqual(stats["entries"], 1)
+        self.assertGreater(stats["payload_bytes"], 0)
+        self.assertEqual(store.clear_image_analysis(str(photo.parent)), 1)
+        self.assertEqual(store.image_analysis_stats(str(photo.parent))["entries"], 0)
 
     def test_task_history_service_records_job_lifecycle(self):
         store = LocalStateStore(self.tmp_path / DB_FILE_NAME)

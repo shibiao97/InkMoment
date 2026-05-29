@@ -22,6 +22,7 @@ export function useLlmConfig() {
   const saving = ref(false);
   const error = ref("");
   const message = ref("");
+  let modelsRequest = null;
 
   const configured = computed(() => Boolean(status.value?.configured));
   const modelReady = computed(() => configured.value && Boolean(selectedModel.value));
@@ -34,39 +35,73 @@ export function useLlmConfig() {
   }
 
   async function loadModels(force = false) {
+    if (modelsRequest) {
+      return modelsRequest;
+    }
     checkingModels.value = true;
-    try {
+    modelsRequest = (async () => {
       const payload = await getLlmModels(force);
-      models.value = payload.models || [];
+      models.value = normalizeModels(payload.models || []);
       unavailable.value = payload.unavailable || [];
-      if (!models.value.includes(selectedModel.value)) {
-        selectedModel.value = models.value[0] || "";
+      if (!models.value.some((model) => model.id === selectedModel.value)) {
+        selectedModel.value = models.value[0]?.id || "";
       }
       return payload;
+    })();
+    try {
+      return await modelsRequest;
     } finally {
       checkingModels.value = false;
+      modelsRequest = null;
     }
   }
 
-  async function loadSupplementalStatus() {
-    const [limitPayload, diagnosticsPayload] = await Promise.allSettled([
-      getLlmConcurrency(),
-      getDiagnostics(),
-    ]);
-    concurrency.value = limitPayload.status === "fulfilled" ? limitPayload.value : null;
-    diagnostics.value = diagnosticsPayload.status === "fulfilled" ? diagnosticsPayload.value : null;
+  async function loadSupplementalStatus({
+    includeConcurrency = true,
+    includeDiagnostics = true,
+  } = {}) {
+    const tasks = [];
+    if (includeConcurrency) {
+      tasks.push(["concurrency", getLlmConcurrency()]);
+    }
+    if (includeDiagnostics) {
+      tasks.push(["diagnostics", getDiagnostics()]);
+    }
+    if (!tasks.length) return;
+
+    const results = await Promise.allSettled(tasks.map(([, task]) => task));
+    tasks.forEach(([name], index) => {
+      const result = results[index];
+      if (name === "concurrency") {
+        concurrency.value = result.status === "fulfilled" ? result.value : null;
+      }
+      if (name === "diagnostics") {
+        diagnostics.value = result.status === "fulfilled" ? result.value : null;
+      }
+    });
+    if (!includeConcurrency) {
+      concurrency.value = null;
+    }
+    if (!includeDiagnostics) {
+      diagnostics.value = null;
+    }
   }
 
-  async function refresh({ forceModels = false } = {}) {
+  async function refresh({
+    forceModels = false,
+    includeModels = true,
+    includeConcurrency = true,
+    includeDiagnostics = true,
+  } = {}) {
     loading.value = true;
     error.value = "";
     message.value = "";
     try {
       await loadStatus();
-      await loadSupplementalStatus();
-      if (configured.value) {
+      await loadSupplementalStatus({ includeConcurrency, includeDiagnostics });
+      if (configured.value && includeModels) {
         await loadModels(forceModels);
-      } else {
+      } else if (!configured.value) {
         models.value = [];
         unavailable.value = [];
         selectedModel.value = "";
@@ -125,7 +160,7 @@ export function useLlmConfig() {
   }
 
   onMounted(() => {
-    refresh();
+    refresh({ includeModels: false, includeConcurrency: false, includeDiagnostics: false });
   });
 
   return {
@@ -149,4 +184,37 @@ export function useLlmConfig() {
     clearConfig,
     refreshModels,
   };
+}
+
+export function normalizeModels(rawModels) {
+  return rawModels
+    .map((model) => {
+      if (typeof model === "string") {
+        return { id: model, label: model, tier: "" };
+      }
+      if (!model || typeof model !== "object") {
+        return null;
+      }
+      const id = String(model.id || model.name || model.model || "").trim();
+      if (!id) return null;
+      return {
+        ...model,
+        id,
+        label: readableModelLabel(model) || id,
+      };
+    })
+    .filter(Boolean);
+}
+
+function readableModelLabel(model) {
+  for (const key of ["label", "display_name", "name", "model", "id"]) {
+    const value = model?.[key];
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+    if (typeof value === "number") {
+      return String(value);
+    }
+  }
+  return "";
 }

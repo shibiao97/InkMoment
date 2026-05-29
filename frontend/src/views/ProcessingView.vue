@@ -145,7 +145,7 @@ onMounted(start);
 
     <ErrorPanel :title="processingErrorTitle" :message="processingErrorMessage" />
 
-    <ProcessingPhotoWall :events="events" :status="job?.status || ''" />
+    <ProcessingPhotoWall :events="events" :status="job?.status || ''" :total="job?.total || 0" />
 
     <NextStepPanel
       v-if="job?.status === 'done'"
@@ -174,6 +174,17 @@ onMounted(start);
           <span class="event-name">{{ event.name || "—" }}</span>
           <span class="event-verdict">{{ event.verdict || "—" }}</span>
           <span class="event-reason">{{ event.reason || event.engine || "" }}</span>
+          <span v-if="event.signals?.length" class="event-signals">
+            <span
+              v-for="signal in event.signals"
+              :key="`${event.seq}-${signal.kind}-${signal.label}`"
+              class="event-signal"
+              :class="`is-${signal.kind}`"
+            >
+              <b>{{ signal.label }}</b>
+              {{ signal.value }}
+            </span>
+          </span>
         </article>
       </div>
       <p v-else class="empty-events">等待后台返回第一条图片记录...</p>

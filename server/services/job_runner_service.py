@@ -41,6 +41,7 @@ class JobRunnerCallbacks:
     publish_session: Callable
     logger: object
     cancelled_error: Callable
+    analysis_cache_factory: Optional[Callable] = None
 
 
 def setup_job_runner_resources(
@@ -153,8 +154,11 @@ def run_info_scan(
     cancel_check: Callable,
     event_cb: Callable,
     cancelled_error,
+    analysis_cache_factory: Optional[Callable] = None,
+    logger: object | None = None,
 ):
     mark_job_hashing(job, config.engine, config.llm_model)
+    analysis_cache = analysis_cache_factory(config.folder) if analysis_cache_factory else None
     infos, skipped = compute_infos(
         config.folder,
         progress=progress,
@@ -168,7 +172,13 @@ def run_info_scan(
         event_cb=event_cb,
         engine=config.engine,
         llm_model=config.llm_model,
+        cache_get=analysis_cache.get if analysis_cache else None,
+        cache_put=analysis_cache.put if analysis_cache else None,
     )
+    if analysis_cache:
+        stats = analysis_cache.stats()
+        if logger:
+            logger.info("[%s] analysis cache stats: %s", config.engine, stats)
     if cancel_check():
         raise cancelled_error()
     job.skipped = list(skipped)
@@ -261,14 +271,17 @@ def prepare_grouping_result(
     return session
 
 
-def run_job_pipeline(
+def ensure_not_cancelled(job, callbacks: JobRunnerCallbacks) -> None:
+    if callbacks.cancel_check() or job.status == "cancelled":
+        raise callbacks.cancelled_error()
+
+
+def run_dependency_check_stage(
     job,
     config: JobRunConfig,
     job_log,
     callbacks: JobRunnerCallbacks,
 ) -> None:
-    mark_job_started(job)
-
     # 启动期能力硬校验：缺一即报错，避免进入不可完成的任务状态。
     mark_job_checking(job, config.engine)
     write_job_event(job_log, "CHECK", f"engine={config.engine} 依赖校验中…")
@@ -280,6 +293,12 @@ def run_job_pipeline(
     callbacks.require_engine(config.engine)
     write_job_event(job_log, "CHECK", "依赖校验通过")
 
+
+def run_analysis_stage(
+    job,
+    config: JobRunConfig,
+    callbacks: JobRunnerCallbacks,
+):
     infos, skipped = run_info_scan(
         job,
         callbacks.compute_infos,
@@ -288,24 +307,41 @@ def run_job_pipeline(
         callbacks.cancel_check,
         callbacks.event_cb,
         callbacks.cancelled_error,
+        callbacks.analysis_cache_factory,
+        callbacks.logger,
     )
     callbacks.record_skipped(config.folder, skipped)
+    return infos, skipped
 
-    if config.prescreen_enabled:
-        session, rejected = prepare_prescreen_result(
-            infos,
-            config,
-            callbacks.prescreen_rejections,
-            callbacks.build_prescreen_session,
-            callbacks.logger,
-        )
-        if callbacks.cancel_check() or job.status == "cancelled":
-            raise callbacks.cancelled_error()
-        callbacks.publish_session(session, infos)
-        mark_job_prescreen_done(job, len(infos), len(rejected))
-        write_prescreen_footer(job_log, len(infos), len(rejected), job.label)
-        return
 
+def run_prescreen_stage(
+    job,
+    config: JobRunConfig,
+    job_log,
+    callbacks: JobRunnerCallbacks,
+    infos,
+) -> None:
+    session, rejected = prepare_prescreen_result(
+        infos,
+        config,
+        callbacks.prescreen_rejections,
+        callbacks.build_prescreen_session,
+        callbacks.logger,
+    )
+    ensure_not_cancelled(job, callbacks)
+    callbacks.publish_session(session, infos)
+    mark_job_prescreen_done(job, len(infos), len(rejected))
+    write_prescreen_footer(job_log, len(infos), len(rejected), job.label)
+
+
+def run_grouping_stage(
+    job,
+    config: JobRunConfig,
+    job_log,
+    callbacks: JobRunnerCallbacks,
+    infos,
+    skipped,
+) -> None:
     session = prepare_grouping_result(
         job,
         infos,
@@ -314,11 +350,27 @@ def run_job_pipeline(
         callbacks.build_session_from_groups,
         callbacks.save_state,
     )
-    if callbacks.cancel_check() or job.status == "cancelled":
-        raise callbacks.cancelled_error()
+    ensure_not_cancelled(job, callbacks)
     callbacks.publish_session(session, infos)
     mark_job_grouping_done(job, len(session.groups), len(skipped))
     write_grouping_footer(job_log, len(session.groups), len(skipped), job.label)
+
+
+def run_job_pipeline(
+    job,
+    config: JobRunConfig,
+    job_log,
+    callbacks: JobRunnerCallbacks,
+) -> None:
+    mark_job_started(job)
+    run_dependency_check_stage(job, config, job_log, callbacks)
+    infos, skipped = run_analysis_stage(job, config, callbacks)
+
+    if config.prescreen_enabled:
+        run_prescreen_stage(job, config, job_log, callbacks, infos)
+        return
+
+    run_grouping_stage(job, config, job_log, callbacks, infos, skipped)
 
 
 def mark_job_grouping_done(

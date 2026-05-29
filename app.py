@@ -16,9 +16,7 @@ import shutil
 import sys
 import threading
 import time
-import uuid
 import webbrowser
-from dataclasses import asdict, dataclass, field
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Callable, Optional
@@ -36,8 +34,11 @@ from inkmoment.grouper import (
     build_groups,
     group_infos,
 )
+from server.domain.models import GroupState, JobState, SessionState
 from server.routes.folder import create_folder_blueprint
 from server.routes.grouping import create_grouping_blueprint
+from server.routes.auth import create_auth_blueprint
+from server.routes.dependencies import create_dependencies_blueprint
 from server.routes.image import create_image_blueprint
 from server.routes.job import create_job_blueprint
 from server.routes.llm import llm_bp
@@ -49,6 +50,7 @@ from server.routes.system import create_system_blueprint
 from server.routes.task_history import create_task_history_blueprint
 from server.routes.watermark import create_watermark_blueprint
 from server.services.llm_service import load_llm_config_from_file
+from server.services.analysis_cache_service import ImageAnalysisCache
 from server.services.job_runner_service import (
     JobRunConfig,
     JobRunnerCallbacks,
@@ -65,10 +67,49 @@ from server.services.selection_service import (
     create_selection_handlers,
     serialize_group,
 )
+from server.services.session_builder_service import (
+    _prescreen_rejections,
+    build_prescreen_session_from_infos,
+    build_session_from_groups as _build_session_from_groups,
+)
+from server.services.session_apply_service import (
+    apply_group,
+    apply_pending_groups,
+    reopen_group,
+    unique_target as _unique_target,
+)
+from server.services.session_state_service import (
+    STATE_FILENAME,
+    group_from_dict as _group_from_dict,
+    load_state as load_session_state,
+    save_state,
+    state_path,
+)
 from server.services.start_service import (
     active_job_error,
     build_pending_job,
     parse_start_request,
+)
+from server.services.auth_client_service import (
+    AUTH_CHECK_INTERVAL_SECONDS,
+    AuthClientError,
+    AuthRuntime,
+    assert_authorized,
+    auth_summary,
+    clear_auth_runtime,
+    ensure_recent_authorization,
+    load_auth_runtime,
+    login as auth_login,
+    logout as auth_logout,
+    redeem_cdk as auth_redeem_cdk,
+    refresh_status as auth_refresh_status,
+    register as auth_register,
+    unbind_device as auth_unbind_device,
+)
+from server.services.dependency_service import (
+    DependencyDownloadManager,
+    configure_runtime_model_cache,
+    preflight_dependencies_payload,
 )
 from server.services.task_history_service import (
     record_job_finished,
@@ -85,6 +126,7 @@ from server.services.watermark_service import (
 )
 from server.services.result_service import restore_rejected_payload
 from server.state.local_store import LocalStateStore
+from server.runtime.app_runtime import AppRuntime, new_grouping_state as _new_grouping_state
 
 try:
     from pillow_heif import register_heif_opener
@@ -93,10 +135,7 @@ except Exception:
     pass
 
 
-STATE_FILENAME = ".inkmoment_state.json"
-STATE_SCHEMA = 6
 PIC_DIR = "_inkmoment"
-THUMB_MAX = 1600
 
 # 可选：用于脚本/curl 访问的 token（默认不开启）
 # 设置 INKMOMENT_TOKEN 环境变量即启用
@@ -108,93 +147,6 @@ DEV_ORIGINS = {
 }
 
 # ---------------- 状态 ----------------
-
-@dataclass
-class GroupState:
-    images: list[str]
-    pending: list[str] = field(default_factory=list)
-    left: Optional[str] = None
-    right: Optional[str] = None
-    losers: list[str] = field(default_factory=list)
-    winner: Optional[str] = None
-    # 通过"全要"决定共同获胜的图片（与 winner 一起进 winners/）
-    extra_winners: list[str] = field(default_factory=list)
-    finished: bool = False
-    applied: bool = False
-    id: str = field(default_factory=lambda: uuid.uuid4().hex)
-    move_log: list[dict] = field(default_factory=list)
-    auto_rejected: list[str] = field(default_factory=list)
-    auto_reject_reasons: dict[str, str] = field(default_factory=dict)
-    auto_selected: bool = False
-    manual_restored: list[str] = field(default_factory=list)
-
-
-@dataclass
-class SessionState:
-    folder: str
-    dry_run: bool
-    mode: str = "copy"                              # copy | move
-    engine: str = "fast"                            # fast | expert（极速 vs 专家）
-    groups: list[GroupState] = field(default_factory=list)
-    current_group: int = 0
-    threshold_near: int = THRESHOLD_NEAR
-    threshold_far: int = THRESHOLD_FAR
-    near_seconds: int = NEAR_SECONDS
-    prescreen_enabled: bool = True
-    prescreen_strength: str = "standard"
-    prescreen_reviewed: bool = False
-    prescreen_rejected: list[str] = field(default_factory=list)
-    prescreen_reject_reasons: dict[str, str] = field(default_factory=dict)
-    prescreen_restored: list[str] = field(default_factory=list)
-    # 撤销栈：每项 (group_index, group_snapshot_dict)，仅当前未完结组上允许
-    undo_stack: list[dict] = field(default_factory=list)
-    # 当前组与其它正在使用的图片的 EXIF 摘要（path -> dict）
-    meta: dict[str, dict] = field(default_factory=dict)
-    # ---- 偏好学习（Wave 3） ----
-    # 每次擂台选择都会更新：用户更倾向哪个维度。值是 (winner_value, loser_value) 累积。
-    # 用作 AI 候选排序的微调权重。
-    pref_decisions: int = 0
-    pref_aesthetic_chosen: float = 0.0   # 当美学分高的被选时 += 1
-    pref_aesthetic_passed: float = 0.0   # 当美学分高的未被选 += 1
-    pref_sharper_chosen: float = 0.0
-    pref_sharper_passed: float = 0.0
-    pref_brighter_chosen: float = 0.0
-    pref_brighter_passed: float = 0.0
-    # ---- RAW + JPG 同名配对（v6） ----
-    # primary path → 同 stem 同目录的伴随文件（搬运时一起搬，分析时不参与）。
-    # 典型：{".../IMG_001.CR2": [".../IMG_001.JPG"]}
-    companions: dict[str, list[str]] = field(default_factory=dict)
-
-
-@dataclass
-class JobState:
-    """异步分组任务的进度。"""
-    folder: str
-    dry_run: bool
-    task_id: str = field(default_factory=lambda: uuid.uuid4().hex)
-    mode: str = "copy"
-    engine: str = "fast"
-    status: str = "pending"  # pending | scanning | hashing | grouping | done | error | cancelled
-    done: int = 0
-    total: int = 0
-    label: str = ""
-    error: Optional[str] = None
-    error_info: Optional[dict] = None
-    skipped: list[tuple[str, str]] = field(default_factory=list)
-    started_at: float = 0.0
-    finished_at: float = 0.0
-    cancel_requested: bool = False
-    threshold_near: int = THRESHOLD_NEAR
-    threshold_far: int = THRESHOLD_FAR
-    near_seconds: int = NEAR_SECONDS
-    prescreen_enabled: bool = True
-    prescreen_strength: str = "standard"
-    face_aware: bool = True
-    # 土豪模式：用户选定的模型服务模型 ID
-    llm_model: Optional[str] = None
-    # 流式事件——每过一张图后端追加一条，前端 streaming log 用
-    recent_events: list[dict] = field(default_factory=list)
-    event_seq: int = 0
 
 
 def _classify_job_error(exc: BaseException) -> dict:
@@ -297,11 +249,8 @@ def skipped_log_path(folder: str) -> Path:
     return pic_dir(folder) / "skipped.log"
 
 
-def state_path(folder: str) -> Path:
-    return Path(folder) / STATE_FILENAME
-
-
 logger = logging.getLogger("inkmoment")
+load_state = lambda folder: load_session_state(folder, logger)
 
 
 # 启动期：从文件载入模型服务配置（env var 优先）
@@ -463,39 +412,26 @@ class JobLogger:
                 pass
 
 
-def _new_grouping_state() -> dict:
-    return {
-        "status": "idle",     # idle | running | done | error
-        "groups": [],         # 逐个追加的组信息 [{id, size, samples, ...}]
-        "all_paths": [],      # 全部照片路径（strip 用）
-        "total": 0,
-        "multi": 0,
-        "error": None,
-    }
-
-
-@dataclass
-class AppRuntime:
-    """Mutable process state for the local Flask runtime."""
-
-    session: Optional[SessionState] = None
-    job: Optional[JobState] = None
-    job_log: Optional["JobLogger"] = None
-    last_infos: Optional[list[ImageInfo]] = None
-    watermark_job: Optional[WatermarkJobState] = None
-    grouping: dict = field(default_factory=_new_grouping_state)
-    lock: object = field(default_factory=threading.Lock)
-    job_log_lock: object = field(default_factory=threading.Lock)
-    state_store: Optional[LocalStateStore] = None
-
-
 RUNTIME = AppRuntime()
 
 
 def _state_store() -> LocalStateStore:
     if RUNTIME.state_store is None:
         RUNTIME.state_store = LocalStateStore()
+        RUNTIME.state_store.initialize()
     return RUNTIME.state_store
+
+
+def _auth_runtime() -> AuthRuntime:
+    if RUNTIME.auth is None:
+        RUNTIME.auth = load_auth_runtime(_state_store())
+    return RUNTIME.auth
+
+
+def _dependency_download_manager() -> DependencyDownloadManager:
+    if RUNTIME.dependency_downloads is None:
+        RUNTIME.dependency_downloads = DependencyDownloadManager(_state_store)
+    return RUNTIME.dependency_downloads
 
 
 def _open_job_log(folder: str, engine: str, llm_model: Optional[str]) -> Optional[JobLogger]:
@@ -528,584 +464,12 @@ def _close_job_log() -> None:
 
 # ---------------- State 持久化 + 迁移 ----------------
 
-def save_state(state: SessionState) -> None:
-    data = {
-        "schema": STATE_SCHEMA,
-        "folder": state.folder,
-        "dry_run": state.dry_run,
-        "mode": state.mode,
-        "engine": state.engine,
-        "current_group": state.current_group,
-        "threshold_near": state.threshold_near,
-        "threshold_far": state.threshold_far,
-        "near_seconds": state.near_seconds,
-        "prescreen_enabled": state.prescreen_enabled,
-        "prescreen_strength": state.prescreen_strength,
-        "prescreen_reviewed": state.prescreen_reviewed,
-        "prescreen_rejected": state.prescreen_rejected,
-        "prescreen_reject_reasons": state.prescreen_reject_reasons,
-        "prescreen_restored": state.prescreen_restored,
-        "companions": state.companions,
-        "groups": [asdict(g) for g in state.groups],
-    }
-    p = state_path(state.folder)
-    tmp = p.with_suffix(p.suffix + ".tmp")
-    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2))
-    tmp.replace(p)
-
-
-def _migrate_state(data: dict) -> dict:
-    """老版本 state 升级到 STATE_SCHEMA。
-    遇到太老的版本直接报错让用户重跑（项目无 git、单 session）。"""
-    schema = data.get("schema", 1)
-    if schema == STATE_SCHEMA:
-        return data
-    if schema == 4:
-        # v4 → v5: 加预筛字段
-        for g in data.get("groups", []):
-            g.setdefault("auto_rejected", [])
-            g.setdefault("auto_reject_reasons", {})
-            g.setdefault("auto_selected", False)
-            g.setdefault("manual_restored", [])
-        data.setdefault("prescreen_enabled", True)
-        data.setdefault("prescreen_strength", "standard")
-        data.setdefault("prescreen_reviewed", False)
-        data.setdefault("prescreen_rejected", [])
-        data.setdefault("prescreen_reject_reasons", {})
-        data.setdefault("prescreen_restored", [])
-        data["schema"] = 5
-        # 继续 fallthrough 升到下一档
-        schema = 5
-    if schema == 5:
-        # v5 → v6: 加 RAW+JPG 配对支持
-        data.setdefault("companions", {})
-        data["schema"] = 6
-        return data
-    raise ValueError(
-        f"state schema {schema} 太旧（仅支持 v4+）。"
-        f"请删除 .inkmoment_state.json 重新跑。"
-    )
-
-
-def load_state(folder: str) -> Optional[SessionState]:
-    p = state_path(folder)
-    if not p.exists():
-        return None
-    try:
-        data = json.loads(p.read_text())
-        data = _migrate_state(data)
-        groups = [_group_from_dict(g) for g in data["groups"]]
-        sess = SessionState(
-            folder=data["folder"],
-            dry_run=data.get("dry_run", False),
-            mode=data.get("mode", "copy"),
-            engine=data.get("engine", "expert"),
-            groups=groups,
-            current_group=data.get("current_group", 0),
-            threshold_near=data.get("threshold_near", THRESHOLD_NEAR),
-            threshold_far=data.get("threshold_far", THRESHOLD_FAR),
-            near_seconds=data.get("near_seconds", NEAR_SECONDS),
-            prescreen_enabled=data.get("prescreen_enabled", True),
-            prescreen_strength=data.get("prescreen_strength", "standard"),
-            prescreen_reviewed=data.get("prescreen_reviewed", False),
-            prescreen_rejected=data.get("prescreen_rejected", []),
-            prescreen_reject_reasons=data.get("prescreen_reject_reasons", {}),
-            prescreen_restored=data.get("prescreen_restored", []),
-            undo_stack=[],
-            meta={},
-            companions=data.get("companions", {}),
-        )
-        return sess
-    except Exception as e:
-        logger.exception(f"读取状态失败: {e}")
-        return None
-
-
-def _group_from_dict(g: dict) -> GroupState:
-    return GroupState(
-        images=g.get("images", []),
-        pending=g.get("pending", []),
-        left=g.get("left"),
-        right=g.get("right"),
-        losers=g.get("losers", []),
-        winner=g.get("winner"),
-        extra_winners=g.get("extra_winners", []),
-        finished=g.get("finished", False),
-        applied=g.get("applied", False),
-        id=g.get("id") or uuid.uuid4().hex,
-        move_log=g.get("move_log", []),
-        auto_rejected=g.get("auto_rejected", []),
-        auto_reject_reasons=g.get("auto_reject_reasons", {}),
-        auto_selected=g.get("auto_selected", False),
-        manual_restored=g.get("manual_restored", []),
-    )
-
-
-AUTO_WIN_MARGIN = {
-    # 最佳 vs 第二名差距大于此值 → 整组自动定胜负，无需用户在擂台决定
-    "standard": 18.0,
-    "aggressive": 10.0,
-}
-
-AUTO_KICK_MARGIN = {
-    # 最佳 vs 某候选差距大于此值 → 直接淘汰该候选（即使不能整组定胜负）
-    # 比 AUTO_WIN_MARGIN 略低：更激进地剔除明显次优，减少擂台轮数
-    "standard": 14.0,
-    "aggressive": 8.0,
-}
-
-
-def _quality_score(info: ImageInfo) -> float:
-    """旧版工程师质量分（0-100）。保留作 fallback / 显示。"""
-    q = info.quality or {}
-    try:
-        return float(q.get("quality_score", 50.0))
-    except (TypeError, ValueError):
-        return 50.0
-
-
-def _aesthetic_score(info: ImageInfo) -> Optional[float]:
-    """融合美学子分（0-10）。三模型可用即一起平均，提升组内区分度。
-
-    单独看 NIMA 分布太窄（实测一组连拍 spread 才 0.24），
-    把 MUSIQ（0-100 → /10）和 CLIP-IQA（0-1 → ×10）也归一进来，
-    spread 立刻能拉到 ~1（4 倍区分度），组内排序才稳。
-    """
-    q = info.quality or {}
-    nima = getattr(info, "aesthetic_score", None)
-    if nima is None:
-        nima = q.get("aesthetic_score")
-    musiq = getattr(info, "musiq_score", None)
-    if musiq is None:
-        musiq = q.get("musiq_score")
-    clipiqa = getattr(info, "clipiqa_score", None)
-    if clipiqa is None:
-        clipiqa = q.get("clipiqa_score")
-
-    parts: list[float] = []
-    for v, scale in ((nima, 1.0), (musiq, 0.1), (clipiqa, 10.0)):
-        try:
-            if v is not None:
-                parts.append(float(v) * scale)
-        except (TypeError, ValueError):
-            pass
-    return sum(parts) / len(parts) if parts else None
-
-
-def _face_quality_score(info: ImageInfo) -> float:
-    """脸部质量子分（0-1）。无脸时返回 0.5 中性。
-
-    考虑：脸锐度 + 眼睛开合 + 没贴边。
-    """
-    q = info.quality or {}
-    face_count = q.get("face_count") or 0
-    if face_count == 0:
-        return 0.5
-    face_sharp = q.get("face_sharpness")
-    eyes = q.get("eyes_open_score")
-    clipped = q.get("face_clipped")
-    score = 0.5
-    if face_sharp is not None:
-        # 200+ 锐度算高分，30- 算低
-        score += min(0.3, max(-0.3, (float(face_sharp) - 70) / 400))
-    if eyes is not None:
-        if eyes < 0.15:
-            score -= 0.35  # 闭眼重罚
-        elif eyes < 0.25:
-            score -= 0.1
-    if clipped:
-        score -= 0.1
-    return max(0.0, min(1.0, score))
-
-
-def _subject_sharpness(info: ImageInfo) -> float:
-    """主体锐度（0-1）：人脸优先 > 显著区 > 整图。"""
-    q = info.quality or {}
-    face_count = q.get("face_count") or 0
-    face_sharp = q.get("face_sharpness")
-    if face_count > 0 and face_sharp is not None:
-        return min(1.0, float(face_sharp) / 300.0)
-    sal = q.get("salient_sharpness")
-    if sal is not None:
-        return min(1.0, float(sal) / 300.0)
-    blur = q.get("blur_score") or 0
-    return min(1.0, float(blur) / 200.0)
-
-
-def _composite_score(info: ImageInfo, main_subject_present: bool = False) -> float:
-    """组内排名用的合成分。范围 ~0-10，越大越好。
-
-    权重：美学 0.50 · 主体锐度 0.20 · 脸部质量 0.15 · 旧技术分 0.15
-    主角出现时给 +0.5 加成。
-    """
-    aes = _aesthetic_score(info)
-    aes01 = (aes / 10.0) if aes is not None else 0.5
-    subj = _subject_sharpness(info)
-    facq = _face_quality_score(info)
-    techq = _quality_score(info) / 100.0  # 0-1
-
-    score = (0.50 * aes01 + 0.20 * subj + 0.15 * facq + 0.15 * techq) * 10.0
-    if main_subject_present:
-        score += 0.5
-    # 致命旗（闭眼 / 严重糊脸）一刀压低
-    flags = _quality_flags(info)
-    if "eyes_closed" in flags:
-        score -= 1.5
-    if "face_very_blurry" in flags or "very_blurry" in flags:
-        score -= 1.2
-    if "underexposed" in flags or "overexposed" in flags:
-        score -= 0.5
-    return score
-
-
-def _quality_flags(info: ImageInfo) -> set[str]:
-    q = info.quality or {}
-    flags = q.get("flags") or []
-    return set(flags if isinstance(flags, list) else [])
-
-
-def _fatal_flags(info: ImageInfo) -> int:
-    """致命问题计数（多信号合议用）：达到 min_fatal 才考虑自动否决。"""
-    flags = _quality_flags(info)
-    fatal = 0
-    if "eyes_closed" in flags:
-        fatal += 1
-    if "very_blurry" in flags or "face_very_blurry" in flags:
-        fatal += 1
-    if "underexposed" in flags or "overexposed" in flags:
-        fatal += 1
-    if "too_small" in flags or "tiny_file" in flags:
-        fatal += 1
-    if "low_information" in flags:
-        fatal += 1
-    # 美学 2-of-3 低 = 一个 fatal 信号（之前完全没参与合议）
-    if "low_aesthetic" in flags:
-        fatal += 1
-    return fatal
-
-
-def _auto_reject_reason(info: ImageInfo) -> Optional[str]:
-    """单图绝对判定（仅用于明显废片，比如截图、严重曝光错误）。
-
-    组内相对判定改在 _init_group_with_prescreen_v2 里做。
-    """
-    q = info.quality or {}
-    if not q.get("auto_reject"):
-        return None
-    return q.get("reject_reason") or "智能初筛"
-
-
-def _meta_entry(info: ImageInfo) -> dict:
-    """合并 EXIF 摘要 + 质量信号给前端用（擂台两图差异提示靠这个）。"""
-    out: dict = dict(info.exif_summary or {})
-    q = info.quality or {}
-    for k in ("quality_score", "blur_score", "brightness_mean",
-              "face_count", "face_sharpness", "eyes_open_score",
-              "salient_sharpness", "aesthetic_score",
-              "musiq_score", "clipiqa_score",
-              "llm_verdict", "llm_reason"):
-        v = q.get(k)
-        if v is not None:
-            out[k] = v
-    # 也直接从 info 上读（compute_infos 写到了 quality dict 里，但兜底）
-    aes = getattr(info, "aesthetic_score", None)
-    if aes is not None and "aesthetic_score" not in out:
-        out["aesthetic_score"] = aes
-    for k in ("musiq_score", "clipiqa_score", "llm_verdict", "llm_reason"):
-        v = getattr(info, k, None)
-        if v is not None and k not in out:
-            out[k] = v
-    flags = q.get("flags") or []
-    if flags:
-        out["flags"] = list(flags) if isinstance(flags, list) else []
-    return out
-
-
-def _prescreen_rejections(infos: list[ImageInfo]) -> tuple[list[str], dict[str, str]]:
-    rejected: list[str] = []
-    reasons: dict[str, str] = {}
-    for info in infos:
-        reason = _auto_reject_reason(info)
-        if reason:
-            rejected.append(info.path)
-            reasons[info.path] = reason
-    return rejected, reasons
-
 
 def _infos_from_memory_or_cache(folder: str) -> list[ImageInfo]:
     if RUNTIME.last_infos:
         return RUNTIME.last_infos
     # 缓存已禁用：runtime.last_infos 没有就空列表（用户需要重新 /api/start）
     return []
-
-
-def build_prescreen_session_from_infos(
-    folder: str,
-    dry_run: bool,
-    mode: str,
-    infos: list[ImageInfo],
-    threshold_near: int,
-    threshold_far: int,
-    near_seconds: int,
-    prescreen_enabled: bool,
-    prescreen_strength: str,
-    engine: str = "fast",
-) -> SessionState:
-    rejected, reasons = _prescreen_rejections(infos) if prescreen_enabled else ([], {})
-    state = SessionState(
-        folder=folder,
-        dry_run=dry_run,
-        mode=mode,
-        engine=engine,
-        groups=[],
-        threshold_near=threshold_near,
-        threshold_far=threshold_far,
-        near_seconds=near_seconds,
-        prescreen_enabled=prescreen_enabled,
-        prescreen_strength=prescreen_strength,
-        prescreen_reviewed=False,
-        prescreen_rejected=rejected,
-        prescreen_reject_reasons=reasons,
-        prescreen_restored=[],
-        meta={i.path: _meta_entry(i) for i in infos},
-    )
-    save_state(state)
-    return state
-
-
-def _init_group_without_prescreen(group_infos: list[ImageInfo]) -> GroupState:
-    paths = [info.path for info in group_infos]
-    gs = GroupState(images=list(paths))
-    if len(paths) == 1:
-        gs.winner = paths[0]
-        gs.finished = True
-    else:
-        gs.left = paths[0]
-        gs.right = paths[1]
-        gs.pending = paths[2:]
-    return gs
-
-
-# 不同初筛档位的"相对淘汰"参数：bottom_frac 是组内排名垫底比例，
-# min_absolute 是绝对分下限（低于此才考虑否决）。多信号合议（fatal ≥ 2）也是必要条件。
-# 组内相对淘汰参数：
-# - bottom_frac:   组内排名后 X% 才算 "候选拒"
-# - min_absolute:  绝对 composite 分低于此才考虑（避免拒掉整体水平就高的组）
-# - min_fatal:     合议要求的 fatal 信号数（low_aesthetic 现在也算 fatal）
-# - min_relative_gap: composite 比组内最高低 X% → 即使没硬伤也拒。这是新加的
-#                  路径——之前组里都是"美学正常但有强弱差距"的图根本拒不到任何一张。
-# - max_keep_score: 即使排名垫底，绝对分 ≥ 此就一律 pass（防止误杀整组都不错的情况）
-PRESCREEN_PROFILES = {
-    "standard": {
-        "bottom_frac": 0.30, "min_absolute": 4.5, "min_fatal": 2,
-        # 实测一组连拍图美学融合分 spread 在 14% 上下；阈值卡在 12% 能拒掉
-        # 明显垫底的那 1-2 张，又不会误杀 spread 小（≤10%）的优质组
-        "min_relative_gap": 0.12, "max_keep_score": 6.8,
-    },
-    "aggressive": {
-        "bottom_frac": 0.50, "min_absolute": 5.5, "min_fatal": 1,
-        # 进阶档：8% 差距就算"明显落后"，拒得更狠
-        "min_relative_gap": 0.08, "max_keep_score": 7.5,
-    },
-}
-# 前端用 "advanced"；alias 防止 .get("advanced") 静默 fallback 到 standard。
-PRESCREEN_PROFILES["advanced"] = PRESCREEN_PROFILES["aggressive"]
-
-
-def _init_group_with_prescreen(
-    group_infos: list[ImageInfo],
-    strength: str,
-    main_subject_ids: Optional[set] = None,
-) -> GroupState:
-    """新版组内相对排名 + 多信号合议初筛。
-
-    流程：
-    1. 算每张的 composite 分（美学 + 主体锐度 + 脸质 + 技术分），主角出现加分。
-    2. 单图绝对致命旗（截图 / 严重曝光）→ 直接 reject。
-    3. 多图：组内按 composite 降序。AI 候选 = 第一名。
-       垫底 bottom_frac 的、且绝对分 < min_absolute、且 fatal_flags >= min_fatal → reject。
-    4. 组内全部都低于 min_absolute → AI 撒手（全留进擂台）。
-    5. 仅剩 1 张 → 直接当 winner（auto_selected）。
-    """
-    paths = [info.path for info in group_infos]
-    gs = GroupState(images=list(paths))
-
-    profile = PRESCREEN_PROFILES.get(strength, PRESCREEN_PROFILES["standard"])
-
-    # ---- 步骤 1：单图绝对致命否决（仅当问题特别明显） ----
-    candidates: list[ImageInfo] = []
-    for info in group_infos:
-        flags = _quality_flags(info)
-        # 截图 / 文件异常小 / 严重过曝/欠曝 → 直接 reject（这是工程师都同意的明显问题）
-        absolute_fatal = bool(flags & {"too_small", "tiny_file"})
-        if absolute_fatal:
-            reason = _auto_reject_reason(info) or "明显非拍摄文件"
-            gs.losers.append(info.path)
-            gs.auto_rejected.append(info.path)
-            gs.auto_reject_reasons[info.path] = reason
-        else:
-            candidates.append(info)
-
-    if not candidates:
-        gs.finished = True
-        gs.auto_selected = bool(paths)
-        return gs
-
-    if len(candidates) == 1:
-        gs.winner = candidates[0].path
-        gs.finished = True
-        gs.auto_selected = len(paths) > 1 or bool(gs.auto_rejected)
-        return gs
-
-    # ---- 步骤 2：主角识别 → composite 分 ----
-    def _has_main_subject(info: ImageInfo) -> bool:
-        if not main_subject_ids:
-            return False
-        ids = getattr(info, "_main_subject_ids", None)
-        if ids is None:
-            return False
-        return bool(ids & main_subject_ids)
-
-    scored = [
-        (info, _composite_score(info, main_subject_present=_has_main_subject(info)))
-        for info in candidates
-    ]
-    scored.sort(key=lambda x: x[1], reverse=True)
-
-    # ---- 步骤 3：相对淘汰（多信号合议） ----
-    n = len(scored)
-    top_score = scored[0][1]
-
-    # 极端情况：组内全部都低于 min_absolute → 全留，AI 撒手
-    if top_score < profile["min_absolute"]:
-        survivors = [info for info, _ in scored]
-    else:
-        # 至少 1 张可候选（n=2 时也能拒最差那张）；上限 n//2 保证至少留一半进擂台。
-        # 之前 max(0, int(n*0.3)) → n=2/3 时 bottom_count=0，小组永远拒不到。
-        if n >= 2:
-            bottom_count = max(1, int(round(n * profile["bottom_frac"])))
-            bottom_count = min(bottom_count, n // 2 if n >= 4 else 1)
-        else:
-            bottom_count = 0
-        min_relative_gap = profile.get("min_relative_gap", 1.0)
-        max_keep_score = profile.get("max_keep_score", 999.0)
-        survivors: list[ImageInfo] = []
-        for rank, (info, score) in enumerate(scored):
-            is_bottom = rank >= n - bottom_count
-            fatal = _fatal_flags(info)
-            # 两条拒片路径，垫底排名是共同前提：
-            # A) 经典路径：绝对分低 + fatal 信号合议达标（适合"真有硬伤"）
-            # B) 相对路径：比组内 top 落后 ≥ min_relative_gap 且自身没好到能锁定（
-            #    适合"组里都没硬伤但有明显强弱"——这是实测中的常态，
-            #    之前 expert 模式完全拒不到任何这类图）
-            path_absolute = (score < profile["min_absolute"]
-                             and fatal >= profile["min_fatal"])
-            score_gap_pct = ((top_score - score) / top_score) if top_score > 0 else 0
-            path_relative = (score_gap_pct >= min_relative_gap
-                             and score < max_keep_score)
-            should_reject = is_bottom and (path_absolute or path_relative)
-            if should_reject:
-                if path_relative and not path_absolute:
-                    reason = "同组美学/质量评分明显落后"
-                else:
-                    reason = _auto_reject_reason(info) or "同组中评分明显较低"
-                gs.losers.append(info.path)
-                gs.auto_rejected.append(info.path)
-                gs.auto_reject_reasons[info.path] = reason
-            else:
-                survivors.append(info)
-
-    if not survivors:
-        gs.finished = True
-        gs.auto_selected = True
-        return gs
-
-    if len(survivors) == 1:
-        gs.winner = survivors[0].path
-        gs.finished = True
-        gs.auto_selected = True
-        return gs
-
-    # 把 AI 候选放在第一位，让擂台一开始就是它
-    survivor_scores = {info.path: _composite_score(info, _has_main_subject(info))
-                       for info in survivors}
-    survivors.sort(key=lambda i: survivor_scores[i.path], reverse=True)
-
-    remaining = [info.path for info in survivors]
-    gs.left = remaining[0]
-    gs.right = remaining[1] if len(remaining) > 1 else None
-    gs.pending = remaining[2:]
-    return gs
-
-
-def _identify_main_subjects(infos: list[ImageInfo]) -> set:
-    """全相册人脸聚类 → 找出"主角"人脸 ID 集合。
-
-    返回 set[int] —— 主角的脸簇 id。同时把 `_main_subject_ids` 字段直接挂到
-    每张 info 上（per-image 主角集合），后续 _init_group_with_prescreen 直接读。
-
-    定义：出现次数 ≥ max(3, 总人脸数 × 0.2) 的脸簇就算主角。
-    人脸 ID 匹配阈值：cosine 余弦 > 0.65。
-    """
-    import numpy as np
-
-    # 收集 (info_idx, face_idx, embedding)
-    all_embs = []
-    for i, info in enumerate(infos):
-        embs = info.face_embeddings or []
-        for j, e in enumerate(embs):
-            all_embs.append((i, j, e))
-
-    if not all_embs:
-        for info in infos:
-            info._main_subject_ids = set()
-        return set()
-
-    # 简易贪心聚类：按顺序遍历，跟所有现有簇心比；最相似且 > 0.65 则归入，否则新建簇
-    cluster_centers = []  # 簇心向量
-    cluster_counts = []   # 每簇人脸数
-    cluster_members = []  # 每个 face 属于哪个簇
-    SIM_TH = 0.65
-
-    for (i, j, e) in all_embs:
-        if not cluster_centers:
-            cluster_centers.append(e.copy())
-            cluster_counts.append(1)
-            cluster_members.append(0)
-            continue
-        # 计算和各簇心的余弦
-        sims = [float(np.dot(e, c)) for c in cluster_centers]
-        best = int(np.argmax(sims))
-        if sims[best] > SIM_TH:
-            # 增量更新簇心
-            n_old = cluster_counts[best]
-            new_center = (cluster_centers[best] * n_old + e) / (n_old + 1)
-            # L2 归一保持
-            norm = float(np.linalg.norm(new_center)) + 1e-8
-            cluster_centers[best] = (new_center / norm).astype(np.float32)
-            cluster_counts[best] += 1
-            cluster_members.append(best)
-        else:
-            cluster_centers.append(e.copy())
-            cluster_counts.append(1)
-            cluster_members.append(len(cluster_centers) - 1)
-
-    # 主角阈值
-    n_faces = len(all_embs)
-    main_threshold = max(3, int(n_faces * 0.20))
-    main_ids = {cid for cid, cnt in enumerate(cluster_counts) if cnt >= main_threshold}
-
-    # 把每张照片含哪些 cluster id 写到 info 上
-    per_image: dict[int, set] = {}
-    for (i, j, _), cid in zip(all_embs, cluster_members):
-        per_image.setdefault(i, set()).add(cid)
-    for i, info in enumerate(infos):
-        info._main_subject_ids = per_image.get(i, set())
-
-    if main_ids:
-        logger.info(f"主角识别：发现 {len(main_ids)} 个主角脸簇（总簇数 {len(cluster_centers)}，"
-                    f"总人脸 {n_faces}）。出现次数 {[cluster_counts[i] for i in main_ids]}")
-    return main_ids
 
 
 def build_session_from_groups(folder: str, dry_run: bool, mode: str,
@@ -1115,332 +479,22 @@ def build_session_from_groups(folder: str, dry_run: bool, mode: str,
                               prescreen_enabled: bool = True,
                               prescreen_strength: str = "standard",
                               engine: str = "fast") -> SessionState:
-    # 全局主角识别（pre-pass：所有照片做一次脸簇）—— expert 模式才有 face embedding
-    main_subjects = (
-        _identify_main_subjects(infos)
-        if (prescreen_enabled and engine == "expert") else set()
+    return _build_session_from_groups(
+        folder,
+        dry_run,
+        mode,
+        raw_groups,
+        infos,
+        threshold_near,
+        threshold_far,
+        near_seconds,
+        prescreen_enabled=prescreen_enabled,
+        prescreen_strength=prescreen_strength,
+        engine=engine,
+        save_state_fn=save_state,
+        apply_pending_groups_fn=apply_pending_groups,
+        log=logger,
     )
-
-    groups: list[GroupState] = []
-    for g in raw_groups:
-        if prescreen_enabled:
-            gs = _init_group_with_prescreen(list(g), prescreen_strength,
-                                            main_subject_ids=main_subjects)
-        else:
-            gs = _init_group_without_prescreen(list(g))
-        groups.append(gs)
-    meta = {i.path: _meta_entry(i) for i in infos}
-    companions = {
-        i.path: list(getattr(i, "companions", None) or [])
-        for i in infos
-        if getattr(i, "companions", None)
-    }
-    state = SessionState(
-        folder=folder, dry_run=dry_run, mode=mode, engine=engine, groups=groups,
-        threshold_near=threshold_near, threshold_far=threshold_far,
-        near_seconds=near_seconds, prescreen_enabled=prescreen_enabled,
-        prescreen_strength=prescreen_strength, prescreen_reviewed=False, meta=meta,
-        companions=companions,
-    )
-    save_state(state)
-    apply_pending_groups(state)
-    save_state(state)
-    return state
-
-
-def apply_pending_groups(state: SessionState) -> list[dict]:
-    """对所有 finished 但未 applied 的组补做物理处理（dry-run 不实际搬运、不置 applied）。"""
-    results = []
-    for g in state.groups:
-        if g.finished and not g.applied:
-            results.append(apply_group(g, state.folder, state.dry_run, state.mode, state))
-    return results
-
-
-# ---------------- apply_group ----------------
-
-def _do_transfer(src: str, dst: Path, mode: str) -> tuple[bool, Optional[str]]:
-    try:
-        if mode == "copy":
-            shutil.copy2(src, dst)
-        else:
-            shutil.move(src, dst)
-        return True, None
-    except FileNotFoundError as e:
-        return False, f"文件不存在: {e}"
-    except OSError as e:
-        return False, str(e)
-
-
-def apply_group(group: GroupState, folder: str, dry_run: bool, mode: str,
-                session: Optional[SessionState] = None) -> dict:
-    if group.applied or not group.finished:
-        return {"skipped": True}
-
-    # 没东西要搬（异常状态：finished 但没 winner 也没 losers），仅标 applied，
-    # 不创建空 winners/ losers/。正常单图组在 build_session 时已被赋 winner=images[0]。
-    has_winner = bool(group.winner) or bool(group.extra_winners)
-    has_losers = bool(group.losers)
-    if not has_winner and not has_losers:
-        if not dry_run:
-            group.applied = True
-        return {"winner": None, "extra_winners": [], "losers": [], "failed": [],
-                "dry_run": dry_run, "mode": mode, "noop": True}
-
-    win_d = winners_dir(folder)
-    lose_d = losers_dir(folder)
-    if has_winner:
-        win_d.mkdir(exist_ok=True)
-    if has_losers:
-        lose_d.mkdir(exist_ok=True)
-
-    moved = {"winner": None, "extra_winners": [], "losers": [], "failed": [],
-             "dry_run": dry_run, "mode": mode}
-
-    def _get_comps(p: str) -> list[str]:
-        return list(session.companions.get(p, [])) if session else []
-
-    if group.winner:
-        old = group.winner
-        comps = _get_comps(old)
-        target_preview = _unique_target(win_d, Path(old).name)
-        moved["winner"] = {"from": old, "to": str(target_preview)}
-        if not dry_run:
-            result = _transfer_main_with_companions(old, win_d, mode, comps)
-            if result["ok"]:
-                new_main = result["main_target"]
-                group.move_log.append({"src": old, "dst": new_main, "kind": "winner"})
-                _record_companion_log(group, result["companion_pairs"], "winner_companion")
-                moved["winner"] = {"from": old, "to": new_main}
-                for cf in result["companion_failed"]:
-                    moved["failed"].append(cf)
-                if mode == "move":
-                    if session is not None and old in session.meta:
-                        session.meta[new_main] = session.meta[old]
-                    _update_session_companions_after_move(
-                        session, old, new_main, result["companion_pairs"]
-                    )
-                    group.winner = new_main
-            else:
-                moved["failed"].append({"path": old, "reason": result["main_error"]})
-
-    new_extras = []
-    for extra in group.extra_winners:
-        comps = _get_comps(extra)
-        target_preview = _unique_target(win_d, Path(extra).name)
-        moved["extra_winners"].append({"from": extra, "to": str(target_preview)})
-        if not dry_run:
-            result = _transfer_main_with_companions(extra, win_d, mode, comps)
-            if result["ok"]:
-                new_main = result["main_target"]
-                group.move_log.append({"src": extra, "dst": new_main, "kind": "winner"})
-                _record_companion_log(group, result["companion_pairs"], "winner_companion")
-                for cf in result["companion_failed"]:
-                    moved["failed"].append(cf)
-                if mode == "move":
-                    if session is not None and extra in session.meta:
-                        session.meta[new_main] = session.meta[extra]
-                    _update_session_companions_after_move(
-                        session, extra, new_main, result["companion_pairs"]
-                    )
-                    new_extras.append(new_main)
-                else:
-                    new_extras.append(extra)
-            else:
-                moved["failed"].append({"path": extra, "reason": result["main_error"]})
-                new_extras.append(extra)
-        else:
-            new_extras.append(extra)
-    group.extra_winners = new_extras
-
-    new_losers = []
-    for loser in group.losers:
-        comps = _get_comps(loser)
-        target_preview = _unique_target(lose_d, Path(loser).name)
-        moved["losers"].append({"from": loser, "to": str(target_preview)})
-        if not dry_run:
-            result = _transfer_main_with_companions(loser, lose_d, mode, comps)
-            if result["ok"]:
-                new_main = result["main_target"]
-                group.move_log.append({"src": loser, "dst": new_main, "kind": "loser"})
-                _record_companion_log(group, result["companion_pairs"], "loser_companion")
-                for cf in result["companion_failed"]:
-                    moved["failed"].append(cf)
-                if mode == "move":
-                    if session is not None and loser in session.meta:
-                        session.meta[new_main] = session.meta[loser]
-                    _update_session_companions_after_move(
-                        session, loser, new_main, result["companion_pairs"]
-                    )
-                    new_losers.append(new_main)
-                else:
-                    new_losers.append(loser)
-            else:
-                moved["failed"].append({"path": loser, "reason": result["main_error"]})
-                new_losers.append(loser)
-        else:
-            new_losers.append(loser)
-    group.losers = new_losers
-
-    if not dry_run and not moved["failed"]:
-        group.applied = True
-    elif not dry_run and moved["failed"]:
-        # 只要还有失败项，applied 仍标记为 True 防止反复重试同一批，但 failed 列表保留供 UI 提示
-        group.applied = True
-    return moved
-
-
-def _unique_target(folder: Path, name: str) -> Path:
-    target = folder / name
-    if not target.exists():
-        return target
-    stem, suffix = target.stem, target.suffix
-    i = 1
-    while True:
-        candidate = folder / f"{stem}_{i}{suffix}"
-        if not candidate.exists():
-            return candidate
-        i += 1
-
-
-def _transfer_main_with_companions(
-    src_main: str,
-    target_dir: Path,
-    mode: str,
-    companions: list[str],
-) -> dict:
-    """搬主文件 + 同 stem 搬伴随文件到 target_dir。
-
-    伴随文件统一沿用主文件最终 stem（_unique_target 之后的）来命名，
-    保证 winner.CR2 和 winner.JPG 始终成对、且后缀不变。
-
-    返回 dict 包含：
-      ok: bool                 主文件是否搬成功
-      main_target: str|None    主文件最终位置
-      main_error: str|None     主文件失败原因
-      companion_pairs: list    [(src, dst), ...]，成功搬的 companions
-      companion_failed: list   [{"path", "reason"}, ...]
-    """
-    target = _unique_target(target_dir, Path(src_main).name)
-    ok, err = _do_transfer(src_main, target, mode)
-    if not ok:
-        return {
-            "ok": False, "main_target": None, "main_error": err,
-            "companion_pairs": [], "companion_failed": [],
-        }
-    final_stem = Path(target).stem
-    pairs: list[tuple[str, str]] = []
-    failed: list[dict] = []
-    for comp in companions:
-        comp_name = final_stem + Path(comp).suffix
-        comp_target = _unique_target(target_dir, comp_name)
-        ok_c, err_c = _do_transfer(comp, comp_target, mode)
-        if ok_c:
-            pairs.append((comp, str(comp_target)))
-        else:
-            failed.append({"path": comp, "reason": err_c})
-    return {
-        "ok": True, "main_target": str(target), "main_error": None,
-        "companion_pairs": pairs, "companion_failed": failed,
-    }
-
-
-def _record_companion_log(group: "GroupState", pairs: list[tuple[str, str]], kind: str) -> None:
-    for src, dst in pairs:
-        group.move_log.append({"src": src, "dst": dst, "kind": kind})
-
-
-def _update_session_companions_after_move(
-    session: Optional["SessionState"], old_primary: str,
-    new_primary: str, new_comp_pairs: list[tuple[str, str]],
-) -> None:
-    """move 模式下 primary 路径变了，把 session.companions 的映射同步过来。"""
-    if session is None:
-        return
-    if old_primary in session.companions:
-        session.companions.pop(old_primary)
-    if new_comp_pairs:
-        session.companions[new_primary] = [dst for _, dst in new_comp_pairs]
-
-
-def reopen_group(group: GroupState, folder: str, mode: str,
-                 session: SessionState) -> dict:
-    """物理倒带 + 状态重置：把已搬到 winners/losers 的文件还原回根目录，
-    然后清空决策状态让用户重新挑这组。
-
-    - copy 模式：winners/losers 是副本 → 删掉副本即可，原图本来就在根目录。
-    - move 模式：原图本体在 winners/losers → 搬回根目录，名字冲突时加 _1 _2 后缀。
-    - move_log 缺失或文件已不在目标位置：跳过该项，记入 failed 但不阻断整个流程。
-    """
-    failed: list[dict] = []
-    root = Path(folder)
-    # 记录：本次反悔涉及的 (old_dst_primary -> restored_src_primary) 映射，
-    # 用于把 session.companions 的 key 从 winners/ 路径换回原 src 路径。
-    primary_restorations: dict[str, str] = {}
-    # companion 也类似：(old_dst -> restored_src)，最后统一回写 session.companions
-    companion_restorations: dict[str, str] = {}
-    if group.applied and group.move_log:
-        for entry in group.move_log:
-            src = entry.get("src", "")
-            dst = entry.get("dst", "")
-            kind = entry.get("kind", "")
-            is_companion = kind.endswith("_companion")
-            dst_p = Path(dst)
-            if not dst_p.exists():
-                failed.append({"path": dst, "reason": "目标不存在（可能已被手动删除/移动）"})
-                continue
-            if mode == "copy":
-                try:
-                    dst_p.unlink()
-                except OSError as e:
-                    failed.append({"path": dst, "reason": str(e)})
-                else:
-                    # copy 模式下 src 本来就在原地，companions 映射不需要改 key
-                    pass
-            else:  # move
-                src_p = Path(src) if src else root / dst_p.name
-                # src 位置可能已被同名文件占用（罕见，比如用户手动放回去过）
-                if src_p.exists():
-                    src_p = _unique_target(root, src_p.name)
-                try:
-                    shutil.move(str(dst_p), str(src_p))
-                    if dst in session.meta:
-                        session.meta[str(src_p)] = session.meta.pop(dst)
-                    if is_companion:
-                        companion_restorations[dst] = str(src_p)
-                    else:
-                        primary_restorations[dst] = str(src_p)
-                except OSError as e:
-                    failed.append({"path": dst, "reason": str(e)})
-
-    # move 模式下：把 session.companions 的 key 从 winners/losers 路径换回原 primary 路径，
-    # 同时把 value 里的 companion 路径也换回 restored 位置。
-    if primary_restorations and mode == "move":
-        for old_primary, new_primary in primary_restorations.items():
-            if old_primary in session.companions:
-                old_comps = session.companions.pop(old_primary)
-                # 用 companion_restorations 反查每个 companion 的还原后位置
-                new_comps = [companion_restorations.get(c, c) for c in old_comps]
-                session.companions[new_primary] = new_comps
-
-    # 状态重置：回到"刚分组完，还没动手挑"的样子
-    group.move_log = []
-    group.winner = None
-    group.extra_winners = []
-    group.losers = []
-    if len(group.images) == 1:
-        # 单图组反悔：放进擂台单边，让用户决定保留还是丢
-        group.left = group.images[0]
-        group.right = None
-        group.pending = []
-    else:
-        group.left = group.images[0] if group.images else None
-        group.right = group.images[1] if len(group.images) > 1 else None
-        group.pending = list(group.images[2:])
-    group.finished = False
-    group.applied = False
-    return {"failed": failed}
-
 
 def _clear_session_state() -> None:
     with RUNTIME.lock:
@@ -1542,8 +596,17 @@ def _job_event(name: str, path: str, info, reason) -> None:
             {"kind": "face", "label": "脸", "value": face_val},
         ]
 
+    verdict_llm = getattr(info, "llm_verdict", None) if info is not None else None
+    reason_llm = getattr(info, "llm_reason", None) if info is not None else None
+
     if info is None:
         verdict = "无法读取"
+    elif engine == "tycoon" and verdict_llm == "pass":
+        verdict = "LLM通过"
+    elif engine == "tycoon" and verdict_llm == "reject":
+        verdict = f"LLM拒：{reason_llm}" if reason_llm else "LLM拒"
+    elif engine == "tycoon" and auto_reject:
+        verdict = f"初筛拒：{rej_reason}" if rej_reason else "初筛拒"
     elif auto_reject:
         verdict = f"拒：{rej_reason}" if rej_reason else "拒"
     else:
@@ -1587,7 +650,9 @@ def _job_event(name: str, path: str, info, reason) -> None:
                 f"under/over={q.get('underexposed_ratio')}/{q.get('overexposed_ratio')}"
             )
         elif engine == "tycoon":
+            llm_model = getattr(job, "llm_model", None) or "未选择"
             extra = (
+                f"llm_model={llm_model} "
                 f"llm_verdict={q.get('llm_verdict')} "
                 f"reason='{q.get('llm_reason')}' "
                 f"face_count={q.get('face_count')} "
@@ -1720,6 +785,8 @@ def _require_engine(engine: str) -> None:
               （首次跑会下载）。这里调 vision.prewarm_all() 把模型一次性加载完，
               失败立即抛——避免每张图都"跑了但没真跑"的鬼祟降级。
     """
+    configure_runtime_model_cache(_state_store())
+
     if engine == "fast":
         import importlib
         for mod in ("cv2", "imagehash", "inkmoment.fast_quality", "inkmoment.fast_clustering"):
@@ -1795,6 +862,10 @@ def _run_job(folder: str, dry_run: bool, mode: str, wipe_cache: bool,
         publish_session=_set_session_state,
         logger=logger,
         cancelled_error=CancelledError,
+        analysis_cache_factory=lambda current_folder: ImageAnalysisCache(
+            _state_store(),
+            current_folder,
+        ),
     )
     # 单任务日志（每次 /api/start 一个文件，便于复盘单次运行的数据）
     resources = setup_job_runner_resources(
@@ -1862,6 +933,56 @@ def _set_watermark_job(job: WatermarkJobState) -> None:
 
 
 # ---------------- Flask app factory ----------------
+
+AUTH_PUBLIC_API_PATHS = {
+    "/api/health",
+    "/api/branding",
+    "/api/dependencies/preflight",
+}
+
+AUTH_PUBLIC_API_PREFIXES = (
+    "/api/auth/",
+)
+
+AUTH_AUTHENTICATED_API_PATHS = {
+    "/api/dependencies/download",
+    "/api/dependencies/download/status",
+}
+
+
+def _cancel_running_work_for_auth_failure() -> None:
+    if RUNTIME.job is not None and RUNTIME.job.status in ("pending", "scanning", "hashing", "grouping", "checking"):
+        RUNTIME.job.cancel_requested = True
+        RUNTIME.job.status = "cancelled"
+        RUNTIME.job.label = "授权已失效"
+        RUNTIME.job.finished_at = time.time()
+    if RUNTIME.watermark_job is not None and RUNTIME.watermark_job.status == "running":
+        RUNTIME.watermark_job.cancel_requested = True
+        RUNTIME.watermark_job.status = "cancelled"
+        RUNTIME.watermark_job.finished_at = time.time()
+
+
+def _auth_required_for_request() -> bool:
+    if not request.path.startswith("/api/"):
+        return False
+    if request.path in AUTH_PUBLIC_API_PATHS:
+        return False
+    return not any(request.path.startswith(prefix) for prefix in AUTH_PUBLIC_API_PREFIXES)
+
+
+def _authorization_check():
+    if not _auth_required_for_request():
+        return None
+    try:
+        ensure_recent_authorization(_state_store(), _auth_runtime())
+        return None
+    except AuthClientError as exc:
+        # Resource downloads are allowed after login even before CDK activation.
+        # Core photo processing remains blocked until the license is active.
+        if request.path in AUTH_AUTHENTICATED_API_PATHS and exc.code == "not_activated":
+            return None
+        _cancel_running_work_for_auth_failure()
+        return jsonify({"error": str(exc), "code": exc.code, "auth": auth_summary(_auth_runtime())}), exc.status
 
 def _allowed_origins_for_request() -> set[str]:
     host = request.host
@@ -1942,6 +1063,7 @@ def create_app() -> Flask:
     flask_app = Flask(__name__, static_folder="static", static_url_path="/static")
     flask_app.after_request(_no_cache_static)
     flask_app.before_request(_security_check)
+    flask_app.before_request(_authorization_check)
 
     @flask_app.route("/")
     def index():
@@ -1965,6 +1087,31 @@ def create_app() -> Flask:
         lambda: RUNTIME.session,
         pic_dir,
         skipped_log_path,
+    ))
+    flask_app.register_blueprint(create_auth_blueprint(
+        lambda: auth_summary(_auth_runtime()),
+        lambda email, password: auth_login(_state_store(), _auth_runtime(), email, password),
+        lambda email, password, display_name: auth_register(
+            _state_store(),
+            _auth_runtime(),
+            email,
+            password,
+            display_name,
+        ),
+        lambda code: auth_redeem_cdk(_state_store(), _auth_runtime(), code),
+        lambda confirm_penalty, reason: auth_unbind_device(
+            _state_store(),
+            _auth_runtime(),
+            confirm_penalty,
+            reason,
+        ),
+        lambda: auth_logout(_state_store(), _auth_runtime()),
+        lambda: auth_refresh_status(_state_store(), _auth_runtime()),
+    ))
+    flask_app.register_blueprint(create_dependencies_blueprint(
+        lambda data: preflight_dependencies_payload(data, _state_store()),
+        lambda data: _dependency_download_manager().start(data),
+        lambda: _dependency_download_manager().status(),
     ))
     flask_app.register_blueprint(create_job_blueprint(
         lambda: RUNTIME.job,
@@ -2071,7 +1218,7 @@ def main():
     args = parser.parse_args()
 
     setup_logger(None)
-    server = make_server(args.host, args.port, app)
+    server = make_server(args.host, args.port, app, threaded=True)
     actual_port = server.server_port
     display_host = "localhost" if args.host in {"127.0.0.1", "0.0.0.0"} else args.host
     url = f"http://{display_host}:{actual_port}"
@@ -2104,4 +1251,6 @@ def main():
 
 
 if __name__ == "__main__":
+    import multiprocessing
+    multiprocessing.freeze_support()
     main()

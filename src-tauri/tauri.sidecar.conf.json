@@ -1,5 +1,5 @@
 {
   "bundle": {
-    "externalBin": ["binaries/inkmoment-sidecar"]
+    "resources": ["inkmoment-auth.json", "binaries/inkmoment-sidecar"]
   }
 }

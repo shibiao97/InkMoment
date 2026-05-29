@@ -55,7 +55,7 @@ class StartJobRequest:
 
 
 def parse_start_request(data: dict, defaults: dict) -> tuple[Optional[StartJobRequest], dict, int]:
-    folder = (data.get("folder") or "").strip()
+    folder = _coerce_text(data.get("folder"))
     dry_run = bool(data.get("dry_run", False))
     wipe_cache = bool(data.get("wipe_cache", False))
     mode = data.get("mode", "copy")
@@ -64,7 +64,7 @@ def parse_start_request(data: dict, defaults: dict) -> tuple[Optional[StartJobRe
     engine = data.get("engine", "fast")
     if engine not in ("fast", "expert", "tycoon"):
         engine = "fast"
-    llm_model = (data.get("llm_model") or "").strip() or None
+    llm_model = _coerce_model_id(data.get("llm_model")) or None
     threshold_near = int(data.get("threshold_near", defaults["threshold_near"]))
     threshold_far = int(data.get("threshold_far", defaults["threshold_far"]))
     near_seconds = int(data.get("near_seconds", defaults["near_seconds"]))
@@ -108,3 +108,13 @@ def active_job_error(job) -> tuple[Optional[dict], int]:
 
 def build_pending_job(job_factory: Callable, start_request: StartJobRequest):
     return job_factory(**start_request.job_kwargs())
+
+
+def _coerce_text(value) -> str:
+    return str(value or "").strip()
+
+
+def _coerce_model_id(value) -> str:
+    if isinstance(value, dict):
+        value = value.get("id") or value.get("model") or value.get("name") or value.get("label") or ""
+    return _coerce_text(value)
