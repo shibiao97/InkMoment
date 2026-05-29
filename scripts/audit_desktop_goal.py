@@ -135,6 +135,12 @@ def run_audit(*, completion: bool = False, require_local_artifacts: bool = True)
             "Tauri bundles the Python sidecar resource.",
         ),
         Check(
+            "windows icon resource present",
+            exists("src-tauri/icons/icon.ico")
+            and contains("src-tauri/tauri.conf.json", "icons/icon.ico"),
+            "Windows NSIS builds have the required .ico resource for Tauri.",
+        ),
+        Check(
             "installer verifier present",
             exists("scripts/verify_desktop_release.py")
             and contains(".github/workflows/desktop-release.yml", "verify_desktop_release.py"),

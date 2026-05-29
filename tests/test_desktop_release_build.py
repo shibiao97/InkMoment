@@ -1,3 +1,4 @@
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -91,6 +92,33 @@ class DesktopReleaseBuildTest(unittest.TestCase):
         self.assertIn("src-tauri/target/release/bundle/dmg/*.dmg", workflow)
         self.assertIn("src-tauri/target/release/bundle/nsis/*.exe", workflow)
         self.assertIn("actions/upload-artifact@v4", workflow)
+
+    def test_tauri_config_declares_windows_icon(self):
+        config = json.loads(Path("src-tauri/tauri.conf.json").read_text(encoding="utf-8"))
+        icons = config["bundle"]["icon"]
+        icon_path = Path("src-tauri/icons/icon.ico")
+
+        self.assertIn("icons/icon.ico", icons)
+        self.assertTrue(icon_path.exists())
+        self.assertEqual(icon_path.read_bytes()[:4], b"\0\0\1\0")
+
+    def test_ensure_windows_icon_generates_ico_from_png(self):
+        try:
+            from PIL import Image
+        except ImportError:
+            self.skipTest("Pillow is not installed")
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            png = root / "icon.png"
+            ico = root / "icon.ico"
+            Image.new("RGBA", (32, 32), (255, 255, 255, 255)).save(png)
+
+            with patch.object(build_desktop_release, "ICON_PNG", png):
+                with patch.object(build_desktop_release, "ICON_ICO", ico):
+                    build_desktop_release.ensure_windows_icon("nsis")
+
+            self.assertEqual(ico.read_bytes()[:4], b"\0\0\1\0")
 
     def test_verify_artifact_accepts_valid_nsis_exe_header(self):
         with tempfile.TemporaryDirectory() as folder:

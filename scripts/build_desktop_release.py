@@ -23,6 +23,8 @@ ROOT = Path(__file__).resolve().parents[1]
 TAURI_DIR = ROOT / "src-tauri"
 SIDECAR_RESOURCE_DIR = TAURI_DIR / "binaries" / "inkmoment-sidecar"
 SIDECAR_CONFIG = TAURI_DIR / "tauri.sidecar.conf.json"
+ICON_PNG = TAURI_DIR / "icons" / "icon.png"
+ICON_ICO = TAURI_DIR / "icons" / "icon.ico"
 
 SUPPORTED_BUNDLES = {
     "darwin": {"app", "dmg"},
@@ -81,6 +83,27 @@ def build_sidecar(skip_sidecar: bool) -> None:
         return
 
     run([sys.executable, str(ROOT / "scripts" / "build_sidecar.py")])
+
+
+def ensure_windows_icon(bundle: str) -> None:
+    if bundle != "nsis" or ICON_ICO.exists():
+        return
+    if not ICON_PNG.exists():
+        raise SystemExit(f"Windows NSIS builds require {ICON_ICO}, but {ICON_PNG} is missing.")
+    try:
+        from PIL import Image
+    except ImportError as exc:
+        raise SystemExit(
+            f"Windows NSIS builds require {ICON_ICO}. Install Pillow or generate it from {ICON_PNG}."
+        ) from exc
+
+    ICON_ICO.parent.mkdir(parents=True, exist_ok=True)
+    image = Image.open(ICON_PNG).convert("RGBA")
+    image.save(
+        ICON_ICO,
+        format="ICO",
+        sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)],
+    )
 
 
 def tauri_bundle_dir(bundle: str, *, debug: bool, target: str | None) -> Path:
@@ -156,6 +179,7 @@ def main() -> int:
     args.target = args.target.strip() or None
     bundle = resolve_bundle(args.bundle)
 
+    ensure_windows_icon(bundle)
     build_sidecar(args.skip_sidecar)
     build_tauri(args, bundle)
 
