@@ -61,7 +61,7 @@ def windows_exe_artifact_verified() -> bool:
     return False
 
 
-def run_audit(*, completion: bool = False) -> list[Check]:
+def run_audit(*, completion: bool = False, require_local_artifacts: bool = True) -> list[Check]:
     checks = [
         Check(
             "domain models extracted",
@@ -169,17 +169,20 @@ def run_audit(*, completion: bool = False) -> list[Check]:
             "GitHub Actions can build and upload the Windows NSIS EXE with the CI venv.",
         ),
         Check(
-            "mac release dmg artifact verified locally",
-            any_artifact("src-tauri/target/release/bundle/dmg/*.dmg"),
-            "A local release DMG artifact exists for verification.",
-        ),
-        Check(
             "refactor target documented",
             exists("docs/DESKTOP_REFACTOR_TARGET.md")
             and contains("docs/DESKTOP_REFACTOR_TARGET.md", "为什么这样性能更高", "Windows"),
             "The target architecture, performance rationale, validation, and risk are documented.",
         ),
     ]
+    if require_local_artifacts:
+        checks.append(
+            Check(
+                "mac release dmg artifact verified locally",
+                any_artifact("src-tauri/target/release/bundle/dmg/*.dmg"),
+                "A local release DMG artifact exists for verification.",
+            )
+        )
     if completion:
         checks.append(
             Check(
@@ -200,9 +203,17 @@ def main() -> int:
         action="store_true",
         help="Also require final platform artifacts, including a verified Windows .exe.",
     )
+    parser.add_argument(
+        "--skip-local-artifacts",
+        action="store_true",
+        help="Skip checks that require installer artifacts already built in this checkout.",
+    )
     args = parser.parse_args()
 
-    checks = run_audit(completion=args.completion)
+    checks = run_audit(
+        completion=args.completion,
+        require_local_artifacts=not args.skip_local_artifacts,
+    )
     width = max(len(check.name) for check in checks)
     for check in checks:
         mark = "PASS" if check.ok else "FAIL"

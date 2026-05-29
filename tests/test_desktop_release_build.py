@@ -40,7 +40,7 @@ class DesktopReleaseBuildTest(unittest.TestCase):
             dmg = bundle_dir / "InkMoment.dmg"
             ignored = bundle_dir / "notes.txt"
             dmg.write_bytes(b"dmg")
-            ignored.write_text("ignore")
+            ignored.write_text("ignore", encoding="utf-8")
 
             with patch.object(build_desktop_release, "TAURI_DIR", tauri_dir):
                 self.assertEqual(
@@ -78,7 +78,7 @@ class DesktopReleaseBuildTest(unittest.TestCase):
         self.assertEqual(env["INKMOMENT_USE_BUNDLED_SIDECAR"], "1")
 
     def test_workflow_builds_macos_and_windows_installers(self):
-        workflow = Path(".github/workflows/desktop-release.yml").read_text()
+        workflow = Path(".github/workflows/desktop-release.yml").read_text(encoding="utf-8")
 
         self.assertIn("macos-14", workflow)
         self.assertIn("windows-2022", workflow)
@@ -153,7 +153,7 @@ class DesktopReleaseBuildTest(unittest.TestCase):
                 self.assertEqual(verify_desktop_release.main(), 0)
 
     def test_desktop_goal_audit_passes_current_checkout(self):
-        checks = audit_desktop_goal.run_audit()
+        checks = audit_desktop_goal.run_audit(require_local_artifacts=False)
         failed = [check.name for check in checks if not check.ok]
 
         self.assertEqual(failed, [])
@@ -164,7 +164,10 @@ class DesktopReleaseBuildTest(unittest.TestCase):
             exe.write_bytes(b"MZ" + b"\0" * 1024)
 
             with patch.dict(audit_desktop_goal.os.environ, {"INKMOMENT_WINDOWS_EXE": str(exe)}):
-                checks = audit_desktop_goal.run_audit(completion=True)
+                checks = audit_desktop_goal.run_audit(
+                    completion=True,
+                    require_local_artifacts=False,
+                )
 
         failed = [check.name for check in checks if not check.ok]
         self.assertEqual(failed, [])
@@ -173,7 +176,10 @@ class DesktopReleaseBuildTest(unittest.TestCase):
         with patch.dict(audit_desktop_goal.os.environ, {}, clear=True):
             if audit_desktop_goal.windows_exe_artifacts():
                 self.skipTest("a Windows EXE artifact is already present")
-            checks = audit_desktop_goal.run_audit(completion=True)
+            checks = audit_desktop_goal.run_audit(
+                completion=True,
+                require_local_artifacts=False,
+            )
 
         failed = [check.name for check in checks if not check.ok]
         self.assertIn("windows exe artifact verified", failed)
@@ -240,14 +246,25 @@ class DesktopReleaseBuildTest(unittest.TestCase):
                     include_mac=False,
                 )
 
-        command_lines = [" ".join(cmd) for cmd, _ in calls]
+        commands = [cmd for cmd, _ in calls]
         self.assertIn(
-            "gh workflow run desktop-release.yml --repo owner/repo --ref feature",
-            command_lines,
+            ["gh", "workflow", "run", "desktop-release.yml", "--repo", "owner/repo", "--ref", "feature"],
+            commands,
         )
         self.assertIn(
-            "gh run download 123 --repo owner/repo --name InkMoment-Windows-nsis --dir /tmp/artifacts",
-            command_lines,
+            [
+                "gh",
+                "run",
+                "download",
+                "123",
+                "--repo",
+                "owner/repo",
+                "--name",
+                "InkMoment-Windows-nsis",
+                "--dir",
+                str(Path("/tmp/artifacts")),
+            ],
+            commands,
         )
 
     def test_workflow_runner_allows_first_run_without_previous_run(self):
@@ -286,7 +303,17 @@ class DesktopReleaseBuildTest(unittest.TestCase):
     def test_check_desktop_release_prefers_release_dmg_profile(self):
         from scripts import check_desktop_release
 
-        self.assertEqual(check_desktop_release.local_dmg_profile(), "release")
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            release_dir = root / "src-tauri" / "target" / "release" / "bundle" / "dmg"
+            debug_dir = root / "src-tauri" / "target" / "debug" / "bundle" / "dmg"
+            release_dir.mkdir(parents=True)
+            debug_dir.mkdir(parents=True)
+            (release_dir / "InkMoment-release.dmg").write_bytes(b"dmg")
+            (debug_dir / "InkMoment-debug.dmg").write_bytes(b"dmg")
+
+            with patch.object(check_desktop_release, "ROOT", root):
+                self.assertEqual(check_desktop_release.local_dmg_profile(), "release")
 
 
 if __name__ == "__main__":

@@ -46,7 +46,7 @@ def save_state(state: SessionState) -> None:
     }
     path = state_path(state.folder)
     tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2))
+    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
     tmp.replace(path)
 
 
@@ -55,7 +55,7 @@ def load_state(folder: str, logger: logging.Logger | None = None) -> Optional[Se
     if not path.exists():
         return None
     try:
-        data = json.loads(path.read_text())
+        data = json.loads(path.read_text(encoding="utf-8"))
         data = migrate_state(data)
         groups = [group_from_dict(g) for g in data["groups"]]
         return SessionState(

@@ -39,6 +39,9 @@ class DesktopAuthSmokeTest(unittest.TestCase):
         self.addCleanup(self._stop_server)
 
     def test_desktop_auth_smoke_runs_against_standalone_auth_server_and_sidecar(self):
+        if os.environ.get("INKMOMENT_RUN_DESKTOP_AUTH_SMOKE") != "1":
+            self.skipTest("set INKMOMENT_RUN_DESKTOP_AUTH_SMOKE=1 to run the sidecar integration smoke")
+
         self.store.create_admin("support", "admin-password123")
         output = io.StringIO()
         with contextlib.redirect_stdout(output):

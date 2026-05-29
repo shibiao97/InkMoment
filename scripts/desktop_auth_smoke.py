@@ -24,6 +24,11 @@ class DesktopSmokeError(RuntimeError):
     pass
 
 
+def default_python() -> str:
+    candidate = ROOT / ".venv" / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+    return str(candidate)
+
+
 @dataclass
 class HttpClient:
     base_url: str
@@ -292,7 +297,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--admin-password", default="", help="Admin password used with --admin-username")
     parser.add_argument("--sidecar-url", default="", help="Already-running sidecar URL, e.g. http://127.0.0.1:5057")
     parser.add_argument("--sidecar-binary", default="", help="Packaged sidecar binary path to launch")
-    parser.add_argument("--python", default=str(ROOT / ".venv" / "bin" / "python"), help="Python executable for app.py")
+    parser.add_argument("--python", default=default_python(), help="Python executable for app.py")
     parser.add_argument("--email", default="", help="Optional smoke account email")
     parser.add_argument("--password", default="desktop-smoke-password123", help="Smoke account password")
     parser.add_argument("--cdk-code", default="", help="Optional smoke CDK code")

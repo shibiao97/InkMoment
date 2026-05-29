@@ -20,7 +20,7 @@ class AuthorizationDeploymentTemplatesTest(unittest.TestCase):
         self.assertTrue(expected_files.issubset(existing_files))
 
     def test_environment_template_contains_required_auth_settings(self):
-        content = (DEPLOY_DIR / "inkmoment-auth.env.example").read_text()
+        content = (DEPLOY_DIR / "inkmoment-auth.env.example").read_text(encoding="utf-8")
 
         self.assertIn("INKMOMENT_AUTH_DB=/var/lib/inkmoment-auth/auth.sqlite3", content)
         self.assertIn("INKMOMENT_AUTH_ADMIN_TOKEN=", content)
@@ -28,7 +28,7 @@ class AuthorizationDeploymentTemplatesTest(unittest.TestCase):
         self.assertIn("INKMOMENT_AUTH_PORT=8061", content)
 
     def test_systemd_template_runs_wsgi_app_with_environment_file(self):
-        content = (DEPLOY_DIR / "inkmoment-auth.service").read_text()
+        content = (DEPLOY_DIR / "inkmoment-auth.service").read_text(encoding="utf-8")
 
         self.assertIn("User=inkmoment", content)
         self.assertIn("Group=inkmoment", content)
@@ -40,7 +40,7 @@ class AuthorizationDeploymentTemplatesTest(unittest.TestCase):
         self.assertIn("ReadWritePaths=/var/lib/inkmoment-auth /var/log/inkmoment-auth", content)
 
     def test_nginx_template_keeps_app_port_private_and_forwards_https_headers(self):
-        content = (DEPLOY_DIR / "nginx-inkmoment-auth.conf").read_text()
+        content = (DEPLOY_DIR / "nginx-inkmoment-auth.conf").read_text(encoding="utf-8")
 
         self.assertIn("listen 80", content)
         self.assertIn("listen 443 ssl http2", content)
@@ -50,7 +50,7 @@ class AuthorizationDeploymentTemplatesTest(unittest.TestCase):
         self.assertIn("proxy_set_header X-Real-IP $remote_addr", content)
 
     def test_public_http_nginx_template_supports_temporary_ip_access(self):
-        content = (DEPLOY_DIR / "nginx-inkmoment-auth-public-http.conf").read_text()
+        content = (DEPLOY_DIR / "nginx-inkmoment-auth-public-http.conf").read_text(encoding="utf-8")
 
         self.assertIn("listen 80 default_server", content)
         self.assertIn("server_name _", content)
@@ -59,7 +59,7 @@ class AuthorizationDeploymentTemplatesTest(unittest.TestCase):
         self.assertNotIn("ssl_certificate", content)
 
     def test_deployment_document_references_copy_ready_templates(self):
-        content = (ROOT / "docs" / "AUTHORIZATION_SERVER_DEPLOYMENT.md").read_text()
+        content = (ROOT / "docs" / "AUTHORIZATION_SERVER_DEPLOYMENT.md").read_text(encoding="utf-8")
 
         self.assertIn("deploy/authorization/", content)
         self.assertIn("deploy/authorization/inkmoment-auth.env.example", content)

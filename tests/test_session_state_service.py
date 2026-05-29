@@ -44,7 +44,7 @@ class SessionStateServiceTest(unittest.TestCase):
                 )
 
                 save_state(session)
-                raw = json.loads((root / STATE_FILENAME).read_text())
+                raw = json.loads((root / STATE_FILENAME).read_text(encoding="utf-8"))
                 loaded = load_state(str(root))
 
                 self.assertEqual(raw["schema"], STATE_SCHEMA)
