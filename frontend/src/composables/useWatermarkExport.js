@@ -100,7 +100,7 @@ export function useWatermarkExport() {
   async function selectTemplate(templateId) {
     if (!templateId || templateId === selectedTemplate.value) return;
     selectedTemplate.value = templateId;
-    await refreshPreview(0);
+    await refreshPreview(previewIndex.value);
   }
 
   function nextPreview(delta) {

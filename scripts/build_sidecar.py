@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Build the Python backend as a Tauri sidecar binary.
+"""Build the Python backend as a bundled Tauri resource.
 
-Tauri expects sidecar binaries to live under `src-tauri/binaries/` and to include
-the target triple suffix, for example `inkmoment-sidecar-aarch64-apple-darwin`.
+The sidecar is packaged in PyInstaller onedir mode under
+`src-tauri/binaries/inkmoment-sidecar/`. Keeping the extracted runtime on disk
+avoids the startup tax of PyInstaller onefile unpacking on every launch.
 """
 
 from __future__ import annotations
@@ -22,15 +23,6 @@ SIDECAR_NAME = "inkmoment-sidecar"
 def run(cmd: list[str], **kwargs) -> subprocess.CompletedProcess:
     print("+", " ".join(cmd), flush=True)
     return subprocess.run(cmd, check=True, cwd=ROOT, **kwargs)
-
-
-def host_triple() -> str:
-    if os.environ.get("TAURI_ENV_TARGET_TRIPLE"):
-        return os.environ["TAURI_ENV_TARGET_TRIPLE"]
-    if os.environ.get("TARGET"):
-        return os.environ["TARGET"]
-    result = run(["rustc", "--print", "host-tuple"], stdout=subprocess.PIPE, text=True)
-    return result.stdout.strip()
 
 
 def python_executable() -> str:
@@ -55,10 +47,8 @@ def ensure_pyinstaller(python: str) -> None:
 
 def main() -> int:
     python = python_executable()
-    triple = host_triple()
-    sidecar_binary = BIN_DIR / f"{SIDECAR_NAME}-{triple}"
-    if os.name == "nt":
-        sidecar_binary = sidecar_binary.with_suffix(".exe")
+    sidecar_resource_dir = BIN_DIR / SIDECAR_NAME
+    sidecar_executable = sidecar_resource_dir / (SIDECAR_NAME + (".exe" if os.name == "nt" else ""))
 
     ensure_pyinstaller(python)
     BIN_DIR.mkdir(parents=True, exist_ok=True)
@@ -70,6 +60,8 @@ def main() -> int:
     shutil.rmtree(build_dir, ignore_errors=True)
 
     hidden_imports = [
+        "server.routes.auth",
+        "server.routes.dependencies",
         "server.routes.folder",
         "server.routes.grouping",
         "server.routes.image",
@@ -82,8 +74,13 @@ def main() -> int:
         "server.routes.system",
         "server.routes.task_history",
         "server.routes.watermark",
+        "server.domain.models",
+        "server.runtime.app_runtime",
+        "server.services.analysis_cache_service",
         "server.services.branding_service",
+        "server.services.auth_client_service",
         "server.services.capability_service",
+        "server.services.dependency_service",
         "server.services.folder_service",
         "server.services.grouping_service",
         "server.services.health_service",
@@ -93,7 +90,10 @@ def main() -> int:
         "server.services.llm_service",
         "server.services.result_service",
         "server.services.selection_service",
+        "server.services.session_apply_service",
+        "server.services.session_builder_service",
         "server.services.session_service",
+        "server.services.session_state_service",
         "server.services.start_service",
         "server.services.task_history_service",
         "server.services.watermark_service",
@@ -105,7 +105,7 @@ def main() -> int:
         "PyInstaller",
         "--name",
         SIDECAR_NAME,
-        "--onefile",
+        "--onedir",
         "--clean",
         "--noconfirm",
         "--distpath",
@@ -120,15 +120,19 @@ def main() -> int:
     cmd.append(str(ROOT / "app.py"))
     run(cmd)
 
-    built_binary = dist_dir.parent / (SIDECAR_NAME + (".exe" if os.name == "nt" else ""))
-    if not built_binary.exists():
-        raise SystemExit(f"PyInstaller did not produce {built_binary}")
-    if sidecar_binary.exists():
-        sidecar_binary.unlink()
-    shutil.move(str(built_binary), sidecar_binary)
+    built_dir = dist_dir
+    built_executable = built_dir / (SIDECAR_NAME + (".exe" if os.name == "nt" else ""))
+    if not built_executable.exists():
+        raise SystemExit(f"PyInstaller did not produce {built_executable}")
+    shutil.rmtree(sidecar_resource_dir, ignore_errors=True)
+    shutil.copytree(built_dir, sidecar_resource_dir)
+
+    for stale_binary in BIN_DIR.glob(f"{SIDECAR_NAME}-*"):
+        if stale_binary.is_file():
+            stale_binary.unlink()
     if os.name != "nt":
-        sidecar_binary.chmod(0o755)
-    print(f"Built sidecar: {sidecar_binary}")
+        sidecar_executable.chmod(0o755)
+    print(f"Built sidecar: {sidecar_executable}")
     return 0
 
 

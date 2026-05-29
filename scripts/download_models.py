@@ -39,7 +39,23 @@ MODELS = {
 }
 
 
-def try_endpoint(model_id: str, endpoint: str, max_retries: int = 3) -> bool:
+def configure_cache_dir(cache_dir: str | None) -> str | None:
+    if not cache_dir:
+        return None
+    base = Path(cache_dir).expanduser().resolve()
+    hf_home = base / "huggingface"
+    hf_hub = hf_home / "hub"
+    torch_home = base / "torch"
+    for path in (base, hf_home, hf_hub, torch_home):
+        path.mkdir(parents=True, exist_ok=True)
+    os.environ["INKMOMENT_MODEL_CACHE_DIR"] = str(base)
+    os.environ["HF_HOME"] = str(hf_home)
+    os.environ["HUGGINGFACE_HUB_CACHE"] = str(hf_hub)
+    os.environ["TORCH_HOME"] = str(torch_home)
+    return str(hf_hub)
+
+
+def try_endpoint(model_id: str, endpoint: str, cache_dir: str | None = None, max_retries: int = 3) -> bool:
     """对单个镜像尝试 snapshot_download；返回是否成功。"""
     os.environ["HF_ENDPOINT"] = endpoint
     # 让本次进程内的 huggingface_hub 重新读 endpoint。不同版本暴露 constants 的方式不同。
@@ -58,6 +74,7 @@ def try_endpoint(model_id: str, endpoint: str, max_retries: int = 3) -> bool:
             print(f"  [{endpoint}] 第 {attempt}/{max_retries} 次尝试…")
             local_dir = snapshot_download(
                 repo_id=model_id,
+                cache_dir=cache_dir,
                 allow_patterns=[
                     "*.json", "*.txt", "*.safetensors", "*.bin",
                     "tokenizer*", "spiece.*", "vocab.*",
@@ -73,10 +90,10 @@ def try_endpoint(model_id: str, endpoint: str, max_retries: int = 3) -> bool:
     return False
 
 
-def download_model(model_id: str, endpoints: list[str], max_retries: int = 3) -> bool:
+def download_model(model_id: str, endpoints: list[str], cache_dir: str | None = None, max_retries: int = 3) -> bool:
     print(f"\n→ 下载 {model_id}")
     for endpoint in endpoints:
-        ok = try_endpoint(model_id, endpoint, max_retries=max_retries)
+        ok = try_endpoint(model_id, endpoint, cache_dir=cache_dir, max_retries=max_retries)
         if ok:
             return True
         print(f"  → 切换下一个镜像")
@@ -93,14 +110,21 @@ def main() -> int:
         "--endpoint", action="append", default=None,
         help="额外的镜像 endpoint（可重复），按顺序尝试；不指定时用内置列表",
     )
+    parser.add_argument(
+        "--cache-dir", default=None,
+        help="模型缓存根目录；会在其中创建 huggingface/、torch/ 等子目录",
+    )
     parser.add_argument("--retries", type=int, default=3, help="单镜像重试次数（默认 3）")
     args = parser.parse_args()
 
     endpoints = args.endpoint if args.endpoint else DEFAULT_ENDPOINTS
     models = args.model if args.model else list(MODELS.keys())
+    hf_cache_dir = configure_cache_dir(args.cache_dir)
 
     print("镜像顺序：" + " → ".join(endpoints))
     print("待下载模型：" + ", ".join(models))
+    if args.cache_dir:
+        print("缓存目录：" + str(Path(args.cache_dir).expanduser().resolve()))
 
     try:
         import huggingface_hub  # noqa
@@ -111,7 +135,7 @@ def main() -> int:
 
     failures = []
     for model_id in models:
-        ok = download_model(model_id, endpoints, max_retries=args.retries)
+        ok = download_model(model_id, endpoints, cache_dir=hf_cache_dir, max_retries=args.retries)
         if not ok:
             failures.append(model_id)
 

@@ -5,17 +5,17 @@ const engines = [
   {
     id: "fast",
     title: "极速模式",
-    description: "本地传统 CV · 多 hash + HSV + ORB 几何验证 · 零模型依赖",
+    description: "本地 CV · 无模型下载 · 适合先快速整理大量照片",
   },
   {
     id: "expert",
     title: "专家模式",
-    description: "DINOv2 + NIMA / MUSIQ / CLIP-IQA+ 三模型联合 · 人脸识别拒片",
+    description: "本地模型评分 · 自动下载缓存 · 适合更严格的批量筛选",
   },
   {
     id: "tycoon",
-    title: "土豪模式 ¥",
-    description: "兼容 OpenAI 协议的大模型直接判定 · 适合少量高价值精修筛选",
+    title: "土豪模式",
+    description: "视觉大模型判定 · 需要 API Key · 适合少量精修图",
   },
 ];
 </script>

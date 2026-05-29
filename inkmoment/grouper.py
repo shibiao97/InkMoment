@@ -615,6 +615,8 @@ def compute_infos(
     event_cb: Optional[Callable[[str, str, Optional["ImageInfo"], Optional[str]], None]] = None,
     engine: str = "expert",
     llm_model: Optional[str] = None,
+    cache_get: Optional[Callable[[str, list[str], str, str, bool, Optional[str]], Optional["ImageInfo"]]] = None,
+    cache_put: Optional[Callable[["ImageInfo", str, str, bool, Optional[str]], None]] = None,
 ) -> tuple[list[ImageInfo], list[tuple[str, str]]]:
     """读取每张图片的 pHash + 时间戳 + EXIF 摘要，加上 engine 对应的额外签名。
 
@@ -657,17 +659,36 @@ def compute_infos(
     needed: list[str] = []
     fresh: dict[str, ImageInfo] = {}
     skipped: list[tuple[str, str]] = []
-    # 一次性运行：每次都重新分析，不读旧缓存
+    cache_hits = 0
     for f in files:
         try:
             os.stat(f)
         except OSError as e:
             skipped.append((f, str(e)))
             continue
+        cached_info = None
+        if cache_get is not None:
+            try:
+                cached_info = cache_get(
+                    f,
+                    companions_by_primary.get(f, []),
+                    engine,
+                    strength,
+                    face_aware,
+                    llm_model,
+                )
+            except Exception as e:
+                log.warning(f"[{engine}] analysis cache read failed for {Path(f).name}: {e}")
+        if cached_info is not None:
+            fresh[f] = cached_info
+            cache_hits += 1
+            continue
         needed.append(f)
 
     total = len(files)
-    done = 0
+    done = cache_hits
+    if cache_hits and progress:
+        progress(done, total, f"缓存命中 {cache_hits} 张")
 
     def _check_cancel():
         if cancel_check and cancel_check():
@@ -755,6 +776,14 @@ def compute_infos(
                 done += 1
                 if info:
                     fresh[info.path] = info
+                    if cache_put is not None:
+                        try:
+                            cache_put(info, engine, strength, face_aware, llm_model)
+                        except Exception as e:
+                            log.warning(
+                                f"[{engine}] analysis cache write failed for "
+                                f"{Path(info.path).name}: {e}"
+                            )
                 else:
                     skipped.append((f, reason or "未知原因"))
                 if progress:
@@ -768,6 +797,10 @@ def compute_infos(
             ex.shutdown(wait=False, cancel_futures=True)
 
     result_list = [fresh[f] for f in files if f in fresh]
+    if cache_get is not None:
+        log.info(
+            f"[{engine}] analysis cache: 命中 {cache_hits} / 未命中 {len(needed)}"
+        )
 
     # ---- 总结日志：让用户在 log.txt 里直接看见各信号实际成功率 ----
     if result_list:

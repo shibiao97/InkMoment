@@ -88,5 +88,9 @@ assets/.cursor/
 *.pth
 *.safetensors
 
-# 内部审计 / 设计文档，不入库
-docs/
+# 内部审计 / 设计文档默认不入库，产品需求文档例外
+docs/*
+!docs/DESKTOP_REFACTOR_TARGET.md
+!docs/AUTHORIZATION_PRODUCT_REQUIREMENTS.md
+!docs/AUTHORIZATION_SERVER_DEPLOYMENT.md
+!docs/AUTHORIZATION_API_CONTRACT.md

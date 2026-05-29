@@ -4,6 +4,49 @@ export function getBranding() {
   return fetchJSON("/api/branding");
 }
 
+export function getHealth() {
+  return fetchJSON("/api/health");
+}
+
+export function getAuthStatus(force = false) {
+  const params = force ? "?force=1" : "";
+  return fetchJSON(`/api/auth/status${params}`);
+}
+
+export function loginAuth(payload) {
+  return fetchJSON("/api/auth/login", {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export function registerAuth(payload) {
+  return fetchJSON("/api/auth/register", {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export function redeemAuthCdk(code) {
+  return fetchJSON("/api/auth/redeem", {
+    method: "POST",
+    body: { code },
+  });
+}
+
+export function unbindAuthDevice(payload) {
+  return fetchJSON("/api/auth/device/unbind", {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export function logoutAuth() {
+  return fetchJSON("/api/auth/logout", {
+    method: "POST",
+  });
+}
+
 export function peekFolder(folder) {
   return fetchJSON("/api/peek_folder", {
     method: "POST",
@@ -16,6 +59,24 @@ export function startJob(payload) {
     method: "POST",
     body: payload,
   });
+}
+
+export function preflightDependencies(payload) {
+  return fetchJSON("/api/dependencies/preflight", {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export function downloadDependencies(payload) {
+  return fetchJSON("/api/dependencies/download", {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export function getDependencyDownloadStatus() {
+  return fetchJSON("/api/dependencies/download/status");
 }
 
 export function getJob(since = 0) {

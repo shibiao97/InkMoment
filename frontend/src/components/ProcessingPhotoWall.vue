@@ -2,7 +2,8 @@
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { imageUrl } from "../api/http";
 
-const WALL_CELL_COUNT = 40;
+const MAX_WALL_CELL_COUNT = 40;
+const FALLBACK_WALL_CELL_COUNT = 1;
 const WALL_FILL_MS = 200;
 const WALL_REPLACE_MS = 420;
 const WALL_QUEUE_CAP = 80;
@@ -25,9 +26,13 @@ const props = defineProps({
     type: String,
     default: "",
   },
+  total: {
+    type: Number,
+    default: 0,
+  },
 });
 
-const cells = ref(createEmptyCells());
+const cells = ref(createEmptyCells(resolveCellCount()));
 const queue = [];
 let drainTimer = null;
 let seenSeq = 0;
@@ -35,14 +40,82 @@ let insertedAt = 0;
 
 const filledCount = computed(() => cells.value.filter((cell) => cell.event).length);
 const collecting = computed(() => props.status === "grouping");
+const wallCellCount = computed(() => cells.value.length);
+const wallCountLabel = computed(() => {
+  const total = normalizedTotal();
+  if (total > MAX_WALL_CELL_COUNT) return `${MAX_WALL_CELL_COUNT}+`;
+  return wallCellCount.value.toLocaleString();
+});
+const wallColumns = computed(() => {
+  const count = wallCellCount.value;
+  if (count <= 2) return Math.max(1, count);
+  if (count <= 4) return count;
+  if (count <= 8) return 4;
+  if (count <= 15) return 5;
+  if (count <= 24) return 6;
+  return 10;
+});
+const wallStyle = computed(() => {
+  const columns = wallColumns.value;
+  const maxWidth = columns >= 10
+    ? "100%"
+    : `${columns * 168 + Math.max(0, columns - 1) * 8}px`;
+  return {
+    "--wall-cols": String(columns),
+    "--wall-max-width": maxWidth,
+  };
+});
 
-function createEmptyCells() {
-  return Array.from({ length: WALL_CELL_COUNT }, (_, index) => ({
+function normalizedTotal() {
+  const total = Number(props.total || 0);
+  if (!Number.isFinite(total)) return 0;
+  return Math.max(0, Math.floor(total));
+}
+
+function normalizeCellCount(count) {
+  return Math.max(
+    FALLBACK_WALL_CELL_COUNT,
+    Math.min(MAX_WALL_CELL_COUNT, Math.floor(Number(count) || 0)),
+  );
+}
+
+function resolveCellCount(events = props.events) {
+  const total = normalizedTotal();
+  if (total > 0) return normalizeCellCount(total);
+  return normalizeCellCount(Array.isArray(events) ? events.length : 0);
+}
+
+function createEmptyCells(count) {
+  return Array.from({ length: normalizeCellCount(count) }, (_, index) => ({
     id: index,
     event: null,
     insertedAt: 0,
     leaving: false,
   }));
+}
+
+function resizeCells(nextCount) {
+  const targetCount = normalizeCellCount(nextCount);
+  if (cells.value.length === targetCount) return;
+
+  const loadedCells = cells.value
+    .filter((cell) => cell.event)
+    .sort((left, right) => left.insertedAt - right.insertedAt)
+    .slice(-targetCount);
+  const nextCells = createEmptyCells(targetCount);
+  loadedCells.forEach((cell, index) => {
+    nextCells[index] = {
+      ...nextCells[index],
+      event: cell.event,
+      insertedAt: cell.insertedAt,
+      leaving: false,
+    };
+  });
+  cells.value = nextCells;
+}
+
+function syncCellCount(events = props.events) {
+  resizeCells(resolveCellCount(events));
 }
 
 function classifyReason(reason) {
@@ -144,7 +217,7 @@ function clearDrainTimer() {
 function resetWall() {
   clearDrainTimer();
   queue.splice(0);
-  cells.value = createEmptyCells();
+  cells.value = createEmptyCells(resolveCellCount());
   seenSeq = 0;
   insertedAt = 0;
   scheduleDrain();
@@ -153,6 +226,7 @@ function resetWall() {
 watch(
   () => props.events,
   (events) => {
+    syncCellCount(events);
     let queued = false;
     for (const event of events) {
       if (!event?.seq || event.seq <= seenSeq) continue;
@@ -163,6 +237,14 @@ watch(
     if (queued) scheduleDrain();
   },
   { deep: true },
+);
+
+watch(
+  () => props.total,
+  () => {
+    syncCellCount();
+    scheduleDrain();
+  },
 );
 
 watch(
@@ -184,10 +266,10 @@ onBeforeUnmount(clearDrainTimer);
         <p class="eyebrow">照片墙</p>
         <h2>每张照片都会经过这里</h2>
       </div>
-      <span>{{ filledCount }} / {{ WALL_CELL_COUNT }}</span>
+      <span>{{ filledCount }} / {{ wallCountLabel }}</span>
     </div>
 
-    <div class="processing-photo-wall" :class="{ collecting }">
+    <div class="processing-photo-wall" :class="{ collecting }" :style="wallStyle">
       <article
         v-for="cell in cells"
         :key="cell.id"

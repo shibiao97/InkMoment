@@ -68,13 +68,15 @@ def _device():
 
 
 def _cache_dir() -> Path:
-    d = Path.home() / ".cache" / "inkmoment"
+    configured = os.environ.get("INKMOMENT_MODEL_CACHE_DIR", "").strip()
+    d = Path(configured).expanduser() if configured else Path.home() / ".cache" / "inkmoment"
     d.mkdir(parents=True, exist_ok=True)
     return d
 
 
 def hf_model_cache_status(model_id: str = DINO_MODEL_ID,
-                          files: list[str] | None = None) -> dict:
+                          files: list[str] | None = None,
+                          cache_dir: str | os.PathLike[str] | None = None) -> dict:
     """返回 HuggingFace 模型关键文件缓存状态，不触发下载。"""
     files = files or DINO_REQUIRED_FILES
     try:
@@ -86,10 +88,12 @@ def hf_model_cache_status(model_id: str = DINO_MODEL_ID,
             "missing": files,
             "error": f"huggingface_hub 未安装：{e}",
         }
+    resolved_cache = cache_dir or os.environ.get("HUGGINGFACE_HUB_CACHE")
     missing = []
     paths = {}
     for filename in files:
-        path = try_to_load_from_cache(model_id, filename)
+        kwargs = {"cache_dir": resolved_cache} if resolved_cache else {}
+        path = try_to_load_from_cache(model_id, filename, **kwargs)
         if isinstance(path, str) and Path(path).exists():
             paths[filename] = path
         else:
@@ -121,21 +125,23 @@ def _ensure_dinov2():
                 f"DINOv2 依赖缺失：{e}。专家模式需要 `pip install torch transformers`。"
             ) from e
         logger.info("vision: 加载 DINOv2-small（首次约 86MB）…")
+        hf_cache_dir = os.environ.get("HUGGINGFACE_HUB_CACHE", "").strip() or None
+        cache_kwargs = {"cache_dir": hf_cache_dir} if hf_cache_dir else {}
         # 优先用本地缓存（HF 在国内常 SSL EOF；缓存命中时绕开 HEAD 校验）
         try:
             processor = AutoImageProcessor.from_pretrained(
-                DINO_MODEL_ID, local_files_only=True
+                DINO_MODEL_ID, local_files_only=True, **cache_kwargs
             )
             model = AutoModel.from_pretrained(
-                DINO_MODEL_ID, local_files_only=True
+                DINO_MODEL_ID, local_files_only=True, **cache_kwargs
             ).to(_device()).eval()
         except Exception:
             try:
-                processor = AutoImageProcessor.from_pretrained(DINO_MODEL_ID)
-                model = AutoModel.from_pretrained(DINO_MODEL_ID).to(_device()).eval()
+                processor = AutoImageProcessor.from_pretrained(DINO_MODEL_ID, **cache_kwargs)
+                model = AutoModel.from_pretrained(DINO_MODEL_ID, **cache_kwargs).to(_device()).eval()
             except Exception as e:
                 endpoint = os.environ.get("HF_ENDPOINT", "https://huggingface.co")
-                cache = hf_model_cache_status()
+                cache = hf_model_cache_status(cache_dir=hf_cache_dir)
                 missing = ", ".join(cache.get("missing") or DINO_REQUIRED_FILES)
                 raise VisionUnavailable(
                     f"DINOv2 模型未就绪（缺少 {missing}）。"
@@ -351,13 +357,25 @@ def extract_faces(
 
     arr = np.array(img)[:, :, ::-1]  # RGB → BGR for InsightFace
 
-    faces = app.get(arr)
+    try:
+        faces = app.get(arr)
+    except AttributeError as e:
+        # InsightFace 的检测器在少数图片上会返回 None，然后库内部访问
+        # bboxes.shape 抛出 AttributeError。这里按“未检测到人脸”处理，
+        # 避免土豪/专家模式把整张可读图片误记为无法读取。
+        if "NoneType" in str(e) and "shape" in str(e):
+            logger.warning("vision: InsightFace 未返回检测框，按无人脸处理")
+            return []
+        raise
     if not faces:
         return []
 
     inv = 1.0 / scale
     out = []
     for face in faces:
+        if getattr(face, "bbox", None) is None or getattr(face, "embedding", None) is None:
+            logger.warning("vision: 跳过缺少 bbox/embedding 的人脸检测结果")
+            continue
         bbox = tuple(int(c * inv) for c in face.bbox.astype(int))
         emb = face.embedding.astype(np.float32)
         n = float(np.linalg.norm(emb))
