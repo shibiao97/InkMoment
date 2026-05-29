@@ -18,6 +18,16 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 BIN_DIR = ROOT / "src-tauri" / "binaries"
 SIDECAR_NAME = "inkmoment-sidecar"
+PYINSTALLER_COLLECT_DATA = [
+    # pyiqa looks up packaged metric definitions from pyiqa/models at runtime.
+    # PyInstaller imports the Python module but does not collect that directory
+    # unless we ask for package data explicitly.
+    "pyiqa",
+]
+PYINSTALLER_COLLECT_SUBMODULES = [
+    # pyiqa.create_metric dynamically resolves metric implementations.
+    "pyiqa",
+]
 
 
 def run(cmd: list[str], **kwargs) -> subprocess.CompletedProcess:
@@ -43,6 +53,13 @@ def ensure_pyinstaller(python: str) -> None:
             "PyInstaller is not available. Install desktop packaging deps first:\n"
             f"  {python} -m pip install -r requirements-desktop.txt"
         ) from exc
+
+
+def add_pyinstaller_collection_args(cmd: list[str]) -> None:
+    for module in PYINSTALLER_COLLECT_DATA:
+        cmd.extend(["--collect-data", module])
+    for module in PYINSTALLER_COLLECT_SUBMODULES:
+        cmd.extend(["--collect-submodules", module])
 
 
 def main() -> int:
@@ -115,6 +132,7 @@ def main() -> int:
         "--specpath",
         str(spec_dir),
     ]
+    add_pyinstaller_collection_args(cmd)
     for module in hidden_imports:
         cmd.extend(["--hidden-import", module])
     cmd.append(str(ROOT / "app.py"))

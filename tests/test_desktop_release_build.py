@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 from scripts import (
     audit_desktop_goal,
+    build_sidecar,
     build_desktop_release,
     run_desktop_release_workflow,
     verify_desktop_release,
@@ -119,6 +120,15 @@ class DesktopReleaseBuildTest(unittest.TestCase):
                     build_desktop_release.ensure_windows_icon("nsis")
 
             self.assertEqual(ico.read_bytes()[:4], b"\0\0\1\0")
+
+    def test_sidecar_collects_pyiqa_runtime_package_data(self):
+        cmd = ["python", "-m", "PyInstaller"]
+
+        build_sidecar.add_pyinstaller_collection_args(cmd)
+
+        self.assertIn("--collect-data", cmd)
+        self.assertIn("pyiqa", cmd)
+        self.assertIn("--collect-submodules", cmd)
 
     def test_verify_artifact_accepts_valid_nsis_exe_header(self):
         with tempfile.TemporaryDirectory() as folder:

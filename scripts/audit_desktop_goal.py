@@ -141,6 +141,17 @@ def run_audit(*, completion: bool = False, require_local_artifacts: bool = True)
             "Windows NSIS builds have the required .ico resource for Tauri.",
         ),
         Check(
+            "pyiqa package data collected",
+            contains(
+                "scripts/build_sidecar.py",
+                "PYINSTALLER_COLLECT_DATA",
+                '"pyiqa"',
+                "--collect-data",
+                "--collect-submodules",
+            ),
+            "Expert-mode pyiqa metric definitions are included in the packaged sidecar.",
+        ),
+        Check(
             "installer verifier present",
             exists("scripts/verify_desktop_release.py")
             and contains(".github/workflows/desktop-release.yml", "verify_desktop_release.py"),
