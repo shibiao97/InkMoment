@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from scripts.build_auth_server_release import DEFAULT_OUTPUT, build_release
+from scripts.build_auth_server_release import DEFAULT_OUTPUT, build_release  # noqa: E402
 
 
 DEFAULT_REMOTE_HOST = "jdcloud-codex"
@@ -33,8 +33,6 @@ def remote_install_script(args: argparse.Namespace) -> str:
     service_name = shlex.quote(args.service_name)
     service_user = shlex.quote(args.service_user)
     python_bin = shlex.quote(args.python)
-    auth_host = shlex.quote(args.auth_host)
-    auth_port = shlex.quote(str(args.auth_port))
     public_base_url = shlex.quote(str(getattr(args, "public_base_url", "") or "").strip().rstrip("/"))
 
     install_packages = ""

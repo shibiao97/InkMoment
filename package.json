@@ -7,7 +7,11 @@
   "scripts": {
     "frontend:dev": "npm --workspace frontend run dev",
     "frontend:build": "npm --workspace frontend run build",
+    "frontend:lint": "npm --workspace frontend run lint",
     "frontend:preview": "npm --workspace frontend run preview",
+    "frontend:test": "npm --workspace frontend run test",
+    "frontend:typecheck": "npm --workspace frontend run typecheck",
+    "quality:frontend": "npm run frontend:lint && npm run frontend:typecheck && npm run frontend:test",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
     "sidecar:build": "python3 scripts/build_sidecar.py",

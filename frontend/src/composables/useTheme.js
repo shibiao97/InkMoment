@@ -28,7 +28,9 @@ export function useTheme() {
   watch(selectedTheme, (value) => {
     try {
       window.localStorage?.setItem(THEME_KEY, value);
-    } catch {}
+    } catch {
+      // localStorage can be disabled in hardened WebView profiles.
+    }
   }, { immediate: true });
 
   return {

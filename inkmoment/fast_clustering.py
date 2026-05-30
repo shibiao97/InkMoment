@@ -38,7 +38,7 @@ TIME_HALFLIFE = 60.0
 # 强制连拍：同前缀连号 + 时间间隔 ≤ S
 BURST_NUMBER_DELTA = 3
 BURST_TIME_GAP = 1.2
-BURST_HASH_MAX = 18       # phash hamming > 此 → 内容差异太大，不算连拍
+BURST_HASH_MAX = 18  # phash hamming > 此 → 内容差异太大，不算连拍
 
 # 多 hash 融合权重（pHash 主导，其它互补）
 W_PHASH = 0.40
@@ -58,9 +58,9 @@ W_GPS = 0.06
 ORB_CANDIDATE_BASE = 0.45
 
 # ORB inlier 数 → sim 提升
-ORB_INLIERS_STRONG = 80     # ≥ 此：sim 强制 0.95
-ORB_INLIERS_MEDIUM = 30     # ≥ 此：sim = max(base, 0.85)
-ORB_INLIERS_WEAK = 5        # < 此 + base 高 → 降级（hash 误报）
+ORB_INLIERS_STRONG = 80  # ≥ 此：sim 强制 0.95
+ORB_INLIERS_MEDIUM = 30  # ≥ 此：sim = max(base, 0.85)
+ORB_INLIERS_WEAK = 5  # < 此 + base 高 → 降级（hash 误报）
 
 # 聚类阈值（距离 = 1 - sim）
 CLUSTER_DISTANCE_THRESHOLD = 0.38
@@ -70,6 +70,7 @@ MAX_GROUP_SIZE = 25
 
 
 # =================== 工具 ===================
+
 
 def _filename_number(name: str) -> Optional[int]:
     m = re.search(r"(\d+)(?=\.[^.]+$|$)", name)
@@ -91,6 +92,7 @@ def _parse_iso_dt(s: Optional[str]) -> Optional[float]:
     if not s:
         return None
     from datetime import datetime
+
     try:
         return datetime.fromisoformat(s).timestamp()
     except Exception:
@@ -194,6 +196,7 @@ def _exif_sim(meta1: Optional[dict], meta2: Optional[dict]) -> float:
             return float(str(s).rstrip("m").rstrip("m"))
         except ValueError:
             return None
+
     f1, f2 = _focal(meta1), _focal(meta2)
     if f1 is not None and f2 is not None:
         parts += 1
@@ -208,6 +211,7 @@ def _exif_sim(meta1: Optional[dict], meta2: Optional[dict]) -> float:
             return float(str(s).replace("f/", ""))
         except ValueError:
             return None
+
     a1, a2 = _aper(meta1), _aper(meta2)
     if a1 is not None and a2 is not None:
         parts += 1
@@ -245,6 +249,7 @@ def _gps_sim(meta1: Optional[dict], meta2: Optional[dict]) -> Optional[float]:
 
 
 # =================== 强制连拍组 ===================
+
 
 def detect_bursts(infos) -> list[set[int]]:
     n = len(infos)
@@ -303,6 +308,7 @@ def detect_bursts(infos) -> list[set[int]]:
 
 # =================== ORB 几何验证 ===================
 
+
 def _orb_inliers(desc_a, desc_b, kps_a=None, kps_b=None) -> int:
     """返回经过 RANSAC 单应性验证后的内点数。
 
@@ -336,6 +342,7 @@ def _orb_inliers(desc_a, desc_b, kps_a=None, kps_b=None) -> int:
 
 # =================== 成对相似度 ===================
 
+
 def _pair_base_sim(info_a, info_b, meta_a, meta_b) -> float:
     """不含 ORB 验证的"快速"相似度。"""
     sim_hash = _hash_combined_sim(info_a, info_b)
@@ -358,9 +365,7 @@ def _pair_base_sim(info_a, info_b, meta_a, meta_b) -> float:
     if not has_gps:
         sim_gps = 0.0
 
-    w_hash, w_color, w_time, w_exif, w_name, w_gps = (
-        W_HASH, W_COLOR, W_TIME, W_EXIF, W_NAME, W_GPS
-    )
+    w_hash, w_color, w_time, w_exif, w_name, w_gps = (W_HASH, W_COLOR, W_TIME, W_EXIF, W_NAME, W_GPS)
     if not has_color:
         w_hash += w_color
         w_color = 0.0
@@ -410,12 +415,12 @@ def _pair_final_sim(info_a, info_b, meta_a, meta_b) -> float:
 
 # =================== 时间硬切段 ===================
 
+
 def _split_by_time_gaps(infos: Sequence) -> list[list[int]]:
     """按时间间隔切大段。返回每段是 infos 索引的 list。"""
     if not infos:
         return []
-    sorted_idx = sorted(range(len(infos)),
-                        key=lambda i: _time_for_info(infos[i]) or 0.0)
+    sorted_idx = sorted(range(len(infos)), key=lambda i: _time_for_info(infos[i]) or 0.0)
     segments: list[list[int]] = [[sorted_idx[0]]]
     for i in sorted_idx[1:]:
         t_cur = _time_for_info(infos[i])
@@ -428,6 +433,7 @@ def _split_by_time_gaps(infos: Sequence) -> list[list[int]]:
 
 
 # =================== complete linkage 聚类 ===================
+
 
 def _complete_linkage(
     members: list[int],
@@ -520,6 +526,7 @@ def _split_oversized(groups: list[list[int]], infos, max_size: int = MAX_GROUP_S
 
 # =================== 入口 ===================
 
+
 def cluster(infos: Sequence, meta_for=None) -> list[list[int]]:
     """主入口。返回每组是 infos 索引的 list。
 
@@ -532,7 +539,9 @@ def cluster(infos: Sequence, meta_for=None) -> list[list[int]]:
     if n == 1:
         return [[0]]
     if meta_for is None:
-        meta_for = lambda info: (info.exif_summary if getattr(info, "exif_summary", None) else None)
+
+        def meta_for(info):
+            return info.exif_summary if getattr(info, "exif_summary", None) else None
 
     metas = [meta_for(info) for info in infos]
     bursts = detect_bursts(infos)
@@ -561,7 +570,9 @@ def cluster(infos: Sequence, meta_for=None) -> list[list[int]]:
         seg_set = set(seg)
         local_forced = [g & seg_set for g in bursts if len(g & seg_set) >= 2]
         sub_groups = _complete_linkage(
-            seg, dist, threshold=CLUSTER_DISTANCE_THRESHOLD,
+            seg,
+            dist,
+            threshold=CLUSTER_DISTANCE_THRESHOLD,
             forced_groups=local_forced,
         )
         all_groups.extend(sub_groups)
@@ -573,8 +584,5 @@ def cluster(infos: Sequence, meta_for=None) -> list[list[int]]:
         g.sort(key=lambda i: _time_for_info(infos[i]) or 0.0)
     all_groups.sort(key=lambda g: _time_for_info(infos[g[0]]) or 0.0)
 
-    logger.info(
-        f"fast cluster: 最终 {len(all_groups)} 组，最大 "
-        f"{max((len(g) for g in all_groups), default=0)} 张"
-    )
+    logger.info(f"fast cluster: 最终 {len(all_groups)} 组，最大 {max((len(g) for g in all_groups), default=0)} 张")
     return all_groups

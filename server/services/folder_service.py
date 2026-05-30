@@ -27,7 +27,7 @@ def _browse_folder_macos() -> dict:
     script = (
         'tell application "System Events" to activate\n'
         'set chosen to POSIX path of (choose folder with prompt "选择要处理的照片文件夹")\n'
-        'return chosen'
+        "return chosen"
     )
     proc = subprocess.run(
         ["osascript", "-e", script],
@@ -173,11 +173,7 @@ def _scan_folder_snapshot(path: Path) -> dict:
     if earliest and latest and latest > earliest:
         span_days = max(1, int((latest - earliest) / 86400) + 1)
 
-    has_prior = (
-        (path / "winners").is_dir() or
-        (path / "losers").is_dir() or
-        (path / STATE_FILENAME).exists()
-    )
+    has_prior = (path / "winners").is_dir() or (path / "losers").is_dir() or (path / STATE_FILENAME).exists()
 
     return {
         "ok": True,

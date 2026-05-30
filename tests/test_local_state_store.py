@@ -80,38 +80,44 @@ class LocalStateStoreTest(unittest.TestCase):
         store = LocalStateStore(self.tmp_path / DB_FILE_NAME)
         store.initialize()
 
-        store.record_task({
-            "id": "job-1",
-            "folder": "/photos/a",
-            "status": "running",
-            "mode": "copy",
-            "engine": "fast",
-            "dry_run": False,
-            "started_at": 10.0,
-            "summary": {"total": 3},
-        })
-        store.record_task({
-            "id": "job-2",
-            "folder": "/photos/b",
-            "status": "done",
-            "mode": "move",
-            "engine": "expert",
-            "dry_run": True,
-            "started_at": 20.0,
-            "finished_at": 30.0,
-            "summary": {"winners": 2},
-        })
-        store.record_task({
-            "id": "job-1",
-            "folder": "/photos/a",
-            "status": "done",
-            "mode": "copy",
-            "engine": "fast",
-            "dry_run": False,
-            "started_at": 10.0,
-            "finished_at": 15.0,
-            "summary": {"winners": 1},
-        })
+        store.record_task(
+            {
+                "id": "job-1",
+                "folder": "/photos/a",
+                "status": "running",
+                "mode": "copy",
+                "engine": "fast",
+                "dry_run": False,
+                "started_at": 10.0,
+                "summary": {"total": 3},
+            }
+        )
+        store.record_task(
+            {
+                "id": "job-2",
+                "folder": "/photos/b",
+                "status": "done",
+                "mode": "move",
+                "engine": "expert",
+                "dry_run": True,
+                "started_at": 20.0,
+                "finished_at": 30.0,
+                "summary": {"winners": 2},
+            }
+        )
+        store.record_task(
+            {
+                "id": "job-1",
+                "folder": "/photos/a",
+                "status": "done",
+                "mode": "copy",
+                "engine": "fast",
+                "dry_run": False,
+                "started_at": 10.0,
+                "finished_at": 15.0,
+                "summary": {"winners": 1},
+            }
+        )
 
         tasks = store.list_recent_tasks()
 
@@ -127,13 +133,15 @@ class LocalStateStoreTest(unittest.TestCase):
         store.initialize()
 
         with self.assertRaisesRegex(ValueError, "folder"):
-            store.record_task({
-                "id": "job-1",
-                "status": "done",
-                "mode": "copy",
-                "engine": "fast",
-                "started_at": 1.0,
-            })
+            store.record_task(
+                {
+                    "id": "job-1",
+                    "status": "done",
+                    "mode": "copy",
+                    "engine": "fast",
+                    "started_at": 1.0,
+                }
+            )
 
     def test_image_analysis_cache_round_trips_and_invalidates_by_signature(self):
         store = LocalStateStore(self.tmp_path / DB_FILE_NAME)
@@ -141,12 +149,14 @@ class LocalStateStoreTest(unittest.TestCase):
         photo = self.tmp_path / "photos" / "a.jpg"
         photo.parent.mkdir()
         photo.write_bytes(b"first")
-        signature = [{
-            "role": "primary",
-            "path": str(photo),
-            "size": photo.stat().st_size,
-            "mtime_ns": photo.stat().st_mtime_ns,
-        }]
+        signature = [
+            {
+                "role": "primary",
+                "path": str(photo),
+                "size": photo.stat().st_size,
+                "mtime_ns": photo.stat().st_mtime_ns,
+            }
+        ]
         payload = {
             "path": str(photo),
             "phash": "0" * 16,
@@ -176,14 +186,16 @@ class LocalStateStoreTest(unittest.TestCase):
         self.assertEqual(cached["quality"]["flags"], ["blurry"])
 
         stale_signature = [dict(signature[0], size=999)]
-        self.assertIsNone(store.get_image_analysis(
-            path=str(photo),
-            engine="fast",
-            strength="standard",
-            face_aware=False,
-            llm_model=None,
-            input_signature=stale_signature,
-        ))
+        self.assertIsNone(
+            store.get_image_analysis(
+                path=str(photo),
+                engine="fast",
+                strength="standard",
+                face_aware=False,
+                llm_model=None,
+                input_signature=stale_signature,
+            )
+        )
 
         stats = store.image_analysis_stats(str(photo.parent))
         self.assertEqual(stats["entries"], 1)

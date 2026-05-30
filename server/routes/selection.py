@@ -1,6 +1,18 @@
+from typing import Callable, Protocol
+
 from flask import Blueprint, jsonify, request
 
-def create_selection_blueprint(handlers):
+
+class SelectionHandlers(Protocol):
+    group: Callable[[], tuple[dict, int]]
+    choose: Callable[[dict], tuple[dict, int]]
+    kick: Callable[[dict], tuple[dict, int]]
+    undo: Callable[[], tuple[dict, int]]
+    skip: Callable[[], tuple[dict, int]]
+    reopen: Callable[[dict], tuple[dict, int]]
+
+
+def create_selection_blueprint(handlers: SelectionHandlers):
     selection_bp = Blueprint("selection", __name__)
 
     @selection_bp.route("/api/group")

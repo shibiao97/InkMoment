@@ -9,9 +9,9 @@ from server.domain.models import JobState, SessionState
 
 def new_grouping_state() -> dict:
     return {
-        "status": "idle",     # idle | running | done | error
-        "groups": [],         # 逐个追加的组信息 [{id, size, samples, ...}]
-        "all_paths": [],      # 全部照片路径（strip 用）
+        "status": "idle",  # idle | running | done | error
+        "groups": [],  # 逐个追加的组信息 [{id, size, samples, ...}]
+        "all_paths": [],  # 全部照片路径（strip 用）
         "total": 0,
         "multi": 0,
         "error": None,

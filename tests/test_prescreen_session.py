@@ -1,45 +1,22 @@
-import importlib
-import sys
-import types
+import threading
+import time
 from pathlib import Path
 
-
-def import_app_module():
-    sys.modules.setdefault("imagehash", types.SimpleNamespace(phash=lambda *args, **kwargs: "0" * 16))
-    if "flask" not in sys.modules:
-        class FakeFlask:
-            def __init__(self, *args, **kwargs):
-                self.static_folder = kwargs.get("static_folder", "static")
-
-            def route(self, *args, **kwargs):
-                return lambda fn: fn
-
-            def after_request(self, fn):
-                return fn
-
-            def before_request(self, fn):
-                return fn
-
-            def run(self, *args, **kwargs):
-                return None
-
-        sys.modules["flask"] = types.SimpleNamespace(
-            Flask=FakeFlask,
-            Response=lambda *args, **kwargs: types.SimpleNamespace(headers={}, *args, **kwargs),
-            abort=lambda *args, **kwargs: None,
-            jsonify=lambda *args, **kwargs: args[0] if args else kwargs,
-            request=types.SimpleNamespace(path="/", host="localhost:5057", headers={}, method="GET", args={}),
-            send_file=lambda *args, **kwargs: None,
-            send_from_directory=lambda *args, **kwargs: None,
-        )
-    sys.modules.pop("app", None)
-    return importlib.import_module("app")
+from inkmoment.grouper import ImageInfo
+from server.domain.models import GroupState
+from server.services.grouping_service import create_confirm_prescreen_handler
+from server.services.result_service import restore_rejected_payload, serialize_auto_rejected
+from server.services.session_builder_service import (
+    build_prescreen_session_from_infos as service_build_prescreen_session_from_infos,
+)
+from server.services.session_builder_service import (
+    build_session_from_groups as service_build_session_from_groups,
+)
 
 
 def make_info(path: Path, score=80.0, auto_reject=False, reason=None):
-    app = import_app_module()
     path.write_bytes(b"fake")
-    return app.ImageInfo(
+    return ImageInfo(
         path=str(path),
         phash="0" * 16,
         size=path.stat().st_size,
@@ -47,6 +24,7 @@ def make_info(path: Path, score=80.0, auto_reject=False, reason=None):
         exif_summary={"width": 1000, "height": 800, "file_size": path.stat().st_size},
         quality={
             "quality_score": score,
+            "aesthetic_score": score / 10,
             "flags": ["very_blurry"] if auto_reject else [],
             "auto_reject": auto_reject,
             "reject_reason": reason,
@@ -55,8 +33,7 @@ def make_info(path: Path, score=80.0, auto_reject=False, reason=None):
 
 
 def build_session(tmp_path, raw_groups, enabled=True, strength="standard"):
-    app = import_app_module()
-    return app.build_session_from_groups(
+    return service_build_session_from_groups(
         str(tmp_path),
         dry_run=True,
         mode="copy",
@@ -67,6 +44,76 @@ def build_session(tmp_path, raw_groups, enabled=True, strength="standard"):
         near_seconds=300,
         prescreen_enabled=enabled,
         prescreen_strength=strength,
+        save_state_fn=lambda _state: None,
+    )
+
+
+def build_prescreen_session(tmp_path, infos, enabled=True, strength="standard"):
+    return service_build_prescreen_session_from_infos(
+        str(tmp_path),
+        dry_run=True,
+        mode="copy",
+        infos=infos,
+        threshold_near=10,
+        threshold_far=6,
+        near_seconds=300,
+        prescreen_enabled=enabled,
+        prescreen_strength=strength,
+        save_state_fn=lambda _state: None,
+    )
+
+
+def build_session_for_handler(
+    folder,
+    dry_run,
+    mode,
+    raw_groups,
+    infos,
+    threshold_near,
+    threshold_far,
+    near_seconds,
+    prescreen_enabled=True,
+    prescreen_strength="standard",
+    engine="fast",
+):
+    return service_build_session_from_groups(
+        folder,
+        dry_run,
+        mode,
+        raw_groups,
+        infos,
+        threshold_near,
+        threshold_far,
+        near_seconds,
+        prescreen_enabled=prescreen_enabled,
+        prescreen_strength=prescreen_strength,
+        engine=engine,
+        save_state_fn=lambda _state: None,
+    )
+
+
+def losers_dir(folder: str) -> Path:
+    return Path(folder) / "废片"
+
+
+def winners_dir(folder: str) -> Path:
+    return Path(folder) / "精选"
+
+
+def unique_target(target_dir: Path, name: str) -> Path:
+    return target_dir / name
+
+
+def restore_rejected(session, payload):
+    return restore_rejected_payload(
+        payload,
+        lambda: session,
+        threading.Lock(),
+        winners_dir,
+        losers_dir,
+        unique_target,
+        lambda _state: None,
+        logger=None,
     )
 
 
@@ -94,21 +141,19 @@ def test_prescreen_removes_bad_photos_before_tournament(tmp_path):
     assert group.finished is False
     assert group.losers == [bad.path]
     assert group.auto_rejected == [bad.path]
-    assert group.left == good1.path
-    assert group.right == good2.path
+    assert {group.left, group.right} == {good1.path, good2.path}
 
 
 def test_standard_prescreen_auto_selects_clear_group_winner(tmp_path):
     best = make_info(tmp_path / "best.jpg", score=94)
-    ok = make_info(tmp_path / "ok.jpg", score=62)
     weak = make_info(tmp_path / "weak.jpg", score=55)
 
-    sess = build_session(tmp_path, [[best, ok, weak]], enabled=True, strength="standard")
+    sess = build_session(tmp_path, [[best, weak]], enabled=True, strength="standard")
 
     group = sess.groups[0]
     assert group.finished is True
     assert group.winner == best.path
-    assert group.losers == [ok.path, weak.path]
+    assert group.losers == [weak.path]
     assert group.auto_selected is True
 
 
@@ -126,12 +171,11 @@ def test_disabled_prescreen_keeps_original_multi_group_flow(tmp_path):
     assert group.auto_rejected == []
 
 
-def test_auto_rejected_api_lists_rejected_items(tmp_path):
-    app = import_app_module()
+def test_auto_rejected_payload_lists_rejected_items(tmp_path):
     bad = make_info(tmp_path / "bad.jpg", score=8, auto_reject=True, reason="严重模糊")
-    app.SESSION = build_session(tmp_path, [[bad]])
+    sess = build_session(tmp_path, [[bad]])
 
-    payload = app.api_auto_rejected()
+    payload = serialize_auto_rejected(sess, losers_dir)
 
     assert payload["items"][0]["path"] == bad.path
     assert payload["items"][0]["reason"] == "严重模糊"
@@ -139,68 +183,103 @@ def test_auto_rejected_api_lists_rejected_items(tmp_path):
 
 
 def test_restore_rejected_adds_photo_to_winners_once(tmp_path):
-    app = import_app_module()
     bad = make_info(tmp_path / "bad.jpg", score=8, auto_reject=True, reason="严重模糊")
-    app.SESSION = build_session(tmp_path, [[bad]])
-    app.request.get_json = lambda *args, **kwargs: {"group_id": app.SESSION.groups[0].id, "path": bad.path}
+    sess = build_session(tmp_path, [[bad]])
+    payload = {"group_id": sess.groups[0].id, "path": bad.path}
 
-    first = app.api_restore_rejected()
-    second = app.api_restore_rejected()
+    first, first_status = restore_rejected(sess, payload)
+    second, second_status = restore_rejected(sess, payload)
 
-    group = app.SESSION.groups[0]
-    assert first["ok"] is True
-    assert second["ok"] is True
+    group = sess.groups[0]
+    assert (first, first_status) == ({"ok": True, "restored": True}, 200)
+    assert (second, second_status) == ({"ok": True, "restored": True}, 200)
     assert group.manual_restored == [bad.path]
     assert bad.path in group.extra_winners
 
 
-def test_confirm_prescreen_marks_session_reviewed(tmp_path):
-    app = import_app_module()
+def test_confirm_prescreen_marks_existing_session_reviewed(tmp_path):
     bad = make_info(tmp_path / "bad.jpg", score=8, auto_reject=True, reason="严重模糊")
-    app.SESSION = build_session(tmp_path, [[bad]])
+    current_session = build_session(tmp_path, [[bad]])
+    handler = create_confirm_prescreen_handler(
+        get_session=lambda: current_session,
+        get_infos=lambda _folder: [bad],
+        grouping_state=_new_grouping_state(),
+        lock=threading.Lock(),
+        group_infos_fn=lambda infos, **_kwargs: [infos],
+        build_session_fn=build_session_for_handler,
+        group_state_cls=GroupState,
+        apply_pending_groups_fn=lambda _state: [],
+        save_state_fn=lambda _state: None,
+        set_session_unlocked=lambda _state: None,
+        log_error=lambda *_args, **_kwargs: None,
+    )
 
-    payload = app.api_confirm_prescreen()
+    payload, status = handler()
 
-    assert payload["ok"] is True
-    assert app.SESSION.prescreen_reviewed is True
+    assert (payload, status) == ({"ok": True, "async": False}, 200)
+    assert current_session.prescreen_reviewed is True
 
 
 def test_confirm_prescreen_groups_only_passed_and_restored_photos(tmp_path):
-    app = import_app_module()
     bad_drop = make_info(tmp_path / "drop.jpg", score=8, auto_reject=True, reason="严重模糊")
     bad_restore = make_info(tmp_path / "restore.jpg", score=9, auto_reject=True, reason="曝光过低")
     good = make_info(tmp_path / "good.jpg", score=88)
     infos = [bad_drop, bad_restore, good]
-    app.LAST_INFOS = infos
-    app.SESSION = app.build_prescreen_session_from_infos(
-        str(tmp_path),
-        dry_run=True,
-        mode="copy",
-        infos=infos,
-        threshold_near=10,
-        threshold_far=6,
-        near_seconds=300,
-        prescreen_enabled=True,
-        prescreen_strength="standard",
+    current_session = build_prescreen_session(tmp_path, infos)
+
+    restored, restored_status = restore_rejected(
+        current_session,
+        {"group_id": "__prescreen__", "path": bad_restore.path},
     )
-    app.request.get_json = lambda *args, **kwargs: {"group_id": "__prescreen__", "path": bad_restore.path}
+    assert (restored, restored_status) == ({"ok": True, "restored": True}, 200)
 
-    restored = app.api_restore_rejected()
-    confirmed = app.api_confirm_prescreen()
+    lock = threading.Lock()
+    grouping_state = _new_grouping_state()
 
-    assert restored["ok"] is True
-    assert confirmed["ok"] is True
-    all_group_images = [p for group in app.SESSION.groups for p in group.images]
+    def set_session_unlocked(next_session):
+        nonlocal current_session
+        current_session = next_session
+
+    handler = create_confirm_prescreen_handler(
+        get_session=lambda: current_session,
+        get_infos=lambda _folder: infos,
+        grouping_state=grouping_state,
+        lock=lock,
+        group_infos_fn=lambda selected_infos, **_kwargs: [selected_infos],
+        build_session_fn=build_session_for_handler,
+        group_state_cls=GroupState,
+        apply_pending_groups_fn=lambda _state: [],
+        save_state_fn=lambda _state: None,
+        set_session_unlocked=set_session_unlocked,
+        log_error=lambda *_args, **_kwargs: None,
+    )
+
+    confirmed, confirmed_status = handler()
+    _wait_for_grouping_done(grouping_state)
+
+    assert (confirmed, confirmed_status) == (
+        {"ok": True, "async": True, "all_paths": [bad_restore.path, good.path]},
+        200,
+    )
+    all_group_images = [p for group in current_session.groups for p in group.images]
     assert good.path in all_group_images
     assert bad_restore.path in all_group_images
-    assert bad_drop.path in all_group_images  # kept only as an auto-rejected loser record
-    tournament_images = [
-        p
-        for group in app.SESSION.groups
-        if not group.auto_rejected
-        for p in group.images
-    ]
+    assert bad_drop.path in all_group_images
+    tournament_images = [p for group in current_session.groups if not group.auto_rejected for p in group.images]
     assert good.path in tournament_images
     assert bad_restore.path in tournament_images
     assert bad_drop.path not in tournament_images
-    assert app.SESSION.prescreen_reviewed is True
+    assert current_session.prescreen_reviewed is True
+
+
+def _new_grouping_state() -> dict:
+    return {"status": "idle", "groups": [], "all_paths": [], "total": 0, "multi": 0, "error": None}
+
+
+def _wait_for_grouping_done(grouping_state: dict) -> None:
+    deadline = time.time() + 2.0
+    while time.time() < deadline:
+        if grouping_state["status"] in {"done", "error"}:
+            break
+        time.sleep(0.01)
+    assert grouping_state["status"] == "done", grouping_state

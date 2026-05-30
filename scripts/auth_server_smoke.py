@@ -68,9 +68,7 @@ class SmokeClient:
             raise SmokeError(f"{method} {path} failed: {exc}") from exc
 
         if status != expected_status:
-            raise SmokeError(
-                f"{method} {path} expected HTTP {expected_status}, got {status}: {payload}"
-            )
+            raise SmokeError(f"{method} {path} expected HTTP {expected_status}, got {status}: {payload}")
         return payload
 
 
@@ -260,11 +258,17 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         description="Run a production-like smoke test against a deployed InkMoment auth server.",
     )
     parser.add_argument("--base-url", required=True, help="Authorization server URL, e.g. https://auth.example.com")
-    parser.add_argument("--admin-token", default="", help="Bootstrap token fallback, only works before the first admin exists")
+    parser.add_argument(
+        "--admin-token", default="", help="Bootstrap token fallback, only works before the first admin exists"
+    )
     parser.add_argument("--admin-session-token", default="", help="Existing admin session token")
-    parser.add_argument("--admin-username", default="", help="Admin username used to log in before management API calls")
+    parser.add_argument(
+        "--admin-username", default="", help="Admin username used to log in before management API calls"
+    )
     parser.add_argument("--admin-password", default="", help="Admin password used with --admin-username")
-    parser.add_argument("--email", default="", help="Optional smoke account email. Defaults to smoke+<timestamp>@example.invalid")
+    parser.add_argument(
+        "--email", default="", help="Optional smoke account email. Defaults to smoke+<timestamp>@example.invalid"
+    )
     parser.add_argument("--password", default="smoke-password123", help="Smoke account password")
     parser.add_argument("--cdk-code", default="", help="Optional smoke CDK code. Defaults to SMOKE-<timestamp>")
     parser.add_argument("--duration-days", type=int, default=1, help="Smoke CDK duration in days")

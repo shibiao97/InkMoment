@@ -111,6 +111,7 @@ def main() -> int:
         "server.services.session_builder_service",
         "server.services.session_service",
         "server.services.session_state_service",
+        "server.services.secret_store_service",
         "server.services.start_service",
         "server.services.task_history_service",
         "server.services.watermark_service",

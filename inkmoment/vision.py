@@ -24,7 +24,7 @@ import logging
 import os
 import threading
 from pathlib import Path
-from typing import List, Tuple
+from typing import List
 
 import numpy as np
 from PIL import Image
@@ -55,6 +55,7 @@ def _device():
     if _DEVICE is not None:
         return _DEVICE
     import torch
+
     if torch.backends.mps.is_available():
         _DEVICE = torch.device("mps")
         logger.info("vision: 使用 MPS（Apple Silicon GPU）")
@@ -74,9 +75,9 @@ def _cache_dir() -> Path:
     return d
 
 
-def hf_model_cache_status(model_id: str = DINO_MODEL_ID,
-                          files: list[str] | None = None,
-                          cache_dir: str | os.PathLike[str] | None = None) -> dict:
+def hf_model_cache_status(
+    model_id: str = DINO_MODEL_ID, files: list[str] | None = None, cache_dir: str | os.PathLike[str] | None = None
+) -> dict:
     """返回 HuggingFace 模型关键文件缓存状态，不触发下载。"""
     files = files or DINO_REQUIRED_FILES
     try:
@@ -111,6 +112,7 @@ def hf_model_cache_status(model_id: str = DINO_MODEL_ID,
 # DINOv2-small：384 维语义特征（不变）
 # =============================================================
 
+
 def _ensure_dinov2():
     if "dinov2" in _models:
         return _models["dinov2"]
@@ -121,20 +123,14 @@ def _ensure_dinov2():
             import torch  # noqa
             from transformers import AutoImageProcessor, AutoModel
         except ImportError as e:
-            raise VisionUnavailable(
-                f"DINOv2 依赖缺失：{e}。专家模式需要 `pip install torch transformers`。"
-            ) from e
+            raise VisionUnavailable(f"DINOv2 依赖缺失：{e}。专家模式需要 `pip install torch transformers`。") from e
         logger.info("vision: 加载 DINOv2-small（首次约 86MB）…")
         hf_cache_dir = os.environ.get("HUGGINGFACE_HUB_CACHE", "").strip() or None
         cache_kwargs = {"cache_dir": hf_cache_dir} if hf_cache_dir else {}
         # 优先用本地缓存（HF 在国内常 SSL EOF；缓存命中时绕开 HEAD 校验）
         try:
-            processor = AutoImageProcessor.from_pretrained(
-                DINO_MODEL_ID, local_files_only=True, **cache_kwargs
-            )
-            model = AutoModel.from_pretrained(
-                DINO_MODEL_ID, local_files_only=True, **cache_kwargs
-            ).to(_device()).eval()
+            processor = AutoImageProcessor.from_pretrained(DINO_MODEL_ID, local_files_only=True, **cache_kwargs)
+            model = AutoModel.from_pretrained(DINO_MODEL_ID, local_files_only=True, **cache_kwargs).to(_device()).eval()
         except Exception:
             try:
                 processor = AutoImageProcessor.from_pretrained(DINO_MODEL_ID, **cache_kwargs)
@@ -157,6 +153,7 @@ def _ensure_dinov2():
 def extract_dinov2(pil_img: Image.Image) -> np.ndarray:
     """提取 DINOv2-small CLS token（L2 归一化，384 维）。"""
     import torch
+
     model, processor = _ensure_dinov2()
     inputs = processor(images=pil_img.convert("RGB"), return_tensors="pt")
     inputs = {k: v.to(_device()) for k, v in inputs.items()}
@@ -174,6 +171,7 @@ def extract_dinov2(pil_img: Image.Image) -> np.ndarray:
 # NIMA 美学评分（MobileNetV2 backbone，独立于 CLIP）
 # =============================================================
 
+
 def _ensure_nima():
     if "nima" in _models:
         return _models["nima"]
@@ -181,13 +179,10 @@ def _ensure_nima():
         if "nima" in _models:
             return _models["nima"]
         try:
-            import torch
             import torch.nn as nn
             from torchvision import models, transforms
         except ImportError as e:
-            raise VisionUnavailable(
-                f"NIMA 依赖缺失：{e}。需要 `pip install torch torchvision`。"
-            ) from e
+            raise VisionUnavailable(f"NIMA 依赖缺失：{e}。需要 `pip install torch torchvision`。") from e
 
         logger.info("vision: 构建 NIMA 美学评分模型（MobileNetV2 backbone）…")
         base = models.mobilenet_v2(weights=models.MobileNet_V2_Weights.DEFAULT)
@@ -198,13 +193,14 @@ def _ensure_nima():
         )
         base = base.to(_device()).eval()
 
-        preprocess = transforms.Compose([
-            transforms.Resize(256),
-            transforms.CenterCrop(224),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                 std=[0.229, 0.224, 0.225]),
-        ])
+        preprocess = transforms.Compose(
+            [
+                transforms.Resize(256),
+                transforms.CenterCrop(224),
+                transforms.ToTensor(),
+                transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+            ]
+        )
 
         _models["nima"] = (base, preprocess)
         logger.info("vision: NIMA 美学模型就绪")
@@ -214,6 +210,7 @@ def _ensure_nima():
 def extract_aesthetic_score(pil_img: Image.Image) -> float:
     """返回美学分 1-10。使用 NIMA 分布均值。"""
     import torch
+
     model, preprocess = _ensure_nima()
     img = preprocess(pil_img.convert("RGB")).unsqueeze(0).to(_device())
     with torch.no_grad():
@@ -243,8 +240,7 @@ def _resize_for_pyiqa(pil_img: Image.Image) -> Image.Image:
     if max(w, h) <= PYIQA_MAX_SIDE:
         return img
     scale = PYIQA_MAX_SIDE / max(w, h)
-    return img.resize((max(1, int(w * scale)), max(1, int(h * scale))),
-                      Image.LANCZOS)
+    return img.resize((max(1, int(w * scale)), max(1, int(h * scale))), Image.LANCZOS)
 
 
 def _ensure_musiq():
@@ -257,9 +253,7 @@ def _ensure_musiq():
             import pyiqa  # noqa
             import torch
         except ImportError as e:
-            raise VisionUnavailable(
-                f"MUSIQ 依赖缺失：{e}。需要 `pip install pyiqa timm`。"
-            ) from e
+            raise VisionUnavailable(f"MUSIQ 依赖缺失：{e}。需要 `pip install pyiqa timm`。") from e
         logger.info("vision: 加载 MUSIQ（CPU，技术质量评分，首次约 100MB）…")
         dev = torch.device("cpu")
         model = pyiqa.create_metric("musiq", device=dev, as_loss=False)
@@ -271,6 +265,7 @@ def _ensure_musiq():
 def extract_musiq_score(pil_img: Image.Image) -> float:
     """返回 MUSIQ 技术质量分 0-100。CPU + 1024 长边以下输入。"""
     import torch
+
     model, _dev = _ensure_musiq()
     img = _resize_for_pyiqa(pil_img)
     with torch.no_grad():
@@ -289,9 +284,7 @@ def _ensure_clipiqa():
             import pyiqa  # noqa
             import torch
         except ImportError as e:
-            raise VisionUnavailable(
-                f"CLIP-IQA+ 依赖缺失：{e}。需要 `pip install pyiqa timm`。"
-            ) from e
+            raise VisionUnavailable(f"CLIP-IQA+ 依赖缺失：{e}。需要 `pip install pyiqa timm`。") from e
         logger.info("vision: 加载 CLIP-IQA+（CPU，LAION 美学，首次约 350MB）…")
         dev = torch.device("cpu")
         model = pyiqa.create_metric("clipiqa+", device=dev, as_loss=False)
@@ -303,6 +296,7 @@ def _ensure_clipiqa():
 def extract_clipiqa_score(pil_img: Image.Image) -> float:
     """返回 CLIP-IQA+ 美学分 0-1。CPU + 1024 长边以下输入。"""
     import torch
+
     model, _dev = _ensure_clipiqa()
     img = _resize_for_pyiqa(pil_img)
     with torch.no_grad():
@@ -315,6 +309,7 @@ def extract_clipiqa_score(pil_img: Image.Image) -> float:
 # InsightFace：RetinaFace 检测 + ArcFace 512 维嵌入 + 关键点
 # =============================================================
 
+
 def _ensure_insightface():
     if "insightface" in _models:
         return _models["insightface"]
@@ -324,9 +319,7 @@ def _ensure_insightface():
         try:
             from insightface.app import FaceAnalysis
         except ImportError as e:
-            raise VisionUnavailable(
-                f"InsightFace 依赖缺失：{e}。需要 `pip install insightface onnxruntime`。"
-            ) from e
+            raise VisionUnavailable(f"InsightFace 依赖缺失：{e}。需要 `pip install insightface onnxruntime`。") from e
 
         logger.info("vision: 加载 InsightFace（RetinaFace + ArcFace，首次约 300MB）…")
         app = FaceAnalysis(
@@ -340,9 +333,7 @@ def _ensure_insightface():
     return _models["insightface"]
 
 
-def extract_faces(
-    pil_img: Image.Image, max_dim: int = 1024
-) -> List[dict]:
+def extract_faces(pil_img: Image.Image, max_dim: int = 1024) -> List[dict]:
     """返回 [{ bbox: (x1,y1,x2,y2), embedding: 512d ndarray, kps: (5,2) ndarray }]。
 
     没人脸 → 返回 []。依赖缺失 → 抛 VisionUnavailable。
@@ -391,13 +382,15 @@ def extract_faces(
         if getattr(face, "landmark_3d_68", None) is not None:
             lm68 = (face.landmark_3d_68[:, :2] * inv).astype(np.float32)
 
-        out.append({
-            "bbox": bbox,
-            "embedding": emb,
-            "kps": kps,
-            "det_score": float(face.det_score),
-            "landmark_2d_68": lm68,
-        })
+        out.append(
+            {
+                "bbox": bbox,
+                "embedding": emb,
+                "kps": kps,
+                "det_score": float(face.det_score),
+                "landmark_2d_68": lm68,
+            }
+        )
     return out
 
 
@@ -437,24 +430,27 @@ def compute_eye_open_score(face_info: dict, pil_img: Image.Image) -> float | Non
 # 启动期能力校验
 # =============================================================
 
+
 def capabilities() -> dict:
     """轻量探测——仅尝试 import，不下载权重。"""
-    out = {"dinov2": False, "aesthetic": False, "musiq": False,
-           "clipiqa": False, "face_id": False}
+    out = {"dinov2": False, "aesthetic": False, "musiq": False, "clipiqa": False, "face_id": False}
     try:
         import torch  # noqa
         import transformers  # noqa
+
         out["dinov2"] = True
     except ImportError:
         pass
     try:
         import torch  # noqa
         import torchvision  # noqa
+
         out["aesthetic"] = True
     except ImportError:
         pass
     try:
         import pyiqa  # noqa
+
         out["musiq"] = True
         out["clipiqa"] = True
     except ImportError:
@@ -462,6 +458,7 @@ def capabilities() -> dict:
     try:
         import insightface  # noqa
         import onnxruntime  # noqa
+
         out["face_id"] = True
     except ImportError:
         pass
@@ -473,9 +470,7 @@ def require_expert_capabilities() -> None:
     caps = capabilities()
     missing = [k for k, v in caps.items() if not v]
     if missing:
-        raise VisionUnavailable(
-            f"专家模式缺少依赖：{', '.join(missing)}。请按 requirements.txt 安装完整依赖。"
-        )
+        raise VisionUnavailable(f"专家模式缺少依赖：{', '.join(missing)}。请按 requirements.txt 安装完整依赖。")
 
 
 def require_tycoon_capabilities() -> None:
@@ -484,9 +479,7 @@ def require_tycoon_capabilities() -> None:
     needed = ["dinov2", "face_id"]
     missing = [k for k in needed if not caps.get(k)]
     if missing:
-        raise VisionUnavailable(
-            f"土豪模式缺少依赖：{', '.join(missing)}。请按 requirements.txt 安装。"
-        )
+        raise VisionUnavailable(f"土豪模式缺少依赖：{', '.join(missing)}。请按 requirements.txt 安装。")
 
 
 def prewarm_all() -> None:

@@ -65,14 +65,12 @@ def run_audit(*, completion: bool = False, require_local_artifacts: bool = True)
     checks = [
         Check(
             "domain models extracted",
-            exists("server/domain/models.py")
-            and contains("app.py", "from server.domain.models import"),
+            exists("server/domain/models.py") and contains("app.py", "from server.domain.models import"),
             "GroupState/SessionState/JobState live outside app.py.",
         ),
         Check(
             "runtime state extracted",
-            exists("server/runtime/app_runtime.py")
-            and contains("app.py", "RUNTIME = AppRuntime()"),
+            exists("server/runtime/app_runtime.py") and contains("app.py", "RUNTIME = AppRuntime()"),
             "Process runtime state is owned by AppRuntime.",
         ),
         Check(
@@ -83,8 +81,7 @@ def run_audit(*, completion: bool = False, require_local_artifacts: bool = True)
         ),
         Check(
             "session builder service extracted",
-            exists("server/services/session_builder_service.py")
-            and contains("app.py", "_build_session_from_groups"),
+            exists("server/services/session_builder_service.py") and contains("app.py", "_build_session_from_groups"),
             "Prescreen scoring and session construction are service-owned.",
         ),
         Check(
@@ -136,8 +133,7 @@ def run_audit(*, completion: bool = False, require_local_artifacts: bool = True)
         ),
         Check(
             "windows icon resource present",
-            exists("src-tauri/icons/icon.ico")
-            and contains("src-tauri/tauri.conf.json", "icons/icon.ico"),
+            exists("src-tauri/icons/icon.ico") and contains("src-tauri/tauri.conf.json", "icons/icon.ico"),
             "Windows NSIS builds have the required .ico resource for Tauri.",
         ),
         Check(

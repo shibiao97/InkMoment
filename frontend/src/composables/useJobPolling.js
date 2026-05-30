@@ -1,5 +1,5 @@
 import { computed, onBeforeUnmount, ref } from "vue";
-import { cancelJob, getJob } from "../api/inkmoment";
+import { cancelJob, getJob, streamJob } from "../api/inkmoment";
 
 const POLL_INTERVAL_MS = 700;
 
@@ -16,9 +16,11 @@ export function useJobPolling() {
   const events = ref([]);
   const error = ref("");
   const isPolling = ref(false);
+  const isStreaming = ref(false);
   const isCancelling = ref(false);
   const pollFailStreak = ref(0);
   let timer = null;
+  let eventSource = null;
   let eventSeq = 0;
 
   const progressPercent = computed(() => {
@@ -43,17 +45,21 @@ export function useJobPolling() {
     }
   }
 
+  function applyJobPayload(data) {
+    pollFailStreak.value = 0;
+    error.value = "";
+    job.value = data;
+    mergeEvents(data.events || []);
+    if (typeof data.event_seq === "number" && data.event_seq > eventSeq && !data.events?.length) {
+      eventSeq = data.event_seq;
+    }
+    if (isTerminal.value) stop();
+  }
+
   async function refresh() {
     try {
       const data = await getJob(eventSeq);
-      pollFailStreak.value = 0;
-      error.value = "";
-      job.value = data;
-      mergeEvents(data.events || []);
-      if (typeof data.event_seq === "number" && data.event_seq > eventSeq && !data.events?.length) {
-        eventSeq = data.event_seq;
-      }
-      if (isTerminal.value) stop();
+      applyJobPayload(data);
     } catch (err) {
       pollFailStreak.value += 1;
       if (pollFailStreak.value >= 4) {
@@ -64,17 +70,52 @@ export function useJobPolling() {
 
   function start() {
     stop();
+    error.value = "";
+    if (!startStreaming()) {
+      startPolling();
+    }
+  }
+
+  function startStreaming() {
+    const source = streamJob(eventSeq);
+    if (!source) return false;
+    eventSource = source;
+    isStreaming.value = true;
+    source.addEventListener("job", (event) => {
+      try {
+        applyJobPayload(JSON.parse(event.data || "{}"));
+      } catch (err) {
+        error.value = err.message || "后台事件解析失败";
+      }
+    });
+    source.onerror = () => {
+      closeStream();
+      if (!isTerminal.value) startPolling();
+    };
+    return true;
+  }
+
+  function startPolling() {
     isPolling.value = true;
     refresh();
     timer = window.setInterval(refresh, POLL_INTERVAL_MS);
   }
 
   function stop() {
+    closeStream();
     if (timer) {
       window.clearInterval(timer);
       timer = null;
     }
     isPolling.value = false;
+  }
+
+  function closeStream() {
+    if (eventSource) {
+      eventSource.close();
+      eventSource = null;
+    }
+    isStreaming.value = false;
   }
 
   async function requestCancel() {
@@ -103,6 +144,7 @@ export function useJobPolling() {
     events,
     error,
     isPolling,
+    isStreaming,
     isCancelling,
     progressPercent,
     elapsedText,

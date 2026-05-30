@@ -15,7 +15,7 @@ class AuthServerDeployScriptTest(unittest.TestCase):
         self.assertIn("systemctl restart inkmoment-auth", script)
         self.assertIn("curl -fsS http://127.0.0.1:8061/health", script)
         self.assertIn("INKMOMENT_AUTH_ADMIN_TOKEN=$token", script)
-        self.assertIn('store.create_admin(', script)
+        self.assertIn("store.create_admin(", script)
         self.assertIn('"admin"', script)
         self.assertIn("secrets.token_urlsafe(32)", script)
         self.assertIn("/root/show-inkmoment-auth-info.sh", script)

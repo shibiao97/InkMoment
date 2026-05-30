@@ -8,16 +8,12 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+from inkmoment.engines import ENGINE_LABELS, get_engine, normalize_engine
+from server.settings import Settings
 from server.state.local_store import LocalStateStore, default_state_dir
 
 
 MODEL_CACHE_SETTING = "model_cache_dir"
-
-ENGINE_LABELS = {
-    "fast": "极速模式",
-    "expert": "专家模式",
-    "tycoon": "土豪模式",
-}
 
 DINO_MODEL_ID = "facebook/dinov2-small"
 DINO_REQUIRED_FILES = ["config.json", "preprocessor_config.json", "model.safetensors"]
@@ -32,35 +28,6 @@ HF_ALLOW_PATTERNS = [
 ]
 DEFAULT_ENDPOINTS = ["https://hf-mirror.com", "https://huggingface.co"]
 
-FAST_MODULES = [
-    ("cv2", "OpenCV"),
-    ("imagehash", "imagehash"),
-    ("inkmoment.fast_quality", "极速质量评分模块"),
-    ("inkmoment.fast_clustering", "极速聚类模块"),
-]
-
-EXPERT_MODULES = [
-    ("cv2", "OpenCV"),
-    ("torch", "PyTorch"),
-    ("torchvision", "torchvision"),
-    ("transformers", "Transformers"),
-    ("pyiqa", "pyiqa"),
-    ("timm", "timm"),
-    ("insightface", "InsightFace"),
-    ("onnxruntime", "ONNX Runtime"),
-    ("huggingface_hub", "HuggingFace Hub"),
-]
-
-TYCOON_MODULES = [
-    ("cv2", "OpenCV"),
-    ("torch", "PyTorch"),
-    ("transformers", "Transformers"),
-    ("insightface", "InsightFace"),
-    ("onnxruntime", "ONNX Runtime"),
-    ("openai", "OpenAI SDK"),
-    ("huggingface_hub", "HuggingFace Hub"),
-]
-
 
 def default_model_cache_dir() -> Path:
     return default_state_dir() / "models"
@@ -71,7 +38,7 @@ def resolve_model_cache_dir(store: LocalStateStore, requested_dir: str | None = 
     if not configured:
         configured = str(store.get_setting(MODEL_CACHE_SETTING, default="") or "")
     if not configured:
-        configured = os.environ.get("INKMOMENT_MODEL_CACHE_DIR", "")
+        configured = Settings.load().model_cache_dir
     return Path(configured).expanduser() if configured else default_model_cache_dir()
 
 
@@ -99,7 +66,8 @@ def configure_runtime_model_cache(store: LocalStateStore) -> Path:
 
 
 def preflight_dependencies_payload(data: dict[str, Any], store: LocalStateStore) -> tuple[dict[str, Any], int]:
-    engine = _normalize_engine(data.get("engine"))
+    engine = normalize_engine(data.get("engine"))
+    engine_spec = get_engine(engine)
     folder = str(data.get("folder") or "").strip()
     include_folder = _bool_setting(data.get("include_folder"), default=True)
     requested_dir = data.get("model_dir")
@@ -119,53 +87,63 @@ def preflight_dependencies_payload(data: dict[str, Any], store: LocalStateStore)
     for module, label in _modules_for_engine(engine):
         error = _module_import_error(module)
         if error:
-            missing.append(_manual_item(
-                f"python:{module}",
-                label,
-                f"Python 模块不可导入：{error}",
-                hint="需要重新安装对应 Python 依赖，或重新打包包含完整依赖的桌面端。",
-            ))
+            missing.append(
+                _manual_item(
+                    f"python:{module}",
+                    label,
+                    f"Python 模块不可导入：{error}",
+                    hint="需要重新安装对应 Python 依赖，或重新打包包含完整依赖的桌面端。",
+                )
+            )
 
-    if engine == "fast" and not any(item["id"] == "python:cv2" for item in missing):
+    if engine_spec.requires_opencv_orb and not any(item["id"] == "python:cv2" for item in missing):
         orb_error = _opencv_orb_error()
         if orb_error:
-            missing.append(_manual_item(
-                "opencv:orb",
-                "OpenCV ORB",
-                f"cv2.ORB_create 不可用：{orb_error}",
-                hint="请确认使用的是完整可用的 OpenCV 包。",
-            ))
+            missing.append(
+                _manual_item(
+                    "opencv:orb",
+                    "OpenCV ORB",
+                    f"cv2.ORB_create 不可用：{orb_error}",
+                    hint="请确认使用的是完整可用的 OpenCV 包。",
+                )
+            )
 
-    if engine in {"expert", "tycoon"}:
+    if engine_spec.requires_dino_model:
         status = _hf_model_cache_status(DINO_MODEL_ID, DINO_REQUIRED_FILES, cache_dir)
         if status.get("error"):
             if not _has_missing(missing, "python:huggingface_hub"):
-                missing.append(_manual_item(
-                    "python:huggingface_hub",
-                    "HuggingFace Hub",
-                    str(status["error"]),
-                    hint="需要安装 transformers / huggingface_hub 后才能自动下载模型。",
-                ))
+                missing.append(
+                    _manual_item(
+                        "python:huggingface_hub",
+                        "HuggingFace Hub",
+                        str(status["error"]),
+                        hint="需要安装 transformers / huggingface_hub 后才能自动下载模型。",
+                    )
+                )
         elif not status.get("cached"):
-            missing.append({
-                "id": f"model:{DINO_MODEL_ID}",
-                "kind": "model",
-                "label": "DINOv2-small 模型",
-                "detail": f"缺少 {', '.join(status.get('missing') or DINO_REQUIRED_FILES)}",
-                "downloadable": True,
-                "required_by": [ENGINE_LABELS[engine]],
-                "target_dir": str(cache_dir),
-            })
+            missing.append(
+                {
+                    "id": f"model:{DINO_MODEL_ID}",
+                    "kind": "model",
+                    "label": "DINOv2-small 模型",
+                    "detail": f"缺少 {', '.join(status.get('missing') or DINO_REQUIRED_FILES)}",
+                    "downloadable": True,
+                    "required_by": [ENGINE_LABELS[engine]],
+                    "target_dir": str(cache_dir),
+                }
+            )
 
-    if engine == "tycoon":
+    if engine_spec.requires_llm_model:
         llm_model = str(data.get("llm_model") or "").strip()
         if not llm_model:
-            missing.append(_manual_item(
-                "llm:model",
-                "视觉大模型",
-                "土豪模式需要先选择一个可用视觉模型。",
-                hint="请在土豪模式配置里保存 API Key，并刷新模型列表后选择模型。",
-            ))
+            missing.append(
+                _manual_item(
+                    "llm:model",
+                    "视觉大模型",
+                    "土豪模式需要先选择一个可用视觉模型。",
+                    hint="请在土豪模式配置里保存 API Key，并刷新模型列表后选择模型。",
+                )
+            )
 
     downloadable = [item for item in missing if item.get("downloadable")]
     manual = [item for item in missing if not item.get("downloadable")]
@@ -184,10 +162,11 @@ def preflight_dependencies_payload(data: dict[str, Any], store: LocalStateStore)
 
 def download_dependencies_payload(data: dict[str, Any], store: LocalStateStore) -> tuple[dict[str, Any], int]:
     engine = _normalize_engine(data.get("engine"))
+    engine_spec = get_engine(engine)
     cache_dir = configure_model_cache_environment(resolve_model_cache_dir(store, data.get("model_dir")))
     save_model_cache_dir(store, cache_dir)
 
-    if engine not in {"expert", "tycoon"}:
+    if not engine_spec.requires_dino_model:
         return {
             "ok": True,
             "engine": engine,
@@ -298,8 +277,7 @@ class DependencyDownloadManager:
 
 
 def _normalize_engine(value: Any) -> str:
-    engine = str(value or "fast").strip()
-    return engine if engine in ENGINE_LABELS else "fast"
+    return normalize_engine(value)
 
 
 def _bool_setting(value: Any, default: bool = False) -> bool:
@@ -317,11 +295,7 @@ def _has_missing(missing: list[dict[str, Any]], item_id: str) -> bool:
 
 
 def _modules_for_engine(engine: str) -> list[tuple[str, str]]:
-    if engine == "expert":
-        return EXPERT_MODULES
-    if engine == "tycoon":
-        return TYCOON_MODULES
-    return FAST_MODULES
+    return list(get_engine(engine).dependency_modules)
 
 
 def _module_import_error(module: str) -> str:
@@ -335,6 +309,7 @@ def _module_import_error(module: str) -> str:
 def _opencv_orb_error() -> str:
     try:
         import cv2
+
         cv2.ORB_create()
     except Exception as exc:
         return f"{type(exc).__name__}: {exc}"

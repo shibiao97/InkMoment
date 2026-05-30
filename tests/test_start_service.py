@@ -20,15 +20,18 @@ class StartServiceTest(unittest.TestCase):
         self.folder.mkdir()
 
     def test_parse_start_request_accepts_model_object_from_legacy_frontend(self):
-        request, payload, status = parse_start_request({
-            "folder": str(self.folder),
-            "engine": "tycoon",
-            "llm_model": {
-                "available": True,
-                "id": "gpt-5.4-mini",
-                "label": "gpt-5.4-mini",
+        request, payload, status = parse_start_request(
+            {
+                "folder": str(self.folder),
+                "engine": "tycoon",
+                "llm_model": {
+                    "available": True,
+                    "id": "gpt-5.4-mini",
+                    "label": "gpt-5.4-mini",
+                },
             },
-        }, DEFAULTS)
+            DEFAULTS,
+        )
 
         self.assertEqual(status, 200)
         self.assertEqual(payload, {})
@@ -36,11 +39,14 @@ class StartServiceTest(unittest.TestCase):
         self.assertEqual(request.llm_model, "gpt-5.4-mini")
 
     def test_parse_start_request_rejects_empty_tycoon_model_object(self):
-        request, payload, status = parse_start_request({
-            "folder": str(self.folder),
-            "engine": "tycoon",
-            "llm_model": {"label": ""},
-        }, DEFAULTS)
+        request, payload, status = parse_start_request(
+            {
+                "folder": str(self.folder),
+                "engine": "tycoon",
+                "llm_model": {"label": ""},
+            },
+            DEFAULTS,
+        )
 
         self.assertIsNone(request)
         self.assertEqual(status, 400)

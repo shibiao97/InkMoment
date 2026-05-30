@@ -23,7 +23,7 @@ export async function fetchJSON(url, options = {}) {
 
   const response = await fetch(resolveApiUrl(url), { ...options, body, headers });
   const text = await response.text();
-  let data = null;
+  let data;
 
   try {
     data = text ? JSON.parse(text) : null;

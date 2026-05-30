@@ -10,6 +10,8 @@ from pathlib import Path
 from sqlite3 import Connection
 from typing import Any
 
+from server.settings import Settings
+
 
 SCHEMA_VERSION = 2
 IMAGE_ANALYSIS_CACHE_VERSION = 1
@@ -32,7 +34,7 @@ def default_state_dir(home: Path | None = None, platform: str | None = None) -> 
 
 
 def default_db_path() -> Path:
-    configured = os.environ.get(DEFAULT_DB_ENV)
+    configured = Settings.load().state_db
     if configured:
         return Path(configured).expanduser()
     return default_state_dir() / DB_FILE_NAME

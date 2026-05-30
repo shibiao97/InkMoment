@@ -52,8 +52,8 @@ PROFILES: dict[str, dict[str, float]] = {
     #   - horizon_severe >15° → hard reject（人眼难以接受这级别歪斜）
     "standard": {
         # 主体锐度：salient_sharp 的拉普拉斯方差
-        "subject_sharp": 750.0,        # 软扣分（≈ pic_test p25-p30）
-        "very_subject_sharp": 550.0,   # 硬拒（≈ pic_test p15）
+        "subject_sharp": 750.0,  # 软扣分（≈ pic_test p25-p30）
+        "very_subject_sharp": 550.0,  # 硬拒（≈ pic_test p15）
         # 整图融合锐度兜底：saliency 失败时才生效（smap.std() < 0.01 等极端）
         "very_blur_combined": 0.28,
         # 运动模糊：4 条件 AND
@@ -71,15 +71,15 @@ PROFILES: dict[str, dict[str, float]] = {
         "min_long_side": 640.0,
         "min_file_size": 25_000.0,
         # 地平线倾斜
-        "horizon_tilt_deg": 4.5,       # 软提示
-        "horizon_severe_deg": 15.0,    # 硬拒
+        "horizon_tilt_deg": 4.5,  # 软提示
+        "horizon_severe_deg": 15.0,  # 硬拒
         # 评分总线
         "score_adjust": 0.0,
         "score_floor": 35.0,
     },
     "aggressive": {
         "subject_sharp": 1100.0,
-        "very_subject_sharp": 650.0,   # ≈ p20-p25，比 standard 严但避免误杀中位线（p50=963）
+        "very_subject_sharp": 650.0,  # ≈ p20-p25，比 standard 严但避免误杀中位线（p50=963）
         "very_blur_combined": 0.35,
         "motion_anisotropy": 0.55,
         "edge_width_pix": 4.0,
@@ -91,8 +91,8 @@ PROFILES: dict[str, dict[str, float]] = {
         "low_entropy": 1.20,
         "min_long_side": 900.0,
         "min_file_size": 40_000.0,
-        "horizon_tilt_deg": 6.0,       # 软提示放宽（轻微歪斜交给 LLM 复判）
-        "horizon_severe_deg": 20.0,    # 进阶档硬拒放宽：仅拦截 20°+ 的灾难级歪斜
+        "horizon_tilt_deg": 6.0,  # 软提示放宽（轻微歪斜交给 LLM 复判）
+        "horizon_severe_deg": 20.0,  # 进阶档硬拒放宽：仅拦截 20°+ 的灾难级歪斜
         "score_adjust": -6.0,
         "score_floor": 45.0,
     },
@@ -102,6 +102,7 @@ PROFILES["advanced"] = PROFILES["aggressive"]
 
 
 # ---------------- 辅助 ----------------
+
 
 def _resize_for_analysis(img: Image.Image, long_side: int = 768) -> Image.Image:
     if max(img.size) <= long_side:
@@ -134,7 +135,7 @@ def _fft_high_freq_ratio(arr: np.ndarray) -> tuple[float, float]:
     s = min(h, w)
     y0 = (h - s) // 2
     x0 = (w - s) // 2
-    crop = arr[y0:y0 + s, x0:x0 + s]
+    crop = arr[y0 : y0 + s, x0 : x0 + s]
     # 降到 256 加快
     if s > 256:
         crop = cv2.resize(crop.astype(np.float32), (256, 256), interpolation=cv2.INTER_AREA)
@@ -172,7 +173,6 @@ def _fft_high_freq_ratio(arr: np.ndarray) -> tuple[float, float]:
     sums = np.bincount(band_bin, weights=band_mag, minlength=n_bins)
     counts = np.bincount(band_bin, minlength=n_bins).astype(np.float32) + 1e-6
     avg = sums / counts
-    mean_e = float(avg.mean() + 1e-8)
     aniso = float((avg.max() - avg.min()) / (avg.max() + 1e-8))
     return high_ratio, aniso
 
@@ -230,8 +230,7 @@ def _nine_grid_exposure(arr: np.ndarray) -> dict:
     """9 宫格曝光分析。返回每格的 mean / clip ratio 以及"最差格"指标。"""
     h, w = arr.shape
     if h < 9 or w < 9:
-        return {"worst_dark": 0.0, "worst_bright": 0.0, "worst_clip_dark": 0.0,
-                "worst_clip_bright": 0.0}
+        return {"worst_dark": 0.0, "worst_bright": 0.0, "worst_clip_dark": 0.0, "worst_clip_bright": 0.0}
     ys = [0, h // 3, 2 * h // 3, h]
     xs = [0, w // 3, 2 * w // 3, w]
     worst_dark = 255.0
@@ -240,7 +239,7 @@ def _nine_grid_exposure(arr: np.ndarray) -> dict:
     worst_clip_bright = 0.0
     for i in range(3):
         for j in range(3):
-            block = arr[ys[i]:ys[i + 1], xs[j]:xs[j + 1]]
+            block = arr[ys[i] : ys[i + 1], xs[j] : xs[j + 1]]
             if block.size == 0:
                 continue
             m = float(block.mean())
@@ -268,8 +267,7 @@ def _horizon_tilt_degrees(arr: np.ndarray) -> Optional[float]:
     a_u8 = np.clip(arr, 0, 255).astype(np.uint8)
     edges = cv2.Canny(a_u8, 50, 150)
     min_len = max(40, int(min(arr.shape) * 0.35))
-    lines = cv2.HoughLinesP(edges, 1, np.pi / 180, threshold=80,
-                            minLineLength=min_len, maxLineGap=10)
+    lines = cv2.HoughLinesP(edges, 1, np.pi / 180, threshold=80, minLineLength=min_len, maxLineGap=10)
     if lines is None or len(lines) == 0:
         return None
     # 按长度加权找最强方向；返回与水平/垂直的最小偏差
@@ -409,8 +407,8 @@ def _salient_region_sharpness(arr: np.ndarray, smap: Optional[np.ndarray]) -> Op
         if sm.shape != arr.shape:
             try:
                 import cv2
-                sm = cv2.resize(sm, (arr.shape[1], arr.shape[0]),
-                                interpolation=cv2.INTER_LINEAR)
+
+                sm = cv2.resize(sm, (arr.shape[1], arr.shape[0]), interpolation=cv2.INTER_LINEAR)
             except ImportError:
                 return None
         thr = np.quantile(sm, 0.80)
@@ -458,6 +456,7 @@ def _saliency_focus_consistency(arr: np.ndarray, smap: Optional[np.ndarray]) -> 
 
 
 # ---------------- 主入口 ----------------
+
 
 def analyze_image_fast(
     img: Image.Image,
@@ -543,8 +542,10 @@ def analyze_image_fast(
     # focus_ratio 必须不能远大于 1——远大于 1 说明只是浅景深（背景虚化），不是 motion blur
     is_motion = (
         motion_aniso > profile["motion_anisotropy"]
-        and edge_width is not None and edge_width > profile["edge_width_pix"]
-        and salient_sharp is not None and salient_sharp < profile["subject_sharp"]
+        and edge_width is not None
+        and edge_width > profile["edge_width_pix"]
+        and salient_sharp is not None
+        and salient_sharp < profile["subject_sharp"]
         and (focus_ratio is None or focus_ratio < 5.0)
     )
     if is_motion:
@@ -559,13 +560,11 @@ def analyze_image_fast(
     # 曝光：全局为主；九宫格仅当全图也偏向同方向时才加持（排除单角落创意光效）
     if brightness_mean < profile["dark_mean"] or underexposed_ratio >= profile["dead_shadow"]:
         flags.append("underexposed")
-    elif (nine["worst_clip_dark"] >= profile["dead_shadow"]
-          and brightness_mean < profile["dark_mean"] * 3):
+    elif nine["worst_clip_dark"] >= profile["dead_shadow"] and brightness_mean < profile["dark_mean"] * 3:
         flags.append("underexposed")
     if brightness_mean > profile["bright_mean"] or overexposed_ratio >= profile["dead_highlight"]:
         flags.append("overexposed")
-    elif (nine["worst_clip_bright"] >= profile["dead_highlight"]
-          and brightness_mean > profile["bright_mean"] - 20):
+    elif nine["worst_clip_bright"] >= profile["dead_highlight"] and brightness_mean > profile["bright_mean"] - 20:
         flags.append("overexposed")
     if contrast_score < profile["low_contrast"]:
         flags.append("low_contrast")
@@ -649,11 +648,9 @@ def _compute_score(
     contrast_component = min(20.0, contrast_score / 64.0 * 20.0)
     entropy_component = min(10.0, entropy / 7.0 * 10.0)
     comp_component = (composition if composition is not None else 0.5) * 10.0
-    score = (blur_component + exposure_component + contrast_component
-             + entropy_component + comp_component + score_adjust)
+    score = blur_component + exposure_component + contrast_component + entropy_component + comp_component + score_adjust
     for flag in flags:
-        if flag in {"very_blurry", "motion_blur", "underexposed", "overexposed",
-                    "low_information", "horizon_severe"}:
+        if flag in {"very_blurry", "motion_blur", "underexposed", "overexposed", "low_information", "horizon_severe"}:
             score -= 22.0
         elif flag in {"subject_blurry", "low_contrast", "horizon_tilt"}:
             score -= 12.0
@@ -670,9 +667,13 @@ def _rejecting_flags_fast(flags: list[str]) -> list[str]:
                        严重歪斜（horizon_severe）/ 尺寸太小 / 内容信息量太低
     """
     hard = {
-        "very_blurry", "motion_blur",
-        "underexposed", "overexposed", "low_information",
-        "too_small", "tiny_file",
+        "very_blurry",
+        "motion_blur",
+        "underexposed",
+        "overexposed",
+        "low_information",
+        "too_small",
+        "tiny_file",
         "horizon_severe",
     }
     return [f for f in flags if f in hard]

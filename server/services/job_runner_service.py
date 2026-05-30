@@ -3,6 +3,8 @@ from collections import Counter
 from dataclasses import dataclass
 from typing import Callable, Optional
 
+from inkmoment.engines import get_engine
+
 
 @dataclass
 class JobRunnerResources:
@@ -52,9 +54,7 @@ def setup_job_runner_resources(
 ) -> JobRunnerResources:
     wipe_caches(config.folder)
     setup_logger(config.folder)
-    return JobRunnerResources(
-        job_log=open_job_log(config.folder, config.engine, config.llm_model)
-    )
+    return JobRunnerResources(job_log=open_job_log(config.folder, config.engine, config.llm_model))
 
 
 def teardown_job_runner_resources(resources: JobRunnerResources, close_job_log: Callable) -> None:
@@ -133,17 +133,12 @@ def mark_job_started(job, now: Callable[[], float] = time.time) -> None:
 
 def mark_job_checking(job, engine: str) -> None:
     job.status = "checking"
-    job.label = f"校验 {engine} 模式依赖..."
+    job.label = f"校验 {get_engine(engine).label}依赖..."
 
 
 def mark_job_hashing(job, engine: str, llm_model: Optional[str]) -> None:
     job.status = "hashing"
-    if engine == "fast":
-        job.label = "扫描与计算指纹（pHash + dHash + wHash + aHash + HSV + ORB）..."
-    elif engine == "tycoon":
-        job.label = f"扫描 + DINOv2 + InsightFace + LLM 初筛（模型: {llm_model}）..."
-    else:
-        job.label = "扫描与计算 pHash + DINOv2 + NIMA/MUSIQ/CLIP + 人脸嵌入..."
+    job.label = get_engine(engine).hashing_label(llm_model)
 
 
 def run_info_scan(
@@ -165,9 +160,10 @@ def run_info_scan(
         cancel_check=cancel_check,
         strength=config.prescreen_strength if config.prescreen_enabled else "standard",
         face_aware=(
-            config.face_aware
-            and config.prescreen_enabled
-            and config.engine == "expert"
+            get_engine(config.engine).face_aware_enabled(
+                config.face_aware,
+                config.prescreen_enabled,
+            )
         ),
         event_cb=event_cb,
         engine=config.engine,
@@ -209,9 +205,7 @@ def prepare_prescreen_result(
 ):
     rejected, reasons = prescreen_rejections(infos)
     reason_counts = Counter(reasons.values())
-    logger.info(
-        f"[{config.engine}] 初筛汇总：共 {len(infos)} 张，自动 reject {len(rejected)} 张"
-    )
+    logger.info(f"[{config.engine}] 初筛汇总：共 {len(infos)} 张，自动 reject {len(rejected)} 张")
     for reason, count in reason_counts.most_common():
         logger.info(f"[{config.engine}]   · {reason}: {count} 张")
 
@@ -371,6 +365,43 @@ def run_job_pipeline(
         return
 
     run_grouping_stage(job, config, job_log, callbacks, infos, skipped)
+
+
+def run_job_lifecycle(
+    job,
+    config: JobRunConfig,
+    callbacks: JobRunnerCallbacks,
+    *,
+    wipe_caches: Callable,
+    setup_logger: Callable,
+    open_job_log: Callable,
+    close_job_log: Callable,
+    record_finished: Callable,
+    classify_error: Callable,
+) -> None:
+    resources = setup_job_runner_resources(
+        config,
+        wipe_caches,
+        setup_logger,
+        open_job_log,
+    )
+    job_log = resources.job_log
+    write_job_header(job_log, config)
+    try:
+        run_job_pipeline(job, config, job_log, callbacks)
+        record_finished(job)
+    except callbacks.cancelled_error:
+        mark_job_cancelled(job)
+        record_finished(job)
+        callbacks.logger.info("job cancelled")
+        write_status_footer(job_log, "cancelled")
+    except Exception as exc:
+        callbacks.logger.exception("job error")
+        mark_job_error(job, exc, classify_error)
+        record_finished(job)
+        write_status_footer(job_log, "error", str(exc))
+    finally:
+        teardown_job_runner_resources(resources, close_job_log)
 
 
 def mark_job_grouping_done(

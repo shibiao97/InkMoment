@@ -27,10 +27,13 @@ class DependencyServiceTest(unittest.TestCase):
     @patch("server.services.dependency_service._opencv_orb_error", return_value="")
     @patch("server.services.dependency_service._module_import_error", return_value="")
     def test_fast_preflight_passes_without_downloadable_models(self, _import_error, _orb_error):
-        payload, status = preflight_dependencies_payload({
-            "engine": "fast",
-            "folder": str(self.photos),
-        }, self.store)
+        payload, status = preflight_dependencies_payload(
+            {
+                "engine": "fast",
+                "folder": str(self.photos),
+            },
+            self.store,
+        )
 
         self.assertEqual(status, 200)
         self.assertTrue(payload["ok"])
@@ -42,11 +45,14 @@ class DependencyServiceTest(unittest.TestCase):
     def test_preflight_can_check_mode_dependencies_without_photo_folder(self, _import_error, _orb_error):
         model_dir = self.root / "preflight-models"
 
-        payload, status = preflight_dependencies_payload({
-            "engine": "fast",
-            "include_folder": False,
-            "model_dir": str(model_dir),
-        }, self.store)
+        payload, status = preflight_dependencies_payload(
+            {
+                "engine": "fast",
+                "include_folder": False,
+                "model_dir": str(model_dir),
+            },
+            self.store,
+        )
 
         self.assertEqual(status, 200)
         self.assertTrue(payload["ok"])
@@ -65,11 +71,14 @@ class DependencyServiceTest(unittest.TestCase):
             "error": None,
         }
 
-        payload, status = preflight_dependencies_payload({
-            "engine": "expert",
-            "folder": str(self.photos),
-            "model_dir": str(self.root / "models"),
-        }, self.store)
+        payload, status = preflight_dependencies_payload(
+            {
+                "engine": "expert",
+                "folder": str(self.photos),
+                "model_dir": str(self.root / "models"),
+            },
+            self.store,
+        )
 
         self.assertEqual(status, 200)
         self.assertFalse(payload["ok"])
@@ -92,10 +101,13 @@ class DependencyServiceTest(unittest.TestCase):
             "error": None,
         }
 
-        payload, status = preflight_dependencies_payload({
-            "engine": "expert",
-            "folder": str(self.photos),
-        }, self.store)
+        payload, status = preflight_dependencies_payload(
+            {
+                "engine": "expert",
+                "folder": str(self.photos),
+            },
+            self.store,
+        )
 
         self.assertEqual(status, 200)
         self.assertFalse(payload["ok"])
@@ -113,10 +125,13 @@ class DependencyServiceTest(unittest.TestCase):
             "error": None,
         }
 
-        payload, status = download_dependencies_payload({
-            "engine": "expert",
-            "model_dir": str(model_dir),
-        }, self.store)
+        payload, status = download_dependencies_payload(
+            {
+                "engine": "expert",
+                "model_dir": str(model_dir),
+            },
+            self.store,
+        )
 
         self.assertEqual(status, 200)
         self.assertTrue(payload["ok"])
@@ -126,12 +141,15 @@ class DependencyServiceTest(unittest.TestCase):
 
     @patch("server.services.dependency_service.download_dependencies_payload")
     def test_download_manager_runs_download_in_background(self, download_payload):
-        download_payload.return_value = ({
-            "ok": True,
-            "message": "done",
-            "download_dir": str(self.root / "models"),
-            "downloaded": [{"model": "facebook/dinov2-small"}],
-        }, 200)
+        download_payload.return_value = (
+            {
+                "ok": True,
+                "message": "done",
+                "download_dir": str(self.root / "models"),
+                "downloaded": [{"model": "facebook/dinov2-small"}],
+            },
+            200,
+        )
         manager = DependencyDownloadManager(lambda: self.store)
 
         payload, status = manager.start({"engine": "expert"})

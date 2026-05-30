@@ -11,7 +11,7 @@ from flask import Flask
 
 from server.services import auth_client_service
 from server.state.local_store import LocalStateStore
-from server.routes.auth import create_auth_blueprint
+from server.routes.auth import AuthDeps, create_auth_blueprint
 
 
 class SidecarAuthGuardTest(unittest.TestCase):
@@ -59,6 +59,7 @@ class SidecarAuthGuardTest(unittest.TestCase):
             ("GET", "/api/dependencies/download/status", None),
             ("GET", "/api/ark_key", None),
             ("GET", "/api/llm_models", None),
+            ("GET", "/api/job/stream", None),
             ("GET", "/api/image?path=/tmp/example.jpg", None),
         ]
         for method, path, payload in checks:
@@ -172,19 +173,28 @@ class SidecarAuthGuardTest(unittest.TestCase):
     def test_register_route_forwards_display_name_to_auth_service(self):
         captured = {}
         flask_app = Flask(__name__)
-        flask_app.register_blueprint(create_auth_blueprint(
-            lambda: {},
-            lambda email, password: {},
-            lambda email, password, display_name: captured.update({
-                "email": email,
-                "password": password,
-                "display_name": display_name,
-            }) or {"ok": True},
-            lambda code: {},
-            lambda confirm_penalty, reason: {},
-            lambda: {},
-            lambda: {},
-        ))
+        flask_app.register_blueprint(
+            create_auth_blueprint(
+                AuthDeps(
+                    get_status=lambda: {},
+                    login=lambda email, password: {},
+                    register=lambda email, password, display_name: (
+                        captured.update(
+                            {
+                                "email": email,
+                                "password": password,
+                                "display_name": display_name,
+                            }
+                        )
+                        or {"ok": True}
+                    ),
+                    redeem=lambda code: {},
+                    unbind_device=lambda confirm_penalty, reason: {},
+                    logout=lambda: {},
+                    refresh=lambda: {},
+                )
+            )
+        )
 
         response = flask_app.test_client().post(
             "/api/auth/register",

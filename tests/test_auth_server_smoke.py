@@ -41,20 +41,22 @@ class AuthServerSmokeTest(unittest.TestCase):
         self.store.create_admin("support", "admin-password123")
         output = io.StringIO()
         with contextlib.redirect_stdout(output):
-            status = smoke_main([
-                "--base-url",
-                f"http://127.0.0.1:{self.server.server_port}",
-                "--admin-username",
-                "support",
-                "--admin-password",
-                "admin-password123",
-                "--unique-suffix",
-                "unittest",
-                "--cdk-code",
-                "SMOKE-UNITTEST",
-                "--email",
-                "smoke-unittest@example.invalid",
-            ])
+            status = smoke_main(
+                [
+                    "--base-url",
+                    f"http://127.0.0.1:{self.server.server_port}",
+                    "--admin-username",
+                    "support",
+                    "--admin-password",
+                    "admin-password123",
+                    "--unique-suffix",
+                    "unittest",
+                    "--cdk-code",
+                    "SMOKE-UNITTEST",
+                    "--email",
+                    "smoke-unittest@example.invalid",
+                ]
+            )
 
         self.assertEqual(status, 0)
         self.assertIn("SMOKE OK", output.getvalue())
@@ -67,18 +69,20 @@ class AuthServerSmokeTest(unittest.TestCase):
         self.store.create_admin("support", "admin-password123")
         output = io.StringIO()
         with contextlib.redirect_stdout(output):
-            status = smoke_main([
-                "--base-url",
-                f"http://127.0.0.1:{self.server.server_port}",
-                "--admin-username",
-                "support",
-                "--admin-password",
-                "admin-password123",
-                "--unique-suffix",
-                "lowercase-suffix",
-                "--email",
-                "smoke-lowercase@example.invalid",
-            ])
+            status = smoke_main(
+                [
+                    "--base-url",
+                    f"http://127.0.0.1:{self.server.server_port}",
+                    "--admin-username",
+                    "support",
+                    "--admin-password",
+                    "admin-password123",
+                    "--unique-suffix",
+                    "lowercase-suffix",
+                    "--email",
+                    "smoke-lowercase@example.invalid",
+                ]
+            )
 
         self.assertEqual(status, 0)
         self.assertIn("SMOKE-LOWERCASE-SUFFIX", output.getvalue())

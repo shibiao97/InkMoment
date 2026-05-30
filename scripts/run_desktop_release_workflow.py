@@ -10,7 +10,6 @@ from __future__ import annotations
 import argparse
 import shutil
 import subprocess
-import sys
 import time
 from pathlib import Path
 
@@ -163,7 +162,9 @@ def parse_args() -> argparse.Namespace:
         help="Directory to download workflow artifacts into.",
     )
     parser.add_argument("--run-id", default="", help="Existing run id to download instead of triggering a new run.")
-    parser.add_argument("--download-only", action="store_true", help="Do not trigger; download the latest or given run.")
+    parser.add_argument(
+        "--download-only", action="store_true", help="Do not trigger; download the latest or given run."
+    )
     parser.add_argument("--skip-watch", action="store_true", help="Do not wait for the run to finish.")
     parser.add_argument("--include-mac", action="store_true", help="Also download the macOS DMG artifact.")
     parser.add_argument("--timeout-seconds", type=int, default=120, help="How long to wait for a new run id.")

@@ -6,11 +6,21 @@ import sys
 from pathlib import Path
 from urllib.parse import urlparse
 
+from server.services.secret_store_service import (
+    SecretResult,
+    delete_secret,
+    load_secret,
+    save_secret,
+    secret_source_for_value,
+)
+
 logger = logging.getLogger("inkmoment")
 
 CONFIG_DIR = Path.home() / ".config" / "inkmoment"
 ARK_KEY_FILE = CONFIG_DIR / "ark_key"
 LLM_CONFIG_FILE = CONFIG_DIR / "llm_config.json"
+ARK_KEYRING_SERVICE = "InkMoment"
+ARK_KEYRING_ACCOUNT = "ark_api_key"
 
 
 def get_ark_key_status() -> dict:
@@ -27,9 +37,13 @@ def get_ark_key_status() -> dict:
         return {**payload, "source": None, "masked": None}
 
     source = (
-        "file"
-        if ARK_KEY_FILE.exists() and ARK_KEY_FILE.read_text(encoding="utf-8").strip() == key
-        else "env"
+        secret_source_for_value(
+            key,
+            service=ARK_KEYRING_SERVICE,
+            account=ARK_KEYRING_ACCOUNT,
+            fallback_file=ARK_KEY_FILE,
+        )
+        or "env"
     )
     return {
         **payload,
@@ -67,30 +81,36 @@ def set_ark_key(key: str, base_url_raw: str) -> tuple[dict, int]:
 
     try:
         save_llm_config(base_url=base_url)
-        save_ark_key_to_file(key)
+        persisted = save_ark_key_secret(key)
     except OSError as exc:
         return {
             "error": f"配置已生效但持久化失败：{exc}",
             "masked": mask_key(key),
         }, 200
 
-    logger.info(f"模型服务配置已更新，base_url={base_url}，{len(models)} 个模型可见")
-    return {
+    logger.info(f"模型服务配置已更新，base_url={base_url}，{len(models)} 个模型可见，key_source={persisted.source}")
+    response = {
         "ok": True,
         "masked": mask_key(key),
         "base_url": base_url,
+        "source": persisted.source,
         "model_count": len(models),
-    }, 200
+    }
+    if persisted.error:
+        response["persistence_warning"] = persisted.error
+    return response, 200
 
 
 def clear_ark_key() -> tuple[dict, int]:
-    """清除 API Key：删本地文件 + 从 os.environ 移除。"""
+    """清除 API Key：删 Keyring + legacy 文件 + 从 os.environ 移除。"""
     os.environ.pop("ARK_API_KEY", None)
-    try:
-        if ARK_KEY_FILE.exists():
-            ARK_KEY_FILE.unlink()
-    except OSError as exc:
-        return {"error": f"删除 key 文件失败: {exc}"}, 500
+    errors = delete_secret(
+        service=ARK_KEYRING_SERVICE,
+        account=ARK_KEYRING_ACCOUNT,
+        fallback_file=ARK_KEY_FILE,
+    )
+    if errors:
+        return {"error": "删除 key 失败: " + "; ".join(errors)}, 500
     reset_llm_client_cache()
     return {"ok": True}, 200
 
@@ -106,7 +126,7 @@ def list_llm_models(force: bool = False) -> tuple[dict, int]:
         from inkmoment import llm_judge
 
         if force:
-            llm_judge._MODELS_CACHE = {"at": 0.0, "data": None}
+            llm_judge.reset_model_cache()
         models = llm_judge.list_models()
         available, unavailable = llm_judge.filter_available_models(models, force=force)
     except Exception as exc:
@@ -127,8 +147,18 @@ def list_llm_models(force: bool = False) -> tuple[dict, int]:
 def diagnostics_payload() -> dict:
     """本地运行环境诊断：不触发模型服务调用，不产生费用。"""
     modules = [
-        "flask", "PIL", "cv2", "numpy", "torch", "torchvision",
-        "transformers", "insightface", "onnxruntime", "openai", "pyiqa", "timm",
+        "flask",
+        "PIL",
+        "cv2",
+        "numpy",
+        "torch",
+        "torchvision",
+        "transformers",
+        "insightface",
+        "onnxruntime",
+        "openai",
+        "pyiqa",
+        "timm",
     ]
     module_status = {module: _check_importable(module) for module in modules}
     try:
@@ -180,14 +210,14 @@ def load_llm_config_from_file() -> None:
 
     if os.environ.get("ARK_API_KEY"):
         return
-    try:
-        if ARK_KEY_FILE.exists():
-            key = ARK_KEY_FILE.read_text(encoding="utf-8").strip()
-            if key:
-                os.environ["ARK_API_KEY"] = key
-                logger.info(f"已从 {ARK_KEY_FILE} 载入 ARK_API_KEY")
-    except OSError as exc:
-        logger.warning(f"读取 ARK key 文件失败: {exc}")
+    loaded = load_ark_key_secret()
+    if loaded.value:
+        os.environ["ARK_API_KEY"] = loaded.value
+        if loaded.migrated:
+            logger.info("已将 legacy ARK key 文件迁移到系统 Keyring")
+        logger.info(f"已从 {loaded.source} 载入 ARK_API_KEY")
+    elif loaded.error:
+        logger.warning(f"读取 ARK key 失败: {loaded.error}")
 
 
 def default_llm_base_url() -> str:
@@ -203,7 +233,9 @@ def normalize_llm_base_url(value: str | None) -> str:
     raw = raw.rstrip("/")
     parsed = urlparse(raw)
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-        raise ValueError("模型服务地址必须是完整的 http(s) URL，例如 https://api.openai.com 或 https://api.openai.com/v1")
+        raise ValueError(
+            "模型服务地址必须是完整的 http(s) URL，例如 https://api.openai.com 或 https://api.openai.com/v1"
+        )
     if parsed.path in {"", "/"}:
         raw = raw + "/v1"
     return raw
@@ -251,23 +283,28 @@ def save_llm_config(*, base_url: str) -> None:
     )
 
 
-def save_ark_key_to_file(key: str) -> None:
-    """写到 ~/.config/inkmoment/ark_key，0600 权限。"""
-    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    ARK_KEY_FILE.write_text(key, encoding="utf-8")
-    try:
-        os.chmod(ARK_KEY_FILE, 0o600)
-    except OSError:
-        pass
+def load_ark_key_secret() -> SecretResult:
+    return load_secret(
+        service=ARK_KEYRING_SERVICE,
+        account=ARK_KEYRING_ACCOUNT,
+        fallback_file=ARK_KEY_FILE,
+    )
+
+
+def save_ark_key_secret(key: str) -> SecretResult:
+    return save_secret(
+        key,
+        service=ARK_KEYRING_SERVICE,
+        account=ARK_KEYRING_ACCOUNT,
+        fallback_file=ARK_KEY_FILE,
+    )
 
 
 def reset_llm_client_cache() -> None:
     try:
         from inkmoment import llm_judge
 
-        llm_judge._CLIENT = None
-        llm_judge._MODELS_CACHE = {"at": 0.0, "data": None}
-        llm_judge._MODEL_PROBE_CACHE = {}
+        llm_judge.reset_caches()
     except Exception:
         pass
 
@@ -305,9 +342,9 @@ def _opencv_conflicts() -> list[str]:
     try:
         names = {"opencv-python", "opencv-python-headless"}
         return [
-            name for name in names
-            if any((dist.metadata["Name"] or "").lower() == name
-                   for dist in metadata.distributions())
+            name
+            for name in names
+            if any((dist.metadata["Name"] or "").lower() == name for dist in metadata.distributions())
         ]
     except Exception:
         return []

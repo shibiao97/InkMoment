@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 import platform
 import getpass
 import hashlib
@@ -15,6 +14,7 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any
 
+from server.settings import Settings
 from server.state.local_store import LocalStateStore
 
 
@@ -46,7 +46,7 @@ class AuthRuntime:
 
 
 def configured_auth_server_url() -> str:
-    return (os.environ.get(AUTH_SERVER_URL_ENV) or "").strip().rstrip("/")
+    return Settings.load().auth_server_url.rstrip("/")
 
 
 def is_auth_configured() -> bool:
@@ -146,10 +146,7 @@ def auth_summary(runtime: AuthRuntime, *, now: float | None = None) -> dict[str,
         "device": runtime.device,
         "limits": runtime.limits,
         "last_checked_at": runtime.last_checked_at,
-        "next_check_at": (
-            runtime.last_checked_at + AUTH_CHECK_INTERVAL_SECONDS
-            if runtime.token else None
-        ),
+        "next_check_at": (runtime.last_checked_at + AUTH_CHECK_INTERVAL_SECONDS if runtime.token else None),
         "check_interval_seconds": AUTH_CHECK_INTERVAL_SECONDS,
     }
 
@@ -193,22 +190,30 @@ def register(
     password: str,
     display_name: str = "",
 ) -> dict[str, Any]:
-    payload = _request("POST", "/auth/register", {
-        "email": email,
-        "password": password,
-        "display_name": display_name,
-        "device": current_device_info(),
-    })
+    payload = _request(
+        "POST",
+        "/auth/register",
+        {
+            "email": email,
+            "password": password,
+            "display_name": display_name,
+            "device": current_device_info(),
+        },
+    )
     _apply_auth_payload(store, runtime, payload)
     return auth_summary(runtime)
 
 
 def login(store: LocalStateStore, runtime: AuthRuntime, email: str, password: str) -> dict[str, Any]:
-    payload = _request("POST", "/auth/login", {
-        "email": email,
-        "password": password,
-        "device": current_device_info(),
-    })
+    payload = _request(
+        "POST",
+        "/auth/login",
+        {
+            "email": email,
+            "password": password,
+            "device": current_device_info(),
+        },
+    )
     _apply_auth_payload(store, runtime, payload)
     return auth_summary(runtime)
 
@@ -279,18 +284,8 @@ def _apply_auth_payload(store: LocalStateStore, runtime: AuthRuntime, payload: d
         runtime.token = str(token)
     runtime.account = payload.get("account") or runtime.account
     runtime.license = payload.get("license") or payload.get("license_state") or runtime.license or {}
-    runtime.device = (
-        payload.get("device")
-        or payload.get("account", {}).get("device")
-        or runtime.device
-        or {}
-    )
-    runtime.limits = (
-        payload.get("limits")
-        or payload.get("account", {}).get("limits")
-        or runtime.limits
-        or {}
-    )
+    runtime.device = payload.get("device") or payload.get("account", {}).get("device") or runtime.device or {}
+    runtime.limits = payload.get("limits") or payload.get("account", {}).get("limits") or runtime.limits or {}
     runtime.last_checked_at = time.time()
     save_auth_runtime(store, runtime)
 
@@ -349,7 +344,8 @@ def _request(
 
 
 def current_device_info() -> dict[str, Any]:
-    configured = os.environ.get("INKMOMENT_DEVICE_ID", "").strip()
+    settings = Settings.load()
+    configured = settings.device_id
     if configured:
         fingerprint = configured
         fingerprint_source = "configured"
@@ -366,7 +362,7 @@ def current_device_info() -> dict[str, Any]:
         "name": hostname,
         "os": f"{platform.system()} {platform.release()}".strip(),
         "arch": platform.machine(),
-        "app_version": os.environ.get("INKMOMENT_APP_VERSION", "dev"),
+        "app_version": settings.app_version,
         "details": {
             "fingerprint_version": DEVICE_FINGERPRINT_VERSION,
             "fingerprint_source": fingerprint_source,
@@ -403,10 +399,12 @@ def _machine_identifier() -> tuple[str, str]:
         if identifier:
             return identifier, "windows_machine_guid"
     if system == "linux":
-        identifier = _read_first_existing_file((
-            "/etc/machine-id",
-            "/var/lib/dbus/machine-id",
-        ))
+        identifier = _read_first_existing_file(
+            (
+                "/etc/machine-id",
+                "/var/lib/dbus/machine-id",
+            )
+        )
         if identifier:
             return identifier, "linux_machine_id"
     return "", "unknown"

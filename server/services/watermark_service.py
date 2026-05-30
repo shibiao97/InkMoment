@@ -12,6 +12,7 @@ from typing import Callable, Optional
 @dataclass
 class WatermarkJobState:
     """水印批处理任务的进度。和主 JOB 分开，避免主任务的字段污染。"""
+
     status: str = "idle"
     done: int = 0
     total: int = 0
@@ -136,10 +137,7 @@ def run_watermark_job(
             job.status = "cancelled"
         else:
             job.status = "done"
-        logger.info(
-            f"watermark: 完成 ok={result['ok']} failed={len(result['failed'])} "
-            f"out={dst}"
-        )
+        logger.info(f"watermark: 完成 ok={result['ok']} failed={len(result['failed'])} out={dst}")
     except Exception as error:
         logger.exception("watermark batch error")
         job.status = "error"
@@ -199,9 +197,7 @@ def watermark_status_payload(job: Optional[WatermarkJobState]) -> dict:
         "out_dir": job.out_dir,
         "ok": job.ok,
         "failed_count": len(job.failed),
-        "failed_sample": [
-            {"name": name, "reason": reason} for name, reason in job.failed[:8]
-        ],
+        "failed_sample": [{"name": name, "reason": reason} for name, reason in job.failed[:8]],
         "error": job.error,
         "elapsed": (job.finished_at or time.time()) - (job.started_at or time.time()),
     }

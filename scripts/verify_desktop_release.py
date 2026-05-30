@@ -24,9 +24,7 @@ def artifact_size(path: Path) -> int:
 def check_min_size(path: Path, min_bytes: int) -> None:
     size = artifact_size(path)
     if size < min_bytes:
-        raise SystemExit(
-            f"Desktop artifact is too small: {path} is {size} bytes, expected >= {min_bytes}."
-        )
+        raise SystemExit(f"Desktop artifact is too small: {path} is {size} bytes, expected >= {min_bytes}.")
 
 
 def check_windows_exe(path: Path) -> None:

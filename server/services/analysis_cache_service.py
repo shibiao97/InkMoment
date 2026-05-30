@@ -102,12 +102,14 @@ def file_signature(path: str, companions: list[str] | None = None) -> list[dict[
     for role, item in [("primary", path), *[("companion", p) for p in (companions or [])]]:
         resolved = Path(item).expanduser().resolve()
         st = resolved.stat()
-        signature.append({
-            "role": role,
-            "path": str(resolved),
-            "size": int(st.st_size),
-            "mtime_ns": int(st.st_mtime_ns),
-        })
+        signature.append(
+            {
+                "role": role,
+                "path": str(resolved),
+                "size": int(st.st_size),
+                "mtime_ns": int(st.st_mtime_ns),
+            }
+        )
     return signature
 
 
@@ -152,7 +154,8 @@ def image_info_from_payload(payload: dict[str, Any], *, companions: list[str] | 
         musiq_score=payload.get("musiq_score"),
         clipiqa_score=payload.get("clipiqa_score"),
         face_embeddings=[
-            value for value in (_array_from_payload(v) for v in (payload.get("face_embeddings") or []))
+            value
+            for value in (_array_from_payload(v) for v in (payload.get("face_embeddings") or []))
             if value is not None
         ],
         llm_verdict=payload.get("llm_verdict"),

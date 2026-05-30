@@ -116,12 +116,15 @@ class AuthorizationApiContractTest(unittest.TestCase):
         self._admin_session_token = None
 
     def test_register_status_redeem_and_unbind_match_v1_contract(self):
-        register = self.client.post("/auth/register", json={
-            "email": "Contract@Example.com",
-            "password": "password123",
-            "display_name": "Contract User",
-            "device": DEVICE_A,
-        })
+        register = self.client.post(
+            "/auth/register",
+            json={
+                "email": "Contract@Example.com",
+                "password": "password123",
+                "display_name": "Contract User",
+                "device": DEVICE_A,
+            },
+        )
         self.assertEqual(register.status_code, 201)
         registered = register.get_json()
         self._assert_auth_payload_contract(registered, expect_token=True)
@@ -162,29 +165,38 @@ class AuthorizationApiContractTest(unittest.TestCase):
         self.assertFalse(unbound["device"]["bound"])
 
     def test_user_api_error_codes_match_v1_contract(self):
-        register = self.client.post("/auth/register", json={
-            "email": "contract@example.com",
-            "password": "password123",
-            "device": DEVICE_A,
-        })
+        register = self.client.post(
+            "/auth/register",
+            json={
+                "email": "contract@example.com",
+                "password": "password123",
+                "device": DEVICE_A,
+            },
+        )
         self.assertEqual(register.status_code, 201)
         token = register.get_json()["token"]
 
         self._assert_error(
-            self.client.post("/auth/login", json={
-                "email": "contract@example.com",
-                "password": "wrong-password",
-                "device": DEVICE_A,
-            }),
+            self.client.post(
+                "/auth/login",
+                json={
+                    "email": "contract@example.com",
+                    "password": "wrong-password",
+                    "device": DEVICE_A,
+                },
+            ),
             401,
             "invalid_credentials",
         )
         self._assert_error(
-            self.client.post("/auth/login", json={
-                "email": "contract@example.com",
-                "password": "password123",
-                "device": DEVICE_B,
-            }),
+            self.client.post(
+                "/auth/login",
+                json={
+                    "email": "contract@example.com",
+                    "password": "password123",
+                    "device": DEVICE_B,
+                },
+            ),
             403,
             "device_mismatch",
         )
@@ -214,31 +226,40 @@ class AuthorizationApiContractTest(unittest.TestCase):
             operator="test",
         )
         self._assert_error(
-            self.client.post("/auth/login", json={
-                "email": "contract@example.com",
-                "password": "password123",
-                "device": DEVICE_A,
-            }),
+            self.client.post(
+                "/auth/login",
+                json={
+                    "email": "contract@example.com",
+                    "password": "password123",
+                    "device": DEVICE_A,
+                },
+            ),
             403,
             "disabled",
         )
 
     def test_admin_api_error_codes_match_v1_contract(self):
         self._assert_error(
-            self.client.post("/admin/bootstrap", json={
-                "username": "support",
-                "password": "admin-password123",
-                "admin_token": "wrong",
-            }),
+            self.client.post(
+                "/admin/bootstrap",
+                json={
+                    "username": "support",
+                    "password": "admin-password123",
+                    "admin_token": "wrong",
+                },
+            ),
             403,
             "forbidden",
         )
 
-        bootstrap = self.client.post("/admin/bootstrap", json={
-            "username": "support",
-            "password": "admin-password123",
-            "admin_token": "admin-secret",
-        })
+        bootstrap = self.client.post(
+            "/admin/bootstrap",
+            json={
+                "username": "support",
+                "password": "admin-password123",
+                "admin_token": "admin-secret",
+            },
+        )
         self.assertEqual(bootstrap.status_code, 201)
         admin_payload = bootstrap.get_json()
         self.assertTrue(admin_payload["token"])
@@ -246,19 +267,25 @@ class AuthorizationApiContractTest(unittest.TestCase):
         self.assertEqual(admin_payload["admin"]["permissions"], ["*"])
 
         self._assert_error(
-            self.client.post("/admin/bootstrap", json={
-                "username": "other",
-                "password": "admin-password123",
-                "admin_token": "admin-secret",
-            }),
+            self.client.post(
+                "/admin/bootstrap",
+                json={
+                    "username": "other",
+                    "password": "admin-password123",
+                    "admin_token": "admin-secret",
+                },
+            ),
             409,
             "admin_exists",
         )
         self._assert_error(
-            self.client.post("/admin/login", json={
-                "username": "support",
-                "password": "wrong-password",
-            }),
+            self.client.post(
+                "/admin/login",
+                json={
+                    "username": "support",
+                    "password": "wrong-password",
+                },
+            ),
             401,
             "invalid_credentials",
         )
@@ -286,11 +313,14 @@ class AuthorizationApiContractTest(unittest.TestCase):
         self.assertTrue(event_payload["events"])
         self.assertTrue(EVENT_FIELDS.issubset(event_payload["events"][0].keys()))
 
-        user = self.client.post("/auth/register", json={
-            "email": "session-contract@example.com",
-            "password": "password123",
-            "device": DEVICE_A,
-        })
+        user = self.client.post(
+            "/auth/register",
+            json={
+                "email": "session-contract@example.com",
+                "password": "password123",
+                "device": DEVICE_A,
+            },
+        )
         self.assertEqual(user.status_code, 201)
         token_prefix = user.get_json()["token"][:10]
         missing_confirm = self.client.post(

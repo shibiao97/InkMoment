@@ -16,7 +16,6 @@ from __future__ import annotations
 import logging
 import math
 import re
-from dataclasses import dataclass
 from typing import Optional, Sequence
 
 import numpy as np
@@ -52,7 +51,7 @@ GPS_HALFLIFE = 0.0009
 # 强制连拍：连号差 ≤ N + 时间间隔 ≤ S
 BURST_NUMBER_DELTA = 3
 BURST_TIME_GAP = 1.2
-BURST_HASH_MAX = 18       # phash hamming > 此 → 内容差异太大，不算连拍
+BURST_HASH_MAX = 18  # phash hamming > 此 → 内容差异太大，不算连拍
 
 # 软聚类距离上限——超过这个值不合并；这是 (1 - similarity)
 CLUSTER_DISTANCE_THRESHOLD = 0.46
@@ -86,6 +85,7 @@ def _parse_iso_dt(s: Optional[str]) -> Optional[float]:
     if not s:
         return None
     from datetime import datetime
+
     try:
         return datetime.fromisoformat(s).timestamp()
     except Exception:
@@ -113,6 +113,7 @@ def _time_for_info(info) -> Optional[float]:
 
 # =================== 第 1 步：强制连拍组 ===================
 
+
 def detect_bursts(infos) -> list[set[int]]:
     """返回必须强制成一组的 index 集合列表。
 
@@ -123,6 +124,7 @@ def detect_bursts(infos) -> list[set[int]]:
     keyed = []
     for i, info in enumerate(infos):
         from pathlib import Path
+
         name = Path(info.path).name
         num = _filename_number(name)
         if num is None:
@@ -180,6 +182,7 @@ def detect_bursts(infos) -> list[set[int]]:
 
 # =================== 第 2 步：成对相似度 ===================
 
+
 def _time_similarity(t1: Optional[float], t2: Optional[float]) -> float:
     if t1 is None or t2 is None:
         return 0.0
@@ -220,6 +223,7 @@ def _exif_signature_similarity(meta1: Optional[dict], meta2: Optional[dict]) -> 
         parts += 1
         if meta1["lens"] == meta2["lens"]:
             score += 1.0
+
     # 焦距
     def _focal(m):
         s = (m or {}).get("focal_length")
@@ -229,12 +233,14 @@ def _exif_signature_similarity(meta1: Optional[dict], meta2: Optional[dict]) -> 
             return float(str(s).rstrip("m").rstrip("m"))
         except ValueError:
             return None
+
     f1, f2 = _focal(meta1), _focal(meta2)
     if f1 is not None and f2 is not None:
         parts += 1
         # 焦距接近度：差 < 5mm 全分，差 25mm 衰减到 0
         d = abs(f1 - f2)
         score += max(0.0, 1.0 - d / 25.0)
+
     # 光圈
     def _aper(m):
         s = (m or {}).get("aperture")
@@ -244,11 +250,13 @@ def _exif_signature_similarity(meta1: Optional[dict], meta2: Optional[dict]) -> 
             return float(str(s).replace("f/", ""))
         except ValueError:
             return None
+
     a1, a2 = _aper(meta1), _aper(meta2)
     if a1 is not None and a2 is not None:
         parts += 1
         d = abs(a1 - a2)
         score += max(0.0, 1.0 - d / 4.0)  # 差 4 档以内有分
+
     # ISO 数量级
     def _iso(m):
         s = (m or {}).get("iso")
@@ -258,6 +266,7 @@ def _exif_signature_similarity(meta1: Optional[dict], meta2: Optional[dict]) -> 
             return int(s)
         except ValueError:
             return None
+
     i1, i2 = _iso(meta1), _iso(meta2)
     if i1 is not None and i2 is not None and i1 > 0 and i2 > 0:
         parts += 1
@@ -330,6 +339,7 @@ def _pair_similarity(info_a, info_b, meta_a, meta_b) -> float:
     DINOv2 缺失 → 抛 RuntimeError（专家模式核心信号，不静默降级）。
     """
     from pathlib import Path
+
     name_a = Path(info_a.path).name
     name_b = Path(info_b.path).name
 
@@ -360,13 +370,15 @@ def _pair_similarity(info_a, info_b, meta_a, meta_b) -> float:
     # 权重档：两图都有脸 → PORTRAIT（face 主导）；否则 BASE（视觉主导）
     if portrait:
         w_dino, w_time, w_exif, w_face, w_gps, w_name = (
-            PORTRAIT_W_DINOV2, PORTRAIT_W_TIME, PORTRAIT_W_EXIF,
-            PORTRAIT_W_FACE, PORTRAIT_W_GPS, PORTRAIT_W_FILENAME
+            PORTRAIT_W_DINOV2,
+            PORTRAIT_W_TIME,
+            PORTRAIT_W_EXIF,
+            PORTRAIT_W_FACE,
+            PORTRAIT_W_GPS,
+            PORTRAIT_W_FILENAME,
         )
     else:
-        w_dino, w_time, w_exif, w_face, w_gps, w_name = (
-            W_DINOV2, W_TIME, W_EXIF, W_FACE, W_GPS, W_FILENAME
-        )
+        w_dino, w_time, w_exif, w_face, w_gps, w_name = (W_DINOV2, W_TIME, W_EXIF, W_FACE, W_GPS, W_FILENAME)
     # GPS 缺失：把它的权重转给 EXIF
     if not has_gps:
         w_exif += w_gps
@@ -396,7 +408,7 @@ def _pair_similarity(info_a, info_b, meta_a, meta_b) -> float:
         fb = len(faces_b)
         logger.debug(
             f"PAIR {name_a} × {name_b} | portrait={portrait} | "
-            f"sim={total:.3f} dist={1-total:.3f} | "
+            f"sim={total:.3f} dist={1 - total:.3f} | "
             f"dino={sim_vis:.3f}(w{w_dino:.2f}) "
             f"time={sim_time:.3f}(w{w_time:.2f},dt={dt}) "
             f"exif={sim_exif:.3f}(w{w_exif:.2f}) "
@@ -410,11 +422,11 @@ def _pair_similarity(info_a, info_b, meta_a, meta_b) -> float:
 
 # =================== 时间硬切段 ===================
 
+
 def _split_by_time_gaps(infos: Sequence) -> list[list[int]]:
     if not infos:
         return []
-    sorted_idx = sorted(range(len(infos)),
-                        key=lambda i: _time_for_info(infos[i]) or 0.0)
+    sorted_idx = sorted(range(len(infos)), key=lambda i: _time_for_info(infos[i]) or 0.0)
     segments: list[list[int]] = [[sorted_idx[0]]]
     for i in sorted_idx[1:]:
         t_cur = _time_for_info(infos[i])
@@ -427,6 +439,7 @@ def _split_by_time_gaps(infos: Sequence) -> list[list[int]]:
 
 
 # =================== 第 3 步：层次聚类 ===================
+
 
 def _complete_linkage_cluster(
     members: list[int], dist_fn, threshold: float, forced_groups: list[set[int]] = None
@@ -522,6 +535,7 @@ def _split_oversized(groups: list[list[int]], infos, max_size: int = MAX_GROUP_S
 
 # =================== 入口 ===================
 
+
 def cluster(infos: Sequence, meta_for=None) -> list[list[int]]:
     """主入口。infos 必须已计算 EXIF / dinov2 / face_embeddings 等字段。
 
@@ -531,7 +545,9 @@ def cluster(infos: Sequence, meta_for=None) -> list[list[int]]:
     if n == 0:
         return []
     if meta_for is None:
-        meta_for = lambda info: (info.exif_summary if getattr(info, "exif_summary", None) else None)
+
+        def meta_for(info):
+            return info.exif_summary if getattr(info, "exif_summary", None) else None
 
     # 1. 强制连拍组
     forced = detect_bursts(infos)
@@ -563,7 +579,9 @@ def cluster(infos: Sequence, meta_for=None) -> list[list[int]]:
         seg_set = set(seg)
         local_forced = [g & seg_set for g in forced if len(g & seg_set) >= 2]
         sub_groups = _complete_linkage_cluster(
-            seg, dist, threshold=CLUSTER_DISTANCE_THRESHOLD,
+            seg,
+            dist,
+            threshold=CLUSTER_DISTANCE_THRESHOLD,
             forced_groups=local_forced,
         )
         all_groups.extend(sub_groups)
@@ -583,8 +601,9 @@ def cluster(infos: Sequence, meta_for=None) -> list[list[int]]:
 
     if logger.isEnabledFor(logging.DEBUG):
         from pathlib import Path as _P
+
         for gi, g in enumerate(groups):
             names = [_P(infos[i].path).name for i in g]
-            logger.debug(f"GROUP {gi+1} ({len(g)}张): {', '.join(names)}")
+            logger.debug(f"GROUP {gi + 1} ({len(g)}张): {', '.join(names)}")
 
     return groups
