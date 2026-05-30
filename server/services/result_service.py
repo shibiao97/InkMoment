@@ -19,14 +19,16 @@ def serialize_winners(session, winners_dir_factory: Callable[[str], Path]) -> di
                 candidate = winners_dir_factory(session.folder) / Path(actual).name
                 if candidate.exists():
                     actual = str(candidate)
-            winners.append({
-                "path": actual,
-                "name": Path(winner).name,
-                "group_index": index,
-                "group_id": group.id,
-                "group_size": len(group.images),
-                "applied": group.applied,
-            })
+            winners.append(
+                {
+                    "path": actual,
+                    "name": Path(winner).name,
+                    "group_index": index,
+                    "group_id": group.id,
+                    "group_size": len(group.images),
+                    "applied": group.applied,
+                }
+            )
     return {"winners": winners}
 
 
@@ -39,33 +41,37 @@ def serialize_auto_rejected(session, losers_dir_factory: Callable[[str], Path]) 
         for original in session.prescreen_rejected:
             candidate = losers_dir_factory(session.folder) / Path(original).name
             actual = str(candidate) if candidate.exists() else original
-            items.append({
-                "path": actual,
-                "original_path": original,
-                "name": Path(original).name,
-                "group_index": -1,
-                "group_id": "__prescreen__",
-                "group_size": 1,
-                "reason": session.prescreen_reject_reasons.get(original, "智能初筛"),
-                "restored": original in session.prescreen_restored,
-                "datetime": (session.meta.get(original) or {}).get("datetime"),
-            })
+            items.append(
+                {
+                    "path": actual,
+                    "original_path": original,
+                    "name": Path(original).name,
+                    "group_index": -1,
+                    "group_id": "__prescreen__",
+                    "group_size": 1,
+                    "reason": session.prescreen_reject_reasons.get(original, "智能初筛"),
+                    "restored": original in session.prescreen_restored,
+                    "datetime": (session.meta.get(original) or {}).get("datetime"),
+                }
+            )
         return {"items": items}
 
     for index, group in enumerate(session.groups):
         for original in group.auto_rejected:
             actual = _actual_auto_rejected_path(group, original, session.folder, losers_dir_factory)
-            items.append({
-                "path": actual,
-                "original_path": original,
-                "name": Path(original).name,
-                "group_index": index,
-                "group_id": group.id,
-                "group_size": len(group.images),
-                "reason": group.auto_reject_reasons.get(original, "智能初筛"),
-                "restored": original in group.manual_restored,
-                "datetime": (session.meta.get(original) or {}).get("datetime"),
-            })
+            items.append(
+                {
+                    "path": actual,
+                    "original_path": original,
+                    "name": Path(original).name,
+                    "group_index": index,
+                    "group_id": group.id,
+                    "group_size": len(group.images),
+                    "reason": group.auto_reject_reasons.get(original, "智能初筛"),
+                    "restored": original in group.manual_restored,
+                    "datetime": (session.meta.get(original) or {}).get("datetime"),
+                }
+            )
     return {"items": items}
 
 
@@ -150,11 +156,13 @@ def restore_rejected_payload(
                         shutil.copy2(str(source), target)
                         winner_path = original
                         _remove_loser_copy(group, original)
-                    group.move_log.append({
-                        "src": original,
-                        "dst": str(target),
-                        "kind": "restored",
-                    })
+                    group.move_log.append(
+                        {
+                            "src": original,
+                            "dst": str(target),
+                            "kind": "restored",
+                        }
+                    )
                 except OSError as error:
                     failed = str(error)
 
@@ -177,10 +185,7 @@ def restore_rejected_payload(
         group.manual_restored.append(original)
         if winner_path not in group.extra_winners:
             group.extra_winners.append(winner_path)
-        group.losers = [
-            path for path in group.losers
-            if path not in {original, actual, winner_path}
-        ]
+        group.losers = [path for path in group.losers if path not in {original, actual, winner_path}]
         if session.mode == "move" and actual in session.meta:
             session.meta[winner_path] = session.meta.pop(actual)
         save_state(session)
@@ -254,10 +259,7 @@ def _companion_actual(
 
 def _remove_loser_companion_copy(group, comp_original: str) -> None:
     for entry in group.move_log:
-        if (
-            entry.get("kind") == "loser_companion"
-            and entry.get("src") == comp_original
-        ):
+        if entry.get("kind") == "loser_companion" and entry.get("src") == comp_original:
             loser_copy = Path(entry.get("dst", ""))
             if loser_copy.exists():
                 try:
@@ -300,17 +302,17 @@ def _restore_companions(
                 shutil.copy2(comp_original, str(comp_target))
                 _remove_loser_companion_copy(group, comp_original)
             restored_pairs.append((comp_original, str(comp_target)))
-            group.move_log.append({
-                "src": comp_original,
-                "dst": str(comp_target),
-                "kind": "restored_companion",
-            })
+            group.move_log.append(
+                {
+                    "src": comp_original,
+                    "dst": str(comp_target),
+                    "kind": "restored_companion",
+                }
+            )
         except OSError as error:
             logger.warning(f"捞回 companion {comp_original} 失败: {error}")
 
     if session.mode == "move" and restored_pairs:
         if original in session.companions:
             session.companions.pop(original)
-        session.companions[winner_path] = [
-            restored for _, restored in restored_pairs
-        ]
+        session.companions[winner_path] = [restored for _, restored in restored_pairs]

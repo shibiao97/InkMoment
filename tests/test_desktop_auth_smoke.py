@@ -45,22 +45,24 @@ class DesktopAuthSmokeTest(unittest.TestCase):
         self.store.create_admin("support", "admin-password123")
         output = io.StringIO()
         with contextlib.redirect_stdout(output):
-            status = desktop_smoke_main([
-                "--auth-base-url",
-                f"http://127.0.0.1:{self.server.server_port}",
-                "--admin-username",
-                "support",
-                "--admin-password",
-                "admin-password123",
-                "--unique-suffix",
-                "unittest",
-                "--cdk-code",
-                "DESKTOP-SMOKE-UNITTEST",
-                "--email",
-                "desktop-smoke-unittest@example.invalid",
-                "--device-id",
-                "desktop-smoke-device-unittest",
-            ])
+            status = desktop_smoke_main(
+                [
+                    "--auth-base-url",
+                    f"http://127.0.0.1:{self.server.server_port}",
+                    "--admin-username",
+                    "support",
+                    "--admin-password",
+                    "admin-password123",
+                    "--unique-suffix",
+                    "unittest",
+                    "--cdk-code",
+                    "DESKTOP-SMOKE-UNITTEST",
+                    "--email",
+                    "desktop-smoke-unittest@example.invalid",
+                    "--device-id",
+                    "desktop-smoke-device-unittest",
+                ]
+            )
 
         self.assertEqual(status, 0)
         self.assertIn("DESKTOP AUTH SMOKE OK", output.getvalue())

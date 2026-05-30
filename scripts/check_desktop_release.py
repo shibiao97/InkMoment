@@ -57,16 +57,18 @@ def main() -> int:
     args = parse_args()
     python = python_executable()
 
-    run([
-        python,
-        "-m",
-        "py_compile",
-        "scripts/build_desktop_release.py",
-        "scripts/verify_desktop_release.py",
-        "scripts/audit_desktop_goal.py",
-        "scripts/check_desktop_release.py",
-        "scripts/run_desktop_release_workflow.py",
-    ])
+    run(
+        [
+            python,
+            "-m",
+            "py_compile",
+            "scripts/build_desktop_release.py",
+            "scripts/verify_desktop_release.py",
+            "scripts/audit_desktop_goal.py",
+            "scripts/check_desktop_release.py",
+            "scripts/run_desktop_release_workflow.py",
+        ]
+    )
     if not args.skip_tests:
         run([python, "-m", "unittest", "discover", "-s", "tests", "-p", "test_*.py"])
     if not args.skip_frontend:

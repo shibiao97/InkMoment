@@ -24,19 +24,19 @@ except ImportError:
 
 
 # ─── 配置 ────────────────────────────────────────────────────────────────────
-TARGET_DIR    = Path.cwd() / "pic_test"
-TARGET_TOTAL_MB = 100          # 目标总大小（MB）
-MIN_QUALITY   = 20             # 最低 JPEG 质量（低于此不再降质量，转为缩放）
-MAX_QUALITY   = 95             # 二分上限
+TARGET_DIR = Path.cwd() / "pic_test"
+TARGET_TOTAL_MB = 100  # 目标总大小（MB）
+MIN_QUALITY = 20  # 最低 JPEG 质量（低于此不再降质量，转为缩放）
+MAX_QUALITY = 95  # 二分上限
 SUPPORTED_EXTS = {".jpg", ".jpeg"}
 # ─────────────────────────────────────────────────────────────────────────────
 
 
 def format_size(b: int) -> str:
     if b >= 1024**2:
-        return f"{b/1024**2:.2f} MB"
+        return f"{b / 1024**2:.2f} MB"
     elif b >= 1024:
-        return f"{b/1024:.1f} KB"
+        return f"{b / 1024:.1f} KB"
     return f"{b} B"
 
 
@@ -50,8 +50,7 @@ def encode_jpeg(img: Image.Image, quality: int, exif_bytes: bytes | None) -> byt
     return buf.getvalue()
 
 
-def find_quality_for_target(img: Image.Image, exif_bytes: bytes | None,
-                             target_bytes: int) -> tuple[int, bytes]:
+def find_quality_for_target(img: Image.Image, exif_bytes: bytes | None, target_bytes: int) -> tuple[int, bytes]:
     """
     二分搜索：找到使编码大小 ≤ target_bytes 的最大 quality 值。
     返回 (quality, encoded_bytes)。
@@ -66,9 +65,9 @@ def find_quality_for_target(img: Image.Image, exif_bytes: bytes | None,
         if len(data) <= target_bytes:
             best_quality = mid
             best_data = data
-            lo = mid + 1        # 尝试更高质量
+            lo = mid + 1  # 尝试更高质量
         else:
-            hi = mid - 1        # 质量太高，文件太大
+            hi = mid - 1  # 质量太高，文件太大
 
     return best_quality, best_data
 
@@ -129,10 +128,7 @@ def main():
         print(f"错误：目录不存在 → {TARGET_DIR}")
         sys.exit(1)
 
-    image_files = sorted([
-        f for f in TARGET_DIR.iterdir()
-        if f.is_file() and f.suffix.lower() in SUPPORTED_EXTS
-    ])
+    image_files = sorted([f for f in TARGET_DIR.iterdir() if f.is_file() and f.suffix.lower() in SUPPORTED_EXTS])
 
     if not image_files:
         print("未找到任何 JPG/JPEG 图片。")
@@ -161,20 +157,19 @@ def main():
         total_compressed += comp
         ratio = (1 - comp / orig) * 100 if orig > 0 else 0
 
-        print(f"[{i:3d}/{n}] {filepath.name}  "
-              f"{format_size(orig)} → {format_size(comp)}  "
-              f"(节省 {ratio:.0f}%, quality={q})")
+        print(
+            f"[{i:3d}/{n}] {filepath.name}  {format_size(orig)} → {format_size(comp)}  (节省 {ratio:.0f}%, quality={q})"
+        )
 
     print("─" * 65)
     saved = total_original - total_compressed
     overall_ratio = (1 - total_compressed / total_original) * 100 if total_original else 0
-    print(f"✅ 完成！")
+    print("✅ 完成！")
     print(f"📊 总计: {format_size(total_original)} → {format_size(total_compressed)}")
     print(f"💾 节省: {format_size(saved)}  ({overall_ratio:.1f}%)")
 
     if total_compressed > target_total_bytes:
-        print(f"⚠️  实际大小 {format_size(total_compressed)} 略超目标 "
-              f"{TARGET_TOTAL_MB} MB（部分图片已达最低质量限制）")
+        print(f"⚠️  实际大小 {format_size(total_compressed)} 略超目标 {TARGET_TOTAL_MB} MB（部分图片已达最低质量限制）")
     else:
         print(f"✓  已控制在目标 {TARGET_TOTAL_MB} MB 以内 🎉")
 

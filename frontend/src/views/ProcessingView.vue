@@ -7,7 +7,7 @@ import StatusBadge from "../components/StatusBadge.vue";
 import { useJobPolling } from "../composables/useJobPolling";
 import { useNextStep } from "../composables/useNextStep";
 
-const props = defineProps({
+defineProps({
   startedPayload: {
     type: Object,
     default: null,

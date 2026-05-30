@@ -60,8 +60,10 @@ def try_endpoint(model_id: str, endpoint: str, cache_dir: str | None = None, max
     os.environ["HF_ENDPOINT"] = endpoint
     # 让本次进程内的 huggingface_hub 重新读 endpoint。不同版本暴露 constants 的方式不同。
     import huggingface_hub
+
     try:
         import huggingface_hub.constants as hf_constants
+
         importlib.reload(hf_constants)
     except Exception:
         pass
@@ -76,8 +78,13 @@ def try_endpoint(model_id: str, endpoint: str, cache_dir: str | None = None, max
                 repo_id=model_id,
                 cache_dir=cache_dir,
                 allow_patterns=[
-                    "*.json", "*.txt", "*.safetensors", "*.bin",
-                    "tokenizer*", "spiece.*", "vocab.*",
+                    "*.json",
+                    "*.txt",
+                    "*.safetensors",
+                    "*.bin",
+                    "tokenizer*",
+                    "spiece.*",
+                    "vocab.*",
                 ],
                 max_workers=2,
             )
@@ -96,22 +103,27 @@ def download_model(model_id: str, endpoints: list[str], cache_dir: str | None = 
         ok = try_endpoint(model_id, endpoint, cache_dir=cache_dir, max_retries=max_retries)
         if ok:
             return True
-        print(f"  → 切换下一个镜像")
+        print("  → 切换下一个镜像")
     return False
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="预下载土豪/专家模式所需的 HuggingFace 模型")
     parser.add_argument(
-        "--model", action="append", default=None,
+        "--model",
+        action="append",
+        default=None,
         help="只下载指定模型（可重复），默认下载全部",
     )
     parser.add_argument(
-        "--endpoint", action="append", default=None,
+        "--endpoint",
+        action="append",
+        default=None,
         help="额外的镜像 endpoint（可重复），按顺序尝试；不指定时用内置列表",
     )
     parser.add_argument(
-        "--cache-dir", default=None,
+        "--cache-dir",
+        default=None,
         help="模型缓存根目录；会在其中创建 huggingface/、torch/ 等子目录",
     )
     parser.add_argument("--retries", type=int, default=3, help="单镜像重试次数（默认 3）")
@@ -129,8 +141,11 @@ def main() -> int:
     try:
         import huggingface_hub  # noqa
     except ImportError:
-        print("\n× 缺少 huggingface_hub。请先安装专家/土豪模式依赖："
-              "\n  .venv/bin/pip install transformers huggingface_hub", file=sys.stderr)
+        print(
+            "\n× 缺少 huggingface_hub。请先安装专家/土豪模式依赖："
+            "\n  .venv/bin/pip install transformers huggingface_hub",
+            file=sys.stderr,
+        )
         return 2
 
     failures = []
@@ -147,7 +162,9 @@ def main() -> int:
         print("  2) 海外网络：unset HF_ENDPOINT 后重试")
         print("  3) 公司网络拦截 HTTPS：换手机热点重试")
         print(f"  4) 手动下载：浏览器打开 {endpoints[0]}/{failures[0]}/tree/main，")
-        print(f"     下载所有文件到 ~/.cache/huggingface/hub/models--{failures[0].replace('/','--')}/snapshots/<commit>/")
+        print(
+            f"     下载所有文件到 ~/.cache/huggingface/hub/models--{failures[0].replace('/', '--')}/snapshots/<commit>/"
+        )
         return 1
 
     print("✓ 全部模型已下载到本地缓存，重启 app.py 即可。")

@@ -1,0 +1,185 @@
+{% extends "admin/base.html" %}
+{% block title %}InkMoment Admin User{% endblock %}
+{% block body %}
+<main class="app-shell">
+  <aside class="sidebar">
+    <div class="brand-block">
+      <div class="brand-title">InkMoment</div>
+      <div class="brand-subtitle">用户详情</div>
+    </div>
+    <nav class="nav-list" aria-label="管理导航">
+      <a class="nav-link" href="{{ url_for('admin_dashboard.admin_dashboard') }}"><span class="nav-dot"></span>总览</a>
+      <a class="nav-link" href="{{ url_for('admin_dashboard.admin_events_page', email=user.email) }}"><span class="nav-dot"></span>相关审计</a>
+    </nav>
+    <div class="sidebar-footer">
+      <form method="post" action="{{ url_for('admin_auth.admin_logout') }}"><button type="submit">退出登录</button></form>
+    </div>
+  </aside>
+
+  <section class="content">
+    <header class="page-head">
+      <div class="title-block">
+        <a href="{{ url_for('admin_dashboard.admin_dashboard') }}">← 返回总览</a>
+        <h1>{{ user.email }}</h1>
+        <p>{{ user.display_name or '未设置显示名' }}</p>
+      </div>
+      <div class="nav-actions">
+        <a class="btn secondary" href="{{ url_for('admin_dashboard.admin_events_page', email=user.email) }}">相关审计日志</a>
+      </div>
+    </header>
+
+    <div class="stack">
+      <section class="metric-grid">
+        <div class="metric"><span>账号状态</span><strong><span class="badge badge-{{ user.status }}">{{ user.status|account_status_label }}</span></strong><small>{{ user.created_at|admin_time }} 创建</small></div>
+        <div class="metric"><span>授权状态</span><strong><span class="badge badge-{{ user.license.reason }}">{{ user.license.reason|license_reason_label }}</span></strong><small>{{ user.license_expires_at|admin_time }}</small></div>
+        <div class="metric"><span>设备绑定</span><strong>{{ '已绑定' if user.device.bound else '未绑定' }}</strong><small>{{ user.device.name or user.device.fingerprint or '-' }}</small></div>
+        <div class="metric"><span>最近登录</span><strong>{{ user.last_login_at|admin_time }}</strong><small>Session：{{ user.sessions|length }}</small></div>
+      </section>
+
+      <section class="split-grid">
+        <div class="card">
+          <div class="card-head">
+            <div>
+              <h2>账号与设备</h2>
+              <p>设备变更需要先解除绑定，默认扣除 3 天授权时长。</p>
+            </div>
+            {% if user.device.bound %}<span class="badge badge-active">已绑定</span>{% else %}<span class="badge badge-not_activated">未绑定</span>{% endif %}
+          </div>
+          <dl class="kv">
+            <dt>账号 ID</dt><dd class="mono">{{ user.id }}</dd>
+            <dt>设备名称</dt><dd>{{ user.device.name or '-' }}</dd>
+            <dt>设备指纹</dt><dd class="mono">{{ user.device.fingerprint or '-' }}</dd>
+            <dt>系统 / 架构</dt><dd>{{ user.device.os or '-' }} / {{ user.device.arch or '-' }}</dd>
+            <dt>App 版本</dt><dd>{{ user.device.app_version or '-' }}</dd>
+            <dt>绑定时间</dt><dd>{{ user.device.bound_at|admin_time }}</dd>
+            <dt>备注</dt><dd>{{ user.notes or '-' }}</dd>
+            <dt>标签</dt><dd>{{ user.tags or '-' }}</dd>
+          </dl>
+          {% if user.device.details %}
+            <div class="section">
+              <h3>设备详情</h3>
+              <pre class="section">{{ user.device.details|tojson(indent=2) }}</pre>
+            </div>
+          {% endif %}
+        </div>
+
+        {% if can('users:write') %}
+        <div class="card">
+          <div class="card-head">
+            <div>
+              <h2>运营操作</h2>
+              <p>所有操作都会写入审计日志。禁用、解绑和吊销 session 需要确认。</p>
+            </div>
+          </div>
+          <div class="action-grid">
+            <div class="action-card">
+              <h3>账号状态</h3>
+              <p>禁用账号会同步吊销有效 session。</p>
+              <form method="post" action="{{ url_for('admin_dashboard.admin_ui_set_status', email=user.email) }}">
+                <select name="status">
+                  <option value="active" {{ 'selected' if user.status == 'active' else '' }}>启用</option>
+                  <option value="disabled" {{ 'selected' if user.status == 'disabled' else '' }}>禁用</option>
+                </select>
+                <input name="reason" placeholder="原因">
+                <input name="confirm_action" type="hidden" value="CONFIRM">
+                <button type="submit">更新状态</button>
+              </form>
+            </div>
+            <div class="action-card">
+              <h3>授权期限</h3>
+              <p>正数增加时长，负数扣减时长。</p>
+              <form method="post" action="{{ url_for('admin_dashboard.admin_ui_adjust_license', email=user.email) }}" data-confirm="确认调整授权期限？">
+                <input name="add_days" type="number" placeholder="例如 30 或 -3" required>
+                <input name="reason" placeholder="原因">
+                <input name="confirm_action" type="hidden" value="CONFIRM">
+                <button type="submit">调整期限</button>
+              </form>
+            </div>
+            <div class="action-card danger-zone">
+              <h3>设备绑定</h3>
+              <p class="danger-text">解除绑定默认扣除 3 天，用户下一次可绑定新设备。</p>
+              <form method="post" action="{{ url_for('admin_dashboard.admin_ui_unbind_device', email=user.email) }}" data-confirm="确认解除设备绑定并按填写天数扣除？">
+                <input name="deduct_days" type="number" value="3" min="0">
+                <input name="reason" placeholder="解绑原因">
+                <input name="confirm_action" type="hidden" value="CONFIRM">
+                <button class="danger" type="submit">解除绑定</button>
+              </form>
+            </div>
+            <div class="action-card danger-zone">
+              <h3>Session</h3>
+              <p>吊销后客户端会在下一次授权检查时退出可用状态。</p>
+              <form method="post" action="{{ url_for('admin_dashboard.admin_ui_revoke_sessions', email=user.email) }}" data-confirm="确认吊销该用户全部 session？">
+                <input name="confirm_action" type="hidden" value="CONFIRM">
+                <button class="danger" type="submit">吊销全部 session</button>
+              </form>
+            </div>
+          </div>
+        </div>
+        {% endif %}
+      </section>
+
+      <section class="table-card">
+        <div class="table-toolbar"><h2>CDK 兑换记录</h2></div>
+        <div class="table-scroll short">
+          <table><thead><tr><th>CDK</th><th>天数</th><th>状态</th><th>兑换时间</th></tr></thead><tbody>
+          {% for cdk in user.redeemed_cdks %}<tr><td class="mono">{{ cdk.code }}</td><td>{{ cdk.duration_days }}</td><td><span class="badge badge-{{ cdk.status }}">{{ cdk.status|cdk_status_label }}</span></td><td>{{ cdk.redeemed_at|admin_time }}</td></tr>{% else %}<tr><td colspan="4"><div class="empty">无兑换记录</div></td></tr>{% endfor %}
+          </tbody></table>
+        </div>
+      </section>
+
+      <section class="table-card">
+        <div class="table-toolbar"><h2>Session</h2></div>
+        <div class="table-scroll short">
+          <table><thead><tr><th>Token</th><th>设备</th><th>创建</th><th>最近</th><th>状态</th><th>操作</th></tr></thead><tbody>
+          {% for session in user.sessions %}
+            <tr>
+              <td class="mono">{{ session.token_prefix }}</td>
+              <td class="mono">{{ session.device_fingerprint }}</td>
+              <td>{{ session.created_at|admin_time }}</td>
+              <td>{{ session.last_seen_at|admin_time }}</td>
+              <td>{% if session.revoked_at %}<span class="badge badge-disabled">已吊销</span><br><span class="muted small">{{ session.revoked_at|admin_time }}</span>{% else %}<span class="badge badge-active">有效</span>{% endif %}</td>
+              <td>
+                {% if not session.revoked_at and can('users:write') %}
+                  <form method="post" action="{{ url_for('admin_dashboard.admin_ui_revoke_session', email=user.email, token_prefix=session.token_prefix) }}" data-confirm="确认吊销这个 session？">
+                    <input name="confirm_action" type="hidden" value="CONFIRM">
+                    <button class="danger" type="submit">吊销</button>
+                  </form>
+                {% else %}<span class="muted">-</span>{% endif %}
+              </td>
+            </tr>
+          {% else %}<tr><td colspan="6"><div class="empty">无 session</div></td></tr>{% endfor %}
+          </tbody></table>
+        </div>
+      </section>
+
+      <section class="split-grid">
+        <div class="table-card">
+          <div class="table-toolbar"><h2>授权事件</h2></div>
+          <div class="table-scroll short event-detail">
+            <table><thead><tr><th>类型</th><th>详情</th><th>时间</th></tr></thead><tbody>
+            {% for event in user.license_events %}<tr><td><span class="badge">{{ event.event_type }}</span></td><td><pre>{{ event.detail|tojson(indent=2) }}</pre></td><td>{{ event.created_at|admin_time }}</td></tr>{% else %}<tr><td colspan="3"><div class="empty">无授权事件</div></td></tr>{% endfor %}
+            </tbody></table>
+          </div>
+        </div>
+        <div class="table-card">
+          <div class="table-toolbar"><h2>设备事件</h2></div>
+          <div class="table-scroll short event-detail">
+            <table><thead><tr><th>设备</th><th>类型</th><th>详情</th><th>时间</th></tr></thead><tbody>
+            {% for event in user.device_events %}<tr><td class="mono">{{ event.device_fingerprint or '-' }}</td><td><span class="badge badge-device">{{ event.event_type }}</span></td><td><pre>{{ event.detail|tojson(indent=2) }}</pre></td><td>{{ event.created_at|admin_time }}</td></tr>{% else %}<tr><td colspan="4"><div class="empty">无设备事件</div></td></tr>{% endfor %}
+            </tbody></table>
+          </div>
+        </div>
+      </section>
+
+      <section class="table-card">
+        <div class="table-toolbar"><h2>管理员操作</h2></div>
+        <div class="table-scroll short event-detail">
+          <table><thead><tr><th>管理员</th><th>类型</th><th>详情</th><th>时间</th></tr></thead><tbody>
+          {% for event in user.admin_events %}<tr><td>{{ event.actor }}</td><td><span class="badge badge-admin">{{ event.event_type }}</span></td><td><pre>{{ event.detail|tojson(indent=2) }}</pre></td><td>{{ event.created_at|admin_time }}</td></tr>{% else %}<tr><td colspan="4"><div class="empty">无管理员操作</div></td></tr>{% endfor %}
+          </tbody></table>
+        </div>
+      </section>
+    </div>
+  </section>
+</main>
+{% endblock %}

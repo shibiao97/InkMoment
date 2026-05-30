@@ -17,10 +17,12 @@ from typing import Any, Callable, Optional
 import imagehash
 import numpy as np
 from PIL import Image, ImageOps
-from inkmoment.quality import analyze_image
+from inkmoment.engines.base import AnalysisInput
+from inkmoment.engines import get_engine, normalize_engine
 
 try:
     from pillow_heif import register_heif_opener
+
     register_heif_opener()
 except Exception:
     pass
@@ -31,17 +33,22 @@ IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".heic", ".heif", ".webp", ".bmp", ".tif"
 # RAW 格式：靠 rawpy 提取内嵌 JPEG 预览图来分析，原文件搬运时整个搬。
 # 如果同 stem 同目录有 JPG/JPEG 等 IMAGE_EXTS 文件，则优先用那个（更高质量，不需要 rawpy）。
 RAW_EXTS = {
-    ".cr2", ".cr3", ".crw",        # Canon
-    ".nef", ".nrw",                # Nikon
-    ".arw", ".srf", ".sr2",        # Sony
-    ".dng",                        # Adobe / 通用
-    ".raf",                        # Fuji
-    ".orf",                        # Olympus
-    ".rw2",                        # Panasonic
-    ".pef",                        # Pentax
-    ".rwl",                        # Leica
-    ".srw",                        # Samsung
-    ".x3f",                        # Sigma
+    ".cr2",
+    ".cr3",
+    ".crw",  # Canon
+    ".nef",
+    ".nrw",  # Nikon
+    ".arw",
+    ".srf",
+    ".sr2",  # Sony
+    ".dng",  # Adobe / 通用
+    ".raf",  # Fuji
+    ".orf",  # Olympus
+    ".rw2",  # Panasonic
+    ".pef",  # Pentax
+    ".rwl",  # Leica
+    ".srw",  # Samsung
+    ".x3f",  # Sigma
 }
 
 ALL_INPUT_EXTS = IMAGE_EXTS | RAW_EXTS
@@ -74,9 +81,9 @@ def _resize_for_analysis(img: Image.Image) -> Image.Image:
 
 
 # 阈值：时间间隔近时（同一拍摄场景），允许更大的视觉差异
-THRESHOLD_NEAR = 10   # 同场景内 (<= 5 分钟)
-THRESHOLD_FAR = 6     # 跨场景 (> 5 分钟)
-NEAR_SECONDS = 300    # 5 分钟
+THRESHOLD_NEAR = 10  # 同场景内 (<= 5 分钟)
+THRESHOLD_FAR = 6  # 跨场景 (> 5 分钟)
+NEAR_SECONDS = 300  # 5 分钟
 
 
 class CancelledError(Exception):
@@ -85,35 +92,36 @@ class CancelledError(Exception):
 
 @dataclass
 class ImageInfo:
-    path: str                               # primary 文件路径（可能是 RAW 或普通图片）
-    phash: str                              # 64 位 hex
-    timestamp: Optional[float] = None       # unix 秒；naive datetime → ts，仅用于秒差比较
+    path: str  # primary 文件路径（可能是 RAW 或普通图片）
+    phash: str  # 64 位 hex
+    timestamp: Optional[float] = None  # unix 秒；naive datetime → ts，仅用于秒差比较
     size: int = 0
     mtime: float = 0.0
-    exif_summary: Optional[dict] = None     # 展示用 EXIF 摘要
-    quality: Optional[dict] = None          # 技术质量评分与初筛信号
+    exif_summary: Optional[dict] = None  # 展示用 EXIF 摘要
+    quality: Optional[dict] = None  # 技术质量评分与初筛信号
     # 同 stem 同目录的伴随文件（与 primary 一起搬运，不单独参与分析）
     # 例如 primary = IMG_001.CR2，companions = ["IMG_001.JPG"]
     companions: list[str] = field(default_factory=list)
     # ---- 视觉模型产物（专家模式 / vision.py 生成）----
-    dinov2: Optional[Any] = None            # 384 维 float32 np.ndarray，L2 归一
-    aesthetic_score: Optional[float] = None # 1-10 美学分（NIMA）
-    musiq_score: Optional[float] = None     # 0-100 技术质量（pyiqa MUSIQ）
-    clipiqa_score: Optional[float] = None   # 0-1 LAION 美学（pyiqa CLIP-IQA+）
+    dinov2: Optional[Any] = None  # 384 维 float32 np.ndarray，L2 归一
+    aesthetic_score: Optional[float] = None  # 1-10 美学分（NIMA）
+    musiq_score: Optional[float] = None  # 0-100 技术质量（pyiqa MUSIQ）
+    clipiqa_score: Optional[float] = None  # 0-1 LAION 美学（pyiqa CLIP-IQA+）
     face_embeddings: Optional[list] = None  # [512 维 np.ndarray, ...]，InsightFace ArcFace
     # ---- 土豪模式（tycoon）专属 ----
-    llm_verdict: Optional[str] = None       # "pass" | "reject"
-    llm_reason: Optional[str] = None        # 一句中文短理由
+    llm_verdict: Optional[str] = None  # "pass" | "reject"
+    llm_reason: Optional[str] = None  # 一句中文短理由
     # ---- 极速模式签名（fast_clustering 消费）----
-    dhash: Optional[str] = None             # 64 位 hex
-    whash: Optional[str] = None             # 64 位 hex
-    ahash: Optional[str] = None             # 64 位 hex
-    color_hist: Optional[Any] = None        # 144 维 float32（HSV 3×3 块 × 16 bins）
-    orb_descs: Optional[Any] = None         # (N, 32) uint8 ORB 描述子
-    orb_kps: Optional[Any] = None           # (N, 2) float32 关键点坐标
+    dhash: Optional[str] = None  # 64 位 hex
+    whash: Optional[str] = None  # 64 位 hex
+    ahash: Optional[str] = None  # 64 位 hex
+    color_hist: Optional[Any] = None  # 144 维 float32（HSV 3×3 块 × 16 bins）
+    orb_descs: Optional[Any] = None  # (N, 32) uint8 ORB 描述子
+    orb_kps: Optional[Any] = None  # (N, 2) float32 关键点坐标
 
 
 # ---------------- EXIF ----------------
+
 
 def _parse_exif_datetime(dt_str: str, subsec: str = "0") -> Optional[datetime]:
     if not dt_str:
@@ -224,9 +232,11 @@ def extract_exif_summary(img: Image.Image, file_size: int) -> dict:
 # 函数会用到时才会触发顶层 import。这里把 import 提到顶部，使能缺失
 # 不会等到"每张图都失败"才暴露。
 
+
 def _ensure_cv2():
     """fast 模式硬依赖检查；缺失抛 ImportError 让上游 _run_job 接住报错。"""
     import cv2  # noqa: F401
+
     return cv2
 
 
@@ -243,8 +253,7 @@ def _compute_color_hist(img_t: Image.Image) -> Optional[np.ndarray]:
         return None
     if max(h, w) > 384:
         scale = 384.0 / max(h, w)
-        rgb = cv2.resize(rgb, (max(1, int(w * scale)), max(1, int(h * scale))),
-                         interpolation=cv2.INTER_AREA)
+        rgb = cv2.resize(rgb, (max(1, int(w * scale)), max(1, int(h * scale))), interpolation=cv2.INTER_AREA)
         h, w = rgb.shape[:2]
     hsv = cv2.cvtColor(rgb, cv2.COLOR_RGB2HSV)
     feats: list[np.ndarray] = []
@@ -252,7 +261,7 @@ def _compute_color_hist(img_t: Image.Image) -> Optional[np.ndarray]:
     xs = [0, w // 3, 2 * w // 3, w]
     for i in range(3):
         for j in range(3):
-            block = hsv[ys[i]:ys[i + 1], xs[j]:xs[j + 1]]
+            block = hsv[ys[i] : ys[i + 1], xs[j] : xs[j + 1]]
             hist_h = cv2.calcHist([block], [0], None, [16], [0, 180]).flatten()
             hist_s = cv2.calcHist([block], [1], None, [16], [0, 256]).flatten()
             hist_v = cv2.calcHist([block], [2], None, [16], [0, 256]).flatten()
@@ -281,8 +290,7 @@ def _compute_orb(img_t: Image.Image, nfeatures: int = 500):
         return None, None
     if max(h, w) > 800:
         scale = 800.0 / max(h, w)
-        gray = cv2.resize(gray, (max(1, int(w * scale)), max(1, int(h * scale))),
-                          interpolation=cv2.INTER_AREA)
+        gray = cv2.resize(gray, (max(1, int(w * scale)), max(1, int(h * scale))), interpolation=cv2.INTER_AREA)
     orb = cv2.ORB_create(nfeatures=nfeatures)
     kps, descs = orb.detectAndCompute(gray, None)
     if descs is None or len(descs) < 8:
@@ -338,6 +346,7 @@ def _load_image_for_analysis(path: str, companions: list[str]) -> Image.Image:
             # JPG/JPEG companion 损坏（少见，但用户的 SD 卡读坏过）。
             # 优先级 1 失败了，自动 fallback 到 RAW 内嵌 JPEG——比直接 skip 整张图友好。
             import logging
+
             logging.getLogger("inkmoment").warning(
                 f"RAW {Path(path).name} 的 companion {Path(best_comp).name} 加载失败"
                 f"（{type(e).__name__}: {e}），退回 RAW 内嵌 JPEG"
@@ -348,17 +357,14 @@ def _load_image_for_analysis(path: str, companions: list[str]) -> Image.Image:
         import rawpy
     except ImportError as e:
         raise RuntimeError(
-            f"无法处理 RAW 文件 {Path(path).name}：未安装 rawpy。"
-            f"请运行：pip install 'rawpy>=0.18'"
+            f"无法处理 RAW 文件 {Path(path).name}：未安装 rawpy。请运行：pip install 'rawpy>=0.18'"
         ) from e
 
     with rawpy.imread(path) as raw:
         try:
             thumb = raw.extract_thumb()
         except (rawpy.LibRawNoThumbnailError, rawpy.LibRawUnsupportedThumbnailError) as e:
-            raise RuntimeError(
-                f"RAW 文件 {Path(path).name} 没有可用的内嵌预览图：{e}"
-            ) from e
+            raise RuntimeError(f"RAW 文件 {Path(path).name} 没有可用的内嵌预览图：{e}") from e
 
     if thumb.format == rawpy.ThumbFormat.JPEG:
         img = Image.open(io.BytesIO(thumb.data))
@@ -369,12 +375,14 @@ def _load_image_for_analysis(path: str, companions: list[str]) -> Image.Image:
     raise RuntimeError(f"RAW 内嵌缩略图格式不支持：{thumb.format}")
 
 
-def _process_one(path: str, strength: str = "standard",
-                 face_aware: bool = True,
-                 engine: str = "expert",
-                 llm_model: Optional[str] = None,
-                 companions: Optional[list[str]] = None,
-                 ) -> tuple[Optional[ImageInfo], Optional[str]]:
+def _process_one(
+    path: str,
+    strength: str = "standard",
+    face_aware: bool = True,
+    engine: str = "expert",
+    llm_model: Optional[str] = None,
+    companions: Optional[list[str]] = None,
+) -> tuple[Optional[ImageInfo], Optional[str]]:
     """返回 (info, error_reason)。失败时 info=None。
 
     engine="expert"：DINOv2 + NIMA/MUSIQ/CLIP-IQA+ 美学 + InsightFace 人脸 + 本地拒片。
@@ -386,6 +394,8 @@ def _process_one(path: str, strength: str = "standard",
     其它文件（RAW 时优先用其中的 JPG 做分析；任何情况下搬运时一起搬）。
     """
     companions = companions or []
+    engine = normalize_engine(engine)
+    engine_spec = get_engine(engine)
     try:
         st = os.stat(path)
     except OSError as e:
@@ -404,131 +414,27 @@ def _process_one(path: str, strength: str = "standard",
         img_t = _resize_for_analysis(ImageOps.exif_transpose(img))
         ph = imagehash.phash(img_t, hash_size=8)
 
-        if engine == "fast":
-            from inkmoment.fast_quality import analyze_image_fast
-            quality_info = analyze_image_fast(img_t, st.st_size, strength=strength)
-            # 多 hash 签名 —— 四个 hash 都是必须的，任一失败让这张图归 skipped
-            dh = str(imagehash.dhash(img_t, hash_size=8))
-            wh = str(imagehash.whash(img_t, hash_size=8))
-            ah = str(imagehash.average_hash(img_t, hash_size=8))
-            # HSV 直方图 + ORB 描述子：cv2 在模块顶部已 import；图本身退化
-            # （太小 / ORB 找不到关键点）会返回 None，由上层接住跳过该信号——
-            # 这是"数据不足"，不是"能力降级"。
-            color_hist = _compute_color_hist(img_t)
-            orb_descs, orb_kps = _compute_orb(img_t)
-
-            ts_unix = ts_dt.timestamp() if ts_dt else None
-            return ImageInfo(
-                path=path,
-                companions=list(companions),
-                phash=str(ph),
-                timestamp=ts_unix,
-                size=st.st_size,
-                mtime=st.st_mtime,
-                exif_summary=exif_sum,
-                quality=quality_info.to_dict(),
-                # 视觉模型字段在 fast 模式恒为 None（清晰区分模式）
-                dhash=dh,
-                whash=wh,
-                ahash=ah,
-                color_hist=color_hist,
-                orb_descs=orb_descs,
-                orb_kps=orb_kps,
-            ), None
-
-        if engine == "tycoon":
-            # 土豪模式：DINOv2 + InsightFace 跑分组依赖；初筛交给 LLM
-            if not llm_model:
-                return None, "tycoon 缺少 llm_model 参数"
-            import logging as _logging
-            from inkmoment import vision
-            from inkmoment import llm_judge
-            from inkmoment.quality import analyze_basic
-            from inkmoment.fast_quality import analyze_image_fast
-            _log = _logging.getLogger("inkmoment")
-
-            dinov2_vec = vision.extract_dinov2(img_t)
-            face_data = vision.extract_faces(img_t)
-            face_embs = [f["embedding"] for f in face_data]
-
-            # 进阶版极速预审：先用 fast_quality advanced 档拒明显废片，省下 LLM 调用。
-            # 通过的才进 LLM；被拒的直接走 fast 的 auto_reject + reject_reason，
-            # 并且不写 llm_verdict / llm_reason（UI 的 LLM 列会显示"缺失"，如实反映没调过 LLM）。
-            fast_q = analyze_image_fast(img_t, st.st_size, strength="advanced")
-            if fast_q.auto_reject:
-                verdict = None
-                reason = None
-                quality_info = fast_q
-                _log.info(
-                    f"[tycoon] {Path(path).name}: fast-advanced 预审拒片 "
-                    f"reason='{fast_q.reject_reason}' → 跳过 LLM"
-                )
-            else:
-                # LLM 判定 —— 失败 3 次后抛 LLMJudgeError，让 _run_job 接住
-                # strength 路由到 standard / advanced 两套 prompt
-                judgement = llm_judge.judge_image(
-                    img_t, model=llm_model, strength=strength,
-                )
-                verdict = judgement["verdict"]
-                reason = judgement["reason"]
-
-                quality_info = analyze_basic(
-                    img_t, st.st_size,
-                    llm_verdict=verdict,
-                    llm_reason=reason,
-                )
-
-                _log.debug(
-                    f"[tycoon] {Path(path).name}: "
-                    f"verdict={verdict} reason='{reason}' "
-                    f"faces={len(face_embs)}"
-                )
-
-            ts_unix = ts_dt.timestamp() if ts_dt else None
-            return ImageInfo(
-                path=path,
-                companions=list(companions),
-                phash=str(ph),
-                timestamp=ts_unix,
-                size=st.st_size,
-                mtime=st.st_mtime,
-                exif_summary=exif_sum,
-                quality=quality_info.to_dict(),
-                dinov2=dinov2_vec,
-                face_embeddings=face_embs,
-                llm_verdict=verdict,
-                llm_reason=reason,
-            ), None
-
-        # ---- expert 分支 ----
-        import logging as _logging
-        _log = _logging.getLogger("inkmoment")
-        from inkmoment import vision
-        dinov2_vec = vision.extract_dinov2(img_t)
-        aesthetic = vision.extract_aesthetic_score(img_t)
-        musiq = vision.extract_musiq_score(img_t)
-        clipiqa = vision.extract_clipiqa_score(img_t)
-        face_data = vision.extract_faces(img_t)
-        face_embs = [f["embedding"] for f in face_data]
-
-        quality_info = analyze_image(
-            img_t, st.st_size, strength=strength,
-            face_aware=face_aware, face_data=face_data,
-            aesthetic_score=aesthetic,
-            musiq_score=musiq,
-            clipiqa_score=clipiqa,
-        )
-
-        _log.debug(
-            f"[expert] {Path(path).name}: "
-            f"dinov2={'OK' if dinov2_vec is not None else 'FAIL'} "
-            f"nima={aesthetic:.2f} musiq={musiq:.1f} clipiqa={clipiqa:.3f} "
-            f"faces={len(face_embs)} "
-            f"quality={quality_info.quality_score:.1f} "
-            f"reject={quality_info.auto_reject}({quality_info.reject_reason})"
-        )
-
         ts_unix = ts_dt.timestamp() if ts_dt else None
+        fields, reason = engine_spec.analyze(
+            AnalysisInput(
+                path=path,
+                companions=list(companions),
+                file_stat=st,
+                image=img_t,
+                phash=str(ph),
+                timestamp=ts_unix,
+                exif_summary=exif_sum,
+                strength=strength,
+                face_aware=face_aware,
+                llm_model=llm_model,
+                imagehash_module=imagehash,
+                compute_color_hist=_compute_color_hist,
+                compute_orb=_compute_orb,
+            )
+        )
+        if reason:
+            return None, reason
+
         return ImageInfo(
             path=path,
             companions=list(companions),
@@ -537,18 +443,17 @@ def _process_one(path: str, strength: str = "standard",
             size=st.st_size,
             mtime=st.st_mtime,
             exif_summary=exif_sum,
-            quality=quality_info.to_dict(),
-            dinov2=dinov2_vec,
-            aesthetic_score=aesthetic,
-            musiq_score=musiq,
-            clipiqa_score=clipiqa,
-            face_embeddings=face_embs,
+            **(fields or {}),
         ), None
     except Exception as e:
-        if engine == "tycoon":
-            from inkmoment import llm_judge
-            if isinstance(e, llm_judge.LLMJudgeError):
-                raise
+        if engine_spec.requires_llm_model:
+            try:
+                from inkmoment import llm_judge
+
+                if isinstance(e, llm_judge.LLMJudgeError):
+                    raise
+            except ImportError:
+                pass
         return None, f"处理失败: {type(e).__name__}: {e}"
     finally:
         if img is not None:
@@ -605,6 +510,7 @@ def scan_folder(folder: str) -> list[tuple[str, list[str]]]:
 
 # ---------------- 计算入口 ----------------
 
+
 def compute_infos(
     folder: str,
     workers: Optional[int] = None,
@@ -628,7 +534,10 @@ def compute_infos(
     返回 (info_list, skipped_list)，skipped_list 元素为 (path, reason)。
     """
     import logging
+
     log = logging.getLogger("inkmoment")
+    engine = normalize_engine(engine)
+    engine_spec = get_engine(engine)
     pairs = scan_folder(folder)
     companions_by_primary: dict[str, list[str]] = {p: c for p, c in pairs}
     files = [p for p, _ in pairs]
@@ -643,9 +552,9 @@ def compute_infos(
     # 不静默降级：rawpy 缺失时让整任务挂，而不是把每张 RAW 默默 skip——
     # 后者会让用户对着"50 张照片只剩 10 张能处理"困惑半天。
     raw_without_jpg_companion = [
-        p for p, comps in pairs
-        if Path(p).suffix.lower() in RAW_EXTS
-        and not any(Path(c).suffix.lower() in IMAGE_EXTS for c in comps)
+        p
+        for p, comps in pairs
+        if Path(p).suffix.lower() in RAW_EXTS and not any(Path(c).suffix.lower() in IMAGE_EXTS for c in comps)
     ]
     if raw_without_jpg_companion:
         try:
@@ -695,30 +604,17 @@ def compute_infos(
             raise CancelledError()
 
     if needed:
-        # 工作线程数：
-        # - expert：强制 1（torch MPS / InsightFace ONNX 多线程会段错误）
-        # - tycoon：用 ARK_MAX_WORKERS 作为 ThreadPool 上限；未显式设置时，
-        #          Pro/推理类模型采用更保守的默认值，避免一次性压满上游服务。
-        #          实际并发还会被 llm_judge._LIMITER 自适应限制。
-        # - fast：纯 CPU + numpy/cv2，开 8 线程没问题
-        if workers is None:
-            if engine == "expert":
-                workers = 1
-            elif engine == "tycoon":
-                from inkmoment import llm_judge
-                llm_judge.configure_concurrency_for_model(llm_model)
-                if "ARK_MAX_WORKERS" in os.environ:
-                    workers = int(os.getenv("ARK_MAX_WORKERS", "20"))
-                else:
-                    workers = llm_judge.recommended_workers(llm_model) or 20
-                workers = max(1, min(workers, 32))
-            else:
-                workers = min(8, max(2, (os.cpu_count() or 4)))
+        workers = engine_spec.resolve_workers(workers, llm_model)
         ex = ThreadPoolExecutor(max_workers=workers)
         try:
             futures = {
                 ex.submit(
-                    _process_one, f, strength, face_aware, engine, llm_model,
+                    _process_one,
+                    f,
+                    strength,
+                    face_aware,
+                    engine,
+                    llm_model,
                     companions_by_primary.get(f, []),
                 ): f
                 for f in needed
@@ -727,17 +623,23 @@ def compute_infos(
             # 能力级 = LLM 不可用 / vision 模型崩 / torch OOM / cv2 contrib 缺 ——
             # 这些通常意味着所有后续图都会同样失败，500 张图静默 skip 是最糟的体验。
             from concurrent.futures import CancelledError as _FutCancelled
+
             _capability_excs: tuple = ()
-            try:
-                from inkmoment import llm_judge
-                _capability_excs += (llm_judge.LLMJudgeError,)
-            except Exception:
-                pass
-            try:
-                from inkmoment import vision as _vision_mod
-                _capability_excs += (_vision_mod.VisionUnavailable,)
-            except Exception:
-                pass
+            if engine_spec.requires_llm_model:
+                try:
+                    from inkmoment import llm_judge
+
+                    _capability_excs += (llm_judge.LLMJudgeError,)
+                except Exception:
+                    pass
+            if engine_spec.requires_dino_model:
+                try:
+                    from inkmoment import vision as _vision_mod
+
+                    _capability_excs += (_vision_mod.VisionUnavailable,)
+                except Exception:
+                    pass
+
             # torch OOM 名称随版本不同，按字符串识别更稳
             def _is_fatal_capability(exc: BaseException) -> bool:
                 if _capability_excs and isinstance(exc, _capability_excs):
@@ -747,10 +649,16 @@ def compute_infos(
                     return True
                 msg = str(exc).lower()
                 # ONNX/MPS 崩溃的特征字符串
-                return any(k in msg for k in (
-                    "out of memory", "cuda error", "mps backend out of memory",
-                    "onnxruntime", "could not load library",
-                ))
+                return any(
+                    k in msg
+                    for k in (
+                        "out of memory",
+                        "cuda error",
+                        "mps backend out of memory",
+                        "onnxruntime",
+                        "could not load library",
+                    )
+                )
 
             for fut in as_completed(futures):
                 _check_cancel()
@@ -767,10 +675,7 @@ def compute_infos(
                     raise CancelledError()
                 except Exception as e:
                     if _is_fatal_capability(e):
-                        log.error(
-                            f"[{engine}] worker 遇到能力级异常，整任务终止："
-                            f"{type(e).__name__}: {e}"
-                        )
+                        log.error(f"[{engine}] worker 遇到能力级异常，整任务终止：{type(e).__name__}: {e}")
                         raise
                     reason = f"worker error: {type(e).__name__}: {e}"
                 done += 1
@@ -780,10 +685,7 @@ def compute_infos(
                         try:
                             cache_put(info, engine, strength, face_aware, llm_model)
                         except Exception as e:
-                            log.warning(
-                                f"[{engine}] analysis cache write failed for "
-                                f"{Path(info.path).name}: {e}"
-                            )
+                            log.warning(f"[{engine}] analysis cache write failed for {Path(info.path).name}: {e}")
                 else:
                     skipped.append((f, reason or "未知原因"))
                 if progress:
@@ -798,37 +700,16 @@ def compute_infos(
 
     result_list = [fresh[f] for f in files if f in fresh]
     if cache_get is not None:
-        log.info(
-            f"[{engine}] analysis cache: 命中 {cache_hits} / 未命中 {len(needed)}"
-        )
+        log.info(f"[{engine}] analysis cache: 命中 {cache_hits} / 未命中 {len(needed)}")
 
     # ---- 总结日志：让用户在 log.txt 里直接看见各信号实际成功率 ----
     if result_list:
-        if engine == "fast":
-            n_color = sum(1 for i in result_list if i.color_hist is not None)
-            n_orb = sum(1 for i in result_list if i.orb_descs is not None)
-            n_whash = sum(1 for i in result_list if i.whash is not None)
-            log.info(
-                f"[fast] compute_infos 完成：成功 {len(result_list)} / 跳过 {len(skipped)}；"
-                f"HSV {n_color} ({n_color * 100 // max(1, len(result_list))}%) · "
-                f"ORB {n_orb} ({n_orb * 100 // max(1, len(result_list))}%) · "
-                f"wHash {n_whash} ({n_whash * 100 // max(1, len(result_list))}%)"
-            )
-        else:
-            n_dino = sum(1 for i in result_list if i.dinov2 is not None)
-            n_aes = sum(1 for i in result_list if i.aesthetic_score is not None)
-            n_face = sum(1 for i in result_list if i.face_embeddings)
-            total = max(1, len(result_list))
-            log.info(
-                f"[expert] compute_infos 完成：成功 {len(result_list)} / 跳过 {len(skipped)}；"
-                f"DINOv2 {n_dino} ({n_dino * 100 // total}%) · "
-                f"NIMA {n_aes} ({n_aes * 100 // total}%) · "
-                f"有脸 {n_face} ({n_face * 100 // total}%)"
-            )
+        log.info(engine_spec.analysis_summary(result_list, skipped))
     return result_list, skipped
 
 
 # ---------------- 分组分发 ----------------
+
 
 def group_infos(
     infos: list[ImageInfo],
@@ -845,27 +726,20 @@ def group_infos(
       区别只在初筛走 LLM 而非本地拒片。
     """
     import logging
+
     log = logging.getLogger("inkmoment")
+    engine = normalize_engine(engine)
+    engine_spec = get_engine(engine)
     if not infos:
         return []
     if len(infos) == 1:
         log.info(f"[{engine}] group_infos: 单图直接成组")
         return [[infos[0]]]
     log.info(f"[{engine}] group_infos: 开始聚类 {len(infos)} 张")
-    if engine == "fast":
-        from inkmoment import fast_clustering
-        idx_groups = fast_clustering.cluster(infos)
-    elif engine in ("expert", "tycoon"):
-        from inkmoment import clustering
-        idx_groups = clustering.cluster(infos)
-    else:
-        raise ValueError(f"未知 engine: {engine!r}（仅支持 'fast' / 'expert' / 'tycoon'）")
+    idx_groups = engine_spec.cluster(infos)
     sizes = sorted((len(g) for g in idx_groups), reverse=True)
     multi = sum(1 for g in idx_groups if len(g) > 1)
-    log.info(
-        f"[{engine}] group_infos: 输出 {len(idx_groups)} 组（多图组 {multi}，"
-        f"前 5 大={sizes[:5]}）"
-    )
+    log.info(f"[{engine}] group_infos: 输出 {len(idx_groups)} 组（多图组 {multi}，前 5 大={sizes[:5]}）")
     return [[infos[i] for i in g] for g in idx_groups]
 
 

@@ -1,0 +1,96 @@
+[project]
+name = "inkmoment"
+version = "0.1.0"
+requires-python = ">=3.11,<3.14"
+dependencies = [
+    "Pillow>=10.0",
+    "imagehash>=4.3",
+    "flask>=3.0",
+    "pillow-heif>=0.16",
+    "numpy>=1.26",
+    "scipy>=1.11",
+    "opencv-contrib-python>=4.9",
+    "rawpy>=0.18",
+    "torch>=2.2",
+    "torchvision>=0.17",
+    "transformers>=4.40",
+    "insightface>=0.7",
+    "onnxruntime>=1.16",
+    "pyiqa>=0.1.10",
+    "timm>=0.9",
+    "openai>=1.40",
+    "keyring>=25.0",
+    "piexif>=1.1.3",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.15,<0.16",
+    "mypy>=2.1,<2.2",
+    "pytest>=9,<10",
+    "pytest-cov>=7,<8",
+]
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+exclude = [
+    ".git",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".venv",
+    "build",
+    "dist",
+    "frontend/dist",
+    "frontend/node_modules",
+    "node_modules",
+    "src-tauri/target",
+    "static/vue",
+]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+follow_imports = "skip"
+check_untyped_defs = false
+allow_redefinition = true
+warn_unused_ignores = false
+no_implicit_optional = false
+disable_error_code = [
+    "arg-type",
+    "assignment",
+    "attr-defined",
+    "misc",
+    "no-redef",
+    "operator",
+    "return-value",
+    "str-unpack",
+    "type-var",
+    "union-attr",
+    "var-annotated",
+]
+exclude = "^(tests|scripts|auth_server|build|dist|\\.venv)/"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-q"
+
+[tool.coverage.run]
+source = ["auth_server", "inkmoment", "server"]
+omit = [
+    "tests/*",
+    "scripts/*",
+    "inkmoment/vision.py",
+]
+
+[tool.coverage.report]
+skip_empty = true
+show_missing = true

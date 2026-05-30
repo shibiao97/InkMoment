@@ -1,0 +1,58 @@
+name: Quality
+
+on:
+  push:
+    branches:
+      - main
+      - sit
+      - "codex/**"
+  pull_request:
+
+jobs:
+  python:
+    name: Python quality
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Check Python lockfile
+        run: |
+          python -m pip install "uv>=0.8,<0.9"
+          uv lock --locked
+          uv export --locked --no-dev --format requirements.txt --no-hashes --no-header --no-emit-package opencv-python --no-emit-package opencv-python-headless --output-file /tmp/inkmoment-requirements.txt
+          diff -u requirements.txt /tmp/inkmoment-requirements.txt
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install "ruff>=0.15,<0.16" "mypy>=2.1,<2.2" "pytest>=9,<10" "pytest-cov>=7,<8"
+      - name: Ruff lint
+        run: ruff check .
+      - name: Ruff format
+        run: ruff format --check .
+      - name: Mypy baseline
+        run: mypy inkmoment server
+      - name: Tests with coverage
+        run: pytest --cov=inkmoment --cov=server --cov-fail-under=60
+
+  frontend:
+    name: Frontend quality
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20.19.4"
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: ESLint
+        run: npm run frontend:lint
+      - name: Vue typecheck
+        run: npm run frontend:typecheck
+      - name: Vitest
+        run: npm run frontend:test

@@ -1,0 +1,29 @@
+# Runtime dependency intent. The authoritative lock is `uv.lock`; regenerate the
+# pip-compatible snapshot with:
+#   uv lock
+#   uv export --no-dev --format requirements.txt --no-hashes --no-header --no-emit-package opencv-python --no-emit-package opencv-python-headless --output-file requirements.txt
+#
+# OpenCV note:
+# insightface / pyiqa may pull opencv-python transitively. The project pins the
+# runtime-facing OpenCV package to contrib here; build scripts still reinstall
+# opencv-contrib-python with --no-deps after dependency installation to prevent
+# cv2 namespace collisions from transitive wheels.
+
+Pillow>=10.0
+imagehash>=4.3
+flask>=3.0
+pillow-heif>=0.16
+numpy>=1.26
+scipy>=1.11
+opencv-contrib-python>=4.9
+rawpy>=0.18
+torch>=2.2
+torchvision>=0.17
+transformers>=4.40
+insightface>=0.7
+onnxruntime>=1.16
+pyiqa>=0.1.10
+timm>=0.9
+openai>=1.40
+keyring>=25.0
+piexif>=1.1.3

@@ -295,10 +295,7 @@ def reopen_group(
         for old_primary, new_primary in primary_restorations.items():
             if old_primary in session.companions:
                 old_companions = session.companions.pop(old_primary)
-                new_companions = [
-                    companion_restorations.get(companion, companion)
-                    for companion in old_companions
-                ]
+                new_companions = [companion_restorations.get(companion, companion) for companion in old_companions]
                 session.companions[new_primary] = new_companions
 
     group.move_log = []

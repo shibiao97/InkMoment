@@ -2,6 +2,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Optional
 
+from inkmoment.engines import engine_requires_llm_model, normalize_engine
+
 
 ACTIVE_START_JOB_STATUSES = ("pending", "scanning", "hashing", "grouping")
 
@@ -61,9 +63,7 @@ def parse_start_request(data: dict, defaults: dict) -> tuple[Optional[StartJobRe
     mode = data.get("mode", "copy")
     if mode not in ("copy", "move"):
         mode = "copy"
-    engine = data.get("engine", "fast")
-    if engine not in ("fast", "expert", "tycoon"):
-        engine = "fast"
+    engine = normalize_engine(data.get("engine"))
     llm_model = _coerce_model_id(data.get("llm_model")) or None
     threshold_near = int(data.get("threshold_near", defaults["threshold_near"]))
     threshold_far = int(data.get("threshold_far", defaults["threshold_far"]))
@@ -81,23 +81,27 @@ def parse_start_request(data: dict, defaults: dict) -> tuple[Optional[StartJobRe
     folder = str(Path(folder).expanduser().resolve())
     if not Path(folder).is_dir():
         return None, {"error": f"目录不存在: {folder}"}, 400
-    if engine == "tycoon" and not llm_model:
+    if engine_requires_llm_model(engine) and not llm_model:
         return None, {"error": "土豪模式需要选择 LLM 模型"}, 400
 
-    return StartJobRequest(
-        folder=folder,
-        dry_run=dry_run,
-        wipe_cache=wipe_cache,
-        mode=mode,
-        engine=engine,
-        llm_model=llm_model,
-        threshold_near=threshold_near,
-        threshold_far=threshold_far,
-        near_seconds=near_seconds,
-        prescreen_enabled=prescreen_enabled,
-        prescreen_strength=prescreen_strength,
-        face_aware=face_aware,
-    ), {}, 200
+    return (
+        StartJobRequest(
+            folder=folder,
+            dry_run=dry_run,
+            wipe_cache=wipe_cache,
+            mode=mode,
+            engine=engine,
+            llm_model=llm_model,
+            threshold_near=threshold_near,
+            threshold_far=threshold_far,
+            near_seconds=near_seconds,
+            prescreen_enabled=prescreen_enabled,
+            prescreen_strength=prescreen_strength,
+            face_aware=face_aware,
+        ),
+        {},
+        200,
+    )
 
 
 def active_job_error(job) -> tuple[Optional[dict], int]:

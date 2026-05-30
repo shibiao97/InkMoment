@@ -60,8 +60,7 @@ def resolve_bundle(requested: str) -> str:
     if requested not in supported:
         choices = ", ".join(sorted(supported)) or "(none)"
         raise SystemExit(
-            f"Bundle {requested!r} is not supported on {sys.platform}. "
-            f"Supported bundle targets here: {choices}."
+            f"Bundle {requested!r} is not supported on {sys.platform}. Supported bundle targets here: {choices}."
         )
     return requested
 
@@ -75,11 +74,11 @@ def ensure_npx() -> str:
 
 def build_sidecar(skip_sidecar: bool) -> None:
     if skip_sidecar:
-        executable = SIDECAR_RESOURCE_DIR / ("inkmoment-sidecar.exe" if sys.platform == "win32" else "inkmoment-sidecar")
+        executable = SIDECAR_RESOURCE_DIR / (
+            "inkmoment-sidecar.exe" if sys.platform == "win32" else "inkmoment-sidecar"
+        )
         if not executable.exists():
-            raise SystemExit(
-                f"--skip-sidecar was set, but the bundled sidecar is missing: {executable}"
-            )
+            raise SystemExit(f"--skip-sidecar was set, but the bundled sidecar is missing: {executable}")
         return
 
     run([sys.executable, str(ROOT / "scripts" / "build_sidecar.py")])
@@ -120,9 +119,7 @@ def find_artifacts(bundle: str, *, debug: bool, target: str | None) -> list[Path
     if not bundle_dir.exists():
         return []
     return sorted(
-        path
-        for path in bundle_dir.rglob("*")
-        if (path.is_file() or path.is_dir()) and path.name.endswith(suffixes)
+        path for path in bundle_dir.rglob("*") if (path.is_file() or path.is_dir()) and path.name.endswith(suffixes)
     )
 
 

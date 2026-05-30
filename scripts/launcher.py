@@ -16,10 +16,8 @@
 
 from __future__ import annotations
 
-import io
 import json
 import os
-import platform
 import re
 import shutil
 import subprocess
@@ -73,7 +71,7 @@ CORE_PACKAGES = [
 
 # 每种模式在 CORE 之外额外需要的 pip 包。
 MODE_PACKAGES = {
-    "fast": [],     # 极速模式所有依赖都在 CORE 里
+    "fast": [],  # 极速模式所有依赖都在 CORE 里
     "expert": [
         "torch>=2.2",
         "torchvision>=0.17",
@@ -131,6 +129,7 @@ HF_MODELS = {
 
 # ---------- 输出 ----------
 
+
 def banner(text: str) -> None:
     print()
     print("━" * 56)
@@ -162,6 +161,7 @@ def die(text: str) -> None:
 
 # ---------- 安装信息持久化 ----------
 
+
 def load_install() -> dict:
     if INSTALL_INFO.exists():
         try:
@@ -177,6 +177,7 @@ def save_install(data: dict) -> None:
 
 # ---------- 模式选择 ----------
 
+
 def ask_modes(previous: list[str] | None) -> list[str]:
     print()
     if previous:
@@ -189,7 +190,7 @@ def ask_modes(previous: list[str] | None) -> list[str]:
     keys = ["fast", "expert", "tycoon"]
     for i, key in enumerate(keys, 1):
         print(f"  {i}) {MODE_LABELS[key]}")
-    print(f"  4) 全部")
+    print("  4) 全部")
 
     while True:
         try:
@@ -224,6 +225,7 @@ def ask_modes(previous: list[str] | None) -> list[str]:
 
 
 # ---------- GitHub 更新检查 ----------
+
 
 def http_get(url: str, timeout: float = 8.0) -> bytes:
     req = urllib.request.Request(url, headers={"User-Agent": "inkmoment-launcher"})
@@ -262,7 +264,7 @@ PRESERVE = {
     ".inkmoment_deps.stamp",
     "__pycache__",
     ".git",
-    "pic_test",     # 开发用的测试图，可能用户也存了私货
+    "pic_test",  # 开发用的测试图，可能用户也存了私货
     "aaa",
     "aaa copy 2",
     "aaa copy 3",
@@ -346,10 +348,13 @@ def check_and_apply_update(install: dict) -> None:
 
 # ---------- venv + 依赖 ----------
 
+
 def have_uv() -> str | None:
-    for path in (shutil.which("uv"),
-                 str(Path.home() / ".local" / "bin" / ("uv.exe" if IS_WIN else "uv")),
-                 str(Path.home() / ".cargo" / "bin" / ("uv.exe" if IS_WIN else "uv"))):
+    for path in (
+        shutil.which("uv"),
+        str(Path.home() / ".local" / "bin" / ("uv.exe" if IS_WIN else "uv")),
+        str(Path.home() / ".cargo" / "bin" / ("uv.exe" if IS_WIN else "uv")),
+    ):
         if path and Path(path).exists():
             return path
     return None
@@ -386,15 +391,12 @@ def pip_install(packages: list[str]) -> None:
         cmd = [uv, "pip", "install", "--python", str(PY_IN_VENV)]
         if USE_MIRROR:
             # uv 用 --index-url 切镜像；同时把 PyPI 官方作为 fallback 防镜像缺包
-            cmd += ["--index-url", PYPI_MIRROR,
-                    "--extra-index-url", "https://pypi.org/simple/"]
+            cmd += ["--index-url", PYPI_MIRROR, "--extra-index-url", "https://pypi.org/simple/"]
         cmd += packages
     else:
-        cmd = [str(PY_IN_VENV), "-m", "pip", "install",
-               "--disable-pip-version-check", "--no-input"]
+        cmd = [str(PY_IN_VENV), "-m", "pip", "install", "--disable-pip-version-check", "--no-input"]
         if USE_MIRROR:
-            cmd += ["-i", PYPI_MIRROR,
-                    "--extra-index-url", "https://pypi.org/simple/"]
+            cmd += ["-i", PYPI_MIRROR, "--extra-index-url", "https://pypi.org/simple/"]
         cmd += packages
     if USE_MIRROR:
         info(f"使用国内镜像源：{PYPI_MIRROR_HOST}")
@@ -416,12 +418,16 @@ def _ensure_opencv_single() -> None:
     py = str(PY_IN_VENV)
     # 检查是否有冲突包
     rc = subprocess.run(
-        [py, "-c",
-         "import importlib.metadata as m; "
-         "names={'opencv-python', 'opencv-python-headless'}; "
-         "found=[n for n in names if any(d.metadata['Name'].lower()==n for d in m.distributions())]; "
-         "print('|'.join(found))"],
-        capture_output=True, text=True,
+        [
+            py,
+            "-c",
+            "import importlib.metadata as m; "
+            "names={'opencv-python', 'opencv-python-headless'}; "
+            "found=[n for n in names if any(d.metadata['Name'].lower()==n for d in m.distributions())]; "
+            "print('|'.join(found))",
+        ],
+        capture_output=True,
+        text=True,
     )
     conflicts = [s for s in (rc.stdout or "").strip().split("|") if s]
     if not conflicts:
@@ -430,8 +436,11 @@ def _ensure_opencv_single() -> None:
     subprocess.call([py, "-m", "pip", "uninstall", "-y", *conflicts])
     # 重新拉 contrib 修复 cv2 共享文件
     uv = have_uv()
-    cmd = ([uv, "pip", "install", "--python", py] if uv else
-           [py, "-m", "pip", "install", "--disable-pip-version-check", "--no-input"])
+    cmd = (
+        [uv, "pip", "install", "--python", py]
+        if uv
+        else [py, "-m", "pip", "install", "--disable-pip-version-check", "--no-input"]
+    )
     cmd += ["--force-reinstall", "--no-deps"]
     if USE_MIRROR:
         flag = "--index-url" if uv else "-i"
@@ -461,11 +470,14 @@ def _missing_packages(packages: list[str]) -> list[str]:
 
 def _opencv_conflicts() -> list[str]:
     rc = subprocess.run(
-        [str(PY_IN_VENV), "-c",
-         "import importlib.metadata as m; "
-         "names={'opencv-python', 'opencv-python-headless'}; "
-         "found=[n for n in names if any(d.metadata['Name'].lower()==n for d in m.distributions())]; "
-         "print('|'.join(found))"],
+        [
+            str(PY_IN_VENV),
+            "-c",
+            "import importlib.metadata as m; "
+            "names={'opencv-python', 'opencv-python-headless'}; "
+            "found=[n for n in names if any(d.metadata['Name'].lower()==n for d in m.distributions())]; "
+            "print('|'.join(found))",
+        ],
         capture_output=True,
         text=True,
     )
@@ -482,10 +494,7 @@ def collect_diagnostics(modes: list[str]) -> dict:
     module_status = {module: _check_import(module) for module in modules}
     model_status = {}
     if {"expert", "tycoon"} & set(modes):
-        model_status = {
-            model_id: _model_cache_status(model_id, files)
-            for model_id, files in HF_MODELS.items()
-        }
+        model_status = {model_id: _model_cache_status(model_id, files) for model_id, files in HF_MODELS.items()}
     return {
         "checked_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
         "modes": modes,
@@ -632,6 +641,7 @@ def diagnose_runtime(modes: list[str]) -> None:
 
 # ---------- 启动 app ----------
 
+
 def run_app(port: int) -> int:
     info(f"启动 Flask 服务于 http://localhost:{port}")
     modes = load_install().get("modes") or []
@@ -657,6 +667,7 @@ def run_app(port: int) -> int:
 
 
 # ---------- 主流程 ----------
+
 
 def main() -> int:
     banner("影刻 InkMoment · 启动器")

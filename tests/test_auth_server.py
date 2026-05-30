@@ -65,12 +65,15 @@ class AuthServerTest(unittest.TestCase):
         self._admin_session_token = None
 
     def test_register_binds_first_device_and_returns_detailed_payload(self):
-        response = self.client.post("/auth/register", json={
-            "email": "User@Example.com",
-            "password": "password123",
-            "display_name": "User",
-            "device": DEVICE_A,
-        })
+        response = self.client.post(
+            "/auth/register",
+            json={
+                "email": "User@Example.com",
+                "password": "password123",
+                "display_name": "User",
+                "device": DEVICE_A,
+            },
+        )
 
         self.assertEqual(response.status_code, 201)
         payload = response.get_json()
@@ -120,11 +123,14 @@ class AuthServerTest(unittest.TestCase):
     def test_login_from_different_device_is_rejected_until_unbound(self):
         self._register_user()
 
-        response = self.client.post("/auth/login", json={
-            "email": "user@example.com",
-            "password": "password123",
-            "device": DEVICE_B,
-        })
+        response = self.client.post(
+            "/auth/login",
+            json={
+                "email": "user@example.com",
+                "password": "password123",
+                "device": DEVICE_B,
+            },
+        )
 
         self.assertEqual(response.status_code, 403)
         self.assertEqual(response.get_json()["code"], "device_mismatch")
@@ -138,11 +144,14 @@ class AuthServerTest(unittest.TestCase):
             operator="test",
         )
 
-        response = self.client.post("/auth/login", json={
-            "email": "user@example.com",
-            "password": "password123",
-            "device": DEVICE_A,
-        })
+        response = self.client.post(
+            "/auth/login",
+            json={
+                "email": "user@example.com",
+                "password": "password123",
+                "device": DEVICE_A,
+            },
+        )
 
         self.assertEqual(response.status_code, 403)
         self.assertEqual(response.get_json()["code"], "disabled")
@@ -174,11 +183,14 @@ class AuthServerTest(unittest.TestCase):
         )
         self.assertFalse(payload["device"]["bound"])
 
-        login_new_device = self.client.post("/auth/login", json={
-            "email": "user@example.com",
-            "password": "password123",
-            "device": DEVICE_B,
-        })
+        login_new_device = self.client.post(
+            "/auth/login",
+            json={
+                "email": "user@example.com",
+                "password": "password123",
+                "device": DEVICE_B,
+            },
+        )
         self.assertEqual(login_new_device.status_code, 200)
         self.assertEqual(
             login_new_device.get_json()["account"]["device"]["fingerprint"],
@@ -278,9 +290,7 @@ class AuthServerTest(unittest.TestCase):
         self.assertEqual(events.status_code, 200)
         payload = events.get_json()
         self.assertTrue(payload["events"])
-        self.assertTrue({"license", "device", "admin"}.issubset({
-            event["source"] for event in payload["events"]
-        }))
+        self.assertTrue({"license", "device", "admin"}.issubset({event["source"] for event in payload["events"]}))
         for field in ("source", "email", "actor", "device_fingerprint", "event_type", "detail", "created_at"):
             self.assertIn(field, payload["events"][0])
 
@@ -299,11 +309,14 @@ class AuthServerTest(unittest.TestCase):
         self.assertEqual(admin_events.get_json()["events"][0]["event_type"], "create_cdk")
 
     def test_admin_bootstrap_creates_independent_admin_session(self):
-        bootstrap = self.client.post("/admin/bootstrap", json={
-            "username": "support",
-            "password": "admin-password123",
-            "admin_token": "admin-secret",
-        })
+        bootstrap = self.client.post(
+            "/admin/bootstrap",
+            json={
+                "username": "support",
+                "password": "admin-password123",
+                "admin_token": "admin-secret",
+            },
+        )
         self.assertEqual(bootstrap.status_code, 201)
         payload = bootstrap.get_json()
         self.assertTrue(payload["token"])
@@ -328,17 +341,23 @@ class AuthServerTest(unittest.TestCase):
         self._create_admin()
 
         for _ in range(ADMIN_LOGIN_FAILURE_LIMIT - 1):
-            response = self.client.post("/admin/login", json={
-                "username": "support",
-                "password": "wrong-password",
-            })
+            response = self.client.post(
+                "/admin/login",
+                json={
+                    "username": "support",
+                    "password": "wrong-password",
+                },
+            )
             self.assertEqual(response.status_code, 401)
             self.assertEqual(response.get_json()["code"], "invalid_credentials")
 
-        locked = self.client.post("/admin/login", json={
-            "username": "support",
-            "password": "wrong-password",
-        })
+        locked = self.client.post(
+            "/admin/login",
+            json={
+                "username": "support",
+                "password": "wrong-password",
+            },
+        )
         self.assertEqual(locked.status_code, 403)
         self.assertEqual(locked.get_json()["code"], "admin_locked")
 
@@ -346,10 +365,13 @@ class AuthServerTest(unittest.TestCase):
         self.assertEqual(admin["failed_login_count"], ADMIN_LOGIN_FAILURE_LIMIT)
         self.assertGreater(admin["locked_until"], 0)
 
-        correct_while_locked = self.client.post("/admin/login", json={
-            "username": "support",
-            "password": "admin-password123",
-        })
+        correct_while_locked = self.client.post(
+            "/admin/login",
+            json={
+                "username": "support",
+                "password": "admin-password123",
+            },
+        )
         self.assertEqual(correct_while_locked.status_code, 403)
         self.assertEqual(correct_while_locked.get_json()["code"], "admin_locked")
 
@@ -384,27 +406,36 @@ class AuthServerTest(unittest.TestCase):
         self._register_user()
 
         for _ in range(USER_LOGIN_FAILURE_LIMIT - 1):
-            response = self.client.post("/auth/login", json={
-                "email": "user@example.com",
-                "password": "wrong-password",
-                "device": DEVICE_A,
-            })
+            response = self.client.post(
+                "/auth/login",
+                json={
+                    "email": "user@example.com",
+                    "password": "wrong-password",
+                    "device": DEVICE_A,
+                },
+            )
             self.assertEqual(response.status_code, 401)
             self.assertEqual(response.get_json()["code"], "invalid_credentials")
 
-        locked = self.client.post("/auth/login", json={
-            "email": "user@example.com",
-            "password": "wrong-password",
-            "device": DEVICE_A,
-        })
+        locked = self.client.post(
+            "/auth/login",
+            json={
+                "email": "user@example.com",
+                "password": "wrong-password",
+                "device": DEVICE_A,
+            },
+        )
         self.assertEqual(locked.status_code, 403)
         self.assertEqual(locked.get_json()["code"], "login_locked")
 
-        correct_while_locked = self.client.post("/auth/login", json={
-            "email": "user@example.com",
-            "password": "password123",
-            "device": DEVICE_A,
-        })
+        correct_while_locked = self.client.post(
+            "/auth/login",
+            json={
+                "email": "user@example.com",
+                "password": "password123",
+                "device": DEVICE_A,
+            },
+        )
         self.assertEqual(correct_while_locked.status_code, 403)
         self.assertEqual(correct_while_locked.get_json()["code"], "login_locked")
 
@@ -426,10 +457,13 @@ class AuthServerTest(unittest.TestCase):
         self.store.create_admin("audit", "auditor-password123", role=ADMIN_ROLE_AUDITOR)
         self.store.create_admin("operator", "operator-password123", role=ADMIN_ROLE_OPERATOR)
 
-        auditor_login = self.client.post("/admin/login", json={
-            "username": "audit",
-            "password": "auditor-password123",
-        })
+        auditor_login = self.client.post(
+            "/admin/login",
+            json={
+                "username": "audit",
+                "password": "auditor-password123",
+            },
+        )
         self.assertEqual(auditor_login.status_code, 200)
         auditor_payload = auditor_login.get_json()
         self.assertEqual(auditor_payload["admin"]["role"], ADMIN_ROLE_AUDITOR)
@@ -457,10 +491,13 @@ class AuthServerTest(unittest.TestCase):
         self.assertEqual(denied_license.status_code, 403)
         self.assertEqual(denied_license.get_json()["required_permission"], ADMIN_PERMISSION_USERS_WRITE)
 
-        operator_login = self.client.post("/admin/login", json={
-            "username": "operator",
-            "password": "operator-password123",
-        })
+        operator_login = self.client.post(
+            "/admin/login",
+            json={
+                "username": "operator",
+                "password": "operator-password123",
+            },
+        )
         self.assertEqual(operator_login.status_code, 200)
         operator_headers = {"Authorization": f"Bearer {operator_login.get_json()['token']}"}
 
@@ -481,10 +518,13 @@ class AuthServerTest(unittest.TestCase):
         self._register_user()
         self.store.create_admin("agent", "agent-password123", role=ADMIN_ROLE_AGENT)
 
-        login = self.client.post("/admin/login", json={
-            "username": "agent",
-            "password": "agent-password123",
-        })
+        login = self.client.post(
+            "/admin/login",
+            json={
+                "username": "agent",
+                "password": "agent-password123",
+            },
+        )
         self.assertEqual(login.status_code, 200)
         payload = login.get_json()
         self.assertEqual(payload["admin"]["role"], ADMIN_ROLE_AGENT)
@@ -531,10 +571,13 @@ class AuthServerTest(unittest.TestCase):
         self.assertEqual(created.status_code, 201)
         self.assertEqual(created.get_json()["admin"]["role"], ADMIN_ROLE_AGENT)
 
-        login = self.client.post("/admin/login", json={
-            "username": "proxy-agent",
-            "password": "proxy-agent-password123",
-        })
+        login = self.client.post(
+            "/admin/login",
+            json={
+                "username": "proxy-agent",
+                "password": "proxy-agent-password123",
+            },
+        )
         self.assertEqual(login.status_code, 200)
         self.assertEqual(login.get_json()["admin"]["display_name"], "Proxy Agent")
 
@@ -696,10 +739,13 @@ class AuthServerTest(unittest.TestCase):
         token = self._register_user()["token"]
         self._create_admin()
 
-        login = self.client.post("/admin/login", data={
-            "username": "support",
-            "password": "admin-password123",
-        })
+        login = self.client.post(
+            "/admin/login",
+            data={
+                "username": "support",
+                "password": "admin-password123",
+            },
+        )
         self.assertEqual(login.status_code, 302)
         self.assertIn("/admin", login.headers["Location"])
 
@@ -734,26 +780,32 @@ class AuthServerTest(unittest.TestCase):
                 "fingerprint": f"page-device-{index}",
                 "name": f"Page Device {index}",
             }
-            response = self.client.post("/auth/register", json={
-                "email": f"page-user-{index}@example.com",
-                "password": "password123",
-                "device": device,
-            })
+            response = self.client.post(
+                "/auth/register",
+                json={
+                    "email": f"page-user-{index}@example.com",
+                    "password": "password123",
+                    "device": device,
+                },
+            )
             self.assertEqual(response.status_code, 201)
             self._create_cdk(f"PAGE-CDK-{index}", 1)
 
-        self.client.post("/admin/login", data={
-            "username": "support",
-            "password": "admin-password123",
-        })
+        self.client.post(
+            "/admin/login",
+            data={
+                "username": "support",
+                "password": "admin-password123",
+            },
+        )
 
         first_page = self.client.get("/admin?cdk_page_size=6&user_page_size=6")
         self.assertEqual(first_page.status_code, 200)
         html = first_page.get_data(as_text=True)
         self.assertIn("CDK：1-6 / 8", html)
         self.assertIn("用户：1-6 / 8", html)
-        self.assertIn("aria-label=\"CDK 列表，可上下左右滚动\"", html)
-        self.assertIn("aria-label=\"用户列表，可上下左右滚动\"", html)
+        self.assertIn('aria-label="CDK 列表，可上下左右滚动"', html)
+        self.assertIn('aria-label="用户列表，可上下左右滚动"', html)
 
         second_page = self.client.get("/admin?cdk_page=2&user_page=2&cdk_page_size=6&user_page_size=6")
         self.assertEqual(second_page.status_code, 200)
@@ -770,10 +822,13 @@ class AuthServerTest(unittest.TestCase):
             headers=self._auth_headers(token, DEVICE_A["fingerprint"]),
             json={"code": "UI-SEVEN-DAYS"},
         )
-        self.client.post("/admin/login", data={
-            "username": "support",
-            "password": "admin-password123",
-        })
+        self.client.post(
+            "/admin/login",
+            data={
+                "username": "support",
+                "password": "admin-password123",
+            },
+        )
 
         detail = self.client.get("/admin/ui/users/user@example.com")
         self.assertEqual(detail.status_code, 200)
@@ -845,11 +900,14 @@ class AuthServerTest(unittest.TestCase):
         self.assertIn("SameSite=Lax", cookie)
 
     def _register_user(self):
-        response = self.client.post("/auth/register", json={
-            "email": "user@example.com",
-            "password": "password123",
-            "device": DEVICE_A,
-        })
+        response = self.client.post(
+            "/auth/register",
+            json={
+                "email": "user@example.com",
+                "password": "password123",
+                "device": DEVICE_A,
+            },
+        )
         self.assertEqual(response.status_code, 201)
         return response.get_json()
 
@@ -866,11 +924,14 @@ class AuthServerTest(unittest.TestCase):
         return self.store.get_admin("support") or self.store.create_admin("support", "admin-password123")
 
     def _bootstrap_admin_token(self):
-        response = self.client.post("/admin/bootstrap", json={
-            "username": "support",
-            "password": "admin-password123",
-            "admin_token": "admin-secret",
-        })
+        response = self.client.post(
+            "/admin/bootstrap",
+            json={
+                "username": "support",
+                "password": "admin-password123",
+                "admin_token": "admin-secret",
+            },
+        )
         self.assertEqual(response.status_code, 201)
         return response.get_json()["token"]
 

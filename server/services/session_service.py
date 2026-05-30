@@ -27,35 +27,19 @@ def serialize_session_status(session, infos_provider: Callable[[str], list]) -> 
         return {"ready": False}
 
     finished = sum(1 for group in session.groups if group.finished)
-    winners = sum(
-        (1 if group.winner else 0) + len(group.extra_winners)
-        for group in session.groups
-    )
+    winners = sum((1 if group.winner else 0) + len(group.extra_winners) for group in session.groups)
     losers = sum(len(group.losers) for group in session.groups)
     image_count = sum(len(group.images) for group in session.groups)
     if image_count == 0 and (session.prescreen_rejected or not session.prescreen_reviewed):
         image_count = len(infos_provider(session.folder))
 
-    auto_rejected = (
-        len(session.prescreen_rejected) or
-        sum(len(group.auto_rejected) for group in session.groups)
-    )
-    auto_restored = (
-        len(session.prescreen_restored) or
-        sum(len(group.manual_restored) for group in session.groups)
-    )
+    auto_rejected = len(session.prescreen_rejected) or sum(len(group.auto_rejected) for group in session.groups)
+    auto_restored = len(session.prescreen_restored) or sum(len(group.manual_restored) for group in session.groups)
     multi = sum(1 for group in session.groups if len(group.images) > 1)
-    finished_multi = sum(
-        1 for group in session.groups
-        if group.finished and len(group.images) > 1
-    )
+    finished_multi = sum(1 for group in session.groups if group.finished and len(group.images) > 1)
     unfinished = len(session.groups) - finished
-    selection_started = (
-        session.current_group > 0 or
-        any(
-            group.finished and len(group.images) > 1 and not group.auto_selected
-            for group in session.groups
-        )
+    selection_started = session.current_group > 0 or any(
+        group.finished and len(group.images) > 1 and not group.auto_selected for group in session.groups
     )
 
     return {

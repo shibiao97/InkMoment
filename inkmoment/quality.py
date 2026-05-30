@@ -22,7 +22,7 @@ Strength = Literal["standard", "aggressive"]
 
 @dataclass
 class QualityInfo:
-    blur_score: float                       # 拉普拉斯方差（中心 60% 区域，对人像更友好）
+    blur_score: float  # 拉普拉斯方差（中心 60% 区域，对人像更友好）
     brightness_mean: float
     brightness_std: float
     contrast_score: float
@@ -40,7 +40,7 @@ class QualityInfo:
     face_count: int = 0
     face_sharpness: Optional[float] = None  # 最大脸的拉普拉斯方差
     eyes_open_score: Optional[float] = None  # 眼睑开合比，越小越闭
-    face_clipped: bool = False              # 主脸是否贴边
+    face_clipped: bool = False  # 主脸是否贴边
 
     # 新增：显著性区域锐度（替代整图锐度，对虚化主体更友好）
     salient_sharpness: Optional[float] = None
@@ -53,15 +53,15 @@ class QualityInfo:
     # 每张脸的明细：bbox/sharpness/eye_score/det_score/area_ratio；用于多脸硬拒规则
     faces_detail: list[dict] = field(default_factory=list)
     # 土豪模式：LLM 给的判定 + 中文短理由（其他模式恒为 None）
-    llm_verdict: Optional[str] = None         # "pass" | "reject"
+    llm_verdict: Optional[str] = None  # "pass" | "reject"
     llm_reason: Optional[str] = None
     # 极速模式专属：fast_quality 产出的中间量；expert 模式恒为 None
-    blur_combined: Optional[float] = None     # 0-1，归一化综合锐度
-    motion_anisotropy: Optional[float] = None # 0-1，FFT 方向集中度
-    edge_width_pix: Optional[float] = None    # Marziliano 平均边宽
-    focus_ratio: Optional[float] = None       # 主体锐度 / 背景锐度
+    blur_combined: Optional[float] = None  # 0-1，归一化综合锐度
+    motion_anisotropy: Optional[float] = None  # 0-1，FFT 方向集中度
+    edge_width_pix: Optional[float] = None  # Marziliano 平均边宽
+    focus_ratio: Optional[float] = None  # 主体锐度 / 背景锐度
     horizon_tilt_deg: Optional[float] = None  # 主导直线与水平/垂直的最小偏差
-    composition: Optional[float] = None       # 0-1，构图分
+    composition: Optional[float] = None  # 0-1，构图分
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -148,6 +148,7 @@ REASON_LABELS = {
 def has_face_support() -> bool:
     try:
         import insightface  # noqa
+
         return True
     except ImportError:
         return False
@@ -237,23 +238,28 @@ def analyze_image(
             elif main["sharpness"] < profile["face_blur"]:
                 flags.append("face_blurry")
             # 主脸清晰但整图被判 blurry → 救回（人像背景虚化）
-            if (main["sharpness"] >= profile["face_blur"]
-                    and "blurry" in flags and "very_blurry" not in flags
-                    and main["area_ratio"] >= 0.01):
+            if (
+                main["sharpness"] >= profile["face_blur"]
+                and "blurry" in flags
+                and "very_blurry" not in flags
+                and main["area_ratio"] >= 0.01
+            ):
                 flags.remove("blurry")
 
         # 主脸闭眼（高置信 + 面积够大）
-        if (main is not None and main["eye_score"] is not None
-                and main["eye_score"] < profile["eyes_closed_ear"]
-                and main["area_ratio"] >= 0.005):
+        if (
+            main is not None
+            and main["eye_score"] is not None
+            and main["eye_score"] < profile["eyes_closed_ear"]
+            and main["area_ratio"] >= 0.005
+        ):
             if "eyes_closed" not in flags:
                 flags.append("eyes_closed")
 
         # 全员闭眼（≥2 张高置信脸都闭眼）—— 合影场景废片
         if len(mains) >= 2 and all(
-                f["eye_score"] is not None
-                and f["eye_score"] < profile["eyes_closed_ear"]
-                for f in mains):
+            f["eye_score"] is not None and f["eye_score"] < profile["eyes_closed_ear"] for f in mains
+        ):
             if "all_eyes_closed" not in flags:
                 flags.append("all_eyes_closed")
     else:
@@ -263,13 +269,20 @@ def analyze_image(
                 flags.append("face_very_blurry")
             elif face_sharp < profile["face_blur"]:
                 flags.append("face_blurry")
-            if (face_sharp >= profile["face_blur"] and "blurry" in flags
-                    and "very_blurry" not in flags and face_area_ratio >= 0.01):
+            if (
+                face_sharp >= profile["face_blur"]
+                and "blurry" in flags
+                and "very_blurry" not in flags
+                and face_area_ratio >= 0.01
+            ):
                 flags.remove("blurry")
-        if (face_count > 0 and eyes_score is not None
-                and eyes_score < profile["eyes_closed_ear"]
-                and face_signals.get("det_score", 1.0) >= 0.5
-                and face_area_ratio >= 0.005):
+        if (
+            face_count > 0
+            and eyes_score is not None
+            and eyes_score < profile["eyes_closed_ear"]
+            and face_signals.get("det_score", 1.0) >= 0.5
+            and face_area_ratio >= 0.005
+        ):
             flags.append("eyes_closed")
 
     if face_signals.get("face_clipped"):
@@ -282,13 +295,14 @@ def analyze_image(
     nima_low = profile.get("nima_low", 4.7)
     musiq_low = profile.get("musiq_low", 42.0)
     clipiqa_low = profile.get("clipiqa_low", 0.45)
-    aesthetic_lows = sum([
-        aesthetic_score is not None and aesthetic_score < nima_low,
-        musiq_score is not None and musiq_score < musiq_low,
-        clipiqa_score is not None and clipiqa_score < clipiqa_low,
-    ])
-    aesthetic_available = sum(s is not None for s in
-                              (aesthetic_score, musiq_score, clipiqa_score))
+    aesthetic_lows = sum(
+        [
+            aesthetic_score is not None and aesthetic_score < nima_low,
+            musiq_score is not None and musiq_score < musiq_low,
+            clipiqa_score is not None and clipiqa_score < clipiqa_low,
+        ]
+    )
+    aesthetic_available = sum(s is not None for s in (aesthetic_score, musiq_score, clipiqa_score))
     # 至少两个分可用（避免单分误杀），其中 ≥ 2 个低
     if aesthetic_available >= 2 and aesthetic_lows >= 2:
         flags.append("low_aesthetic")
@@ -371,7 +385,7 @@ def analyze_basic(
     entropy = _entropy(arr)
     blur_score = max(_laplacian_variance(arr), _laplacian_variance(_center_crop(arr, 0.6)))
 
-    is_reject = (llm_verdict == "reject")
+    is_reject = llm_verdict == "reject"
     flags = ["llm_reject"] if is_reject else []
     reason = llm_reason if is_reject else None
 
@@ -410,7 +424,7 @@ def _center_crop(arr: np.ndarray, ratio: float) -> np.ndarray:
     cw = max(1, int(w * ratio))
     y0 = (h - ch) // 2
     x0 = (w - cw) // 2
-    return arr[y0:y0 + ch, x0:x0 + cw]
+    return arr[y0 : y0 + ch, x0 : x0 + cw]
 
 
 def _entropy(arr: np.ndarray) -> float:
@@ -433,6 +447,7 @@ def _saliency_region_sharpness(arr: np.ndarray) -> Optional[float]:
     （cv2.saliency 在 opencv-contrib 4.10+ 已被移除，不再可用）。
     """
     from inkmoment.fast_quality import _saliency_map, _salient_region_sharpness
+
     smap = _saliency_map(arr)
     return _salient_region_sharpness(arr, smap)
 
@@ -463,9 +478,16 @@ def _quality_score(
     entropy_component = min(15.0, entropy / 7.0 * 15.0)
     score = blur_component + exposure_component + contrast_component + entropy_component + score_adjust
     for flag in flags:
-        if flag in {"very_blurry", "underexposed", "overexposed", "low_information",
-                    "face_very_blurry", "eyes_closed", "all_eyes_closed",
-                    "llm_reject"}:
+        if flag in {
+            "very_blurry",
+            "underexposed",
+            "overexposed",
+            "low_information",
+            "face_very_blurry",
+            "eyes_closed",
+            "all_eyes_closed",
+            "llm_reject",
+        }:
             score -= 18.0
         elif flag in {"blurry", "low_contrast", "face_blurry"}:
             score -= 10.0
@@ -520,6 +542,7 @@ def _reason_for(flags: list[str]) -> str | None:
 
 # ---------------- 人脸信号计算 ----------------
 
+
 def _face_signals_from_data(face_data: list[dict], img: Image.Image) -> dict:
     """从 vision.extract_faces() 的输出计算质量信号。
 
@@ -563,6 +586,7 @@ def _face_signals_from_data(face_data: list[dict], img: Image.Image) -> dict:
             eye_score = vision.compute_eye_open_score(f, img)
         except Exception as _eye_exc:
             import logging as _logging
+
             _logging.getLogger("inkmoment").warning(
                 f"compute_eye_open_score 失败: {type(_eye_exc).__name__}: {_eye_exc}"
             )
@@ -570,26 +594,26 @@ def _face_signals_from_data(face_data: list[dict], img: Image.Image) -> dict:
         fw = cx2 - cx1
         fh = cy2 - cy1
         area_ratio = (fw * fh) / max(1, full_w * full_h)
-        faces_detail.append({
-            "bbox": [int(cx1), int(cy1), int(cx2), int(cy2)],
-            "sharpness": round(float(sharp), 3),
-            "eye_score": round(float(eye_score), 4) if eye_score is not None else None,
-            "det_score": float(f.get("det_score", 1.0)),
-            "area_ratio": round(float(area_ratio), 5),
-        })
+        faces_detail.append(
+            {
+                "bbox": [int(cx1), int(cy1), int(cx2), int(cy2)],
+                "sharpness": round(float(sharp), 3),
+                "eye_score": round(float(eye_score), 4) if eye_score is not None else None,
+                "det_score": float(f.get("det_score", 1.0)),
+                "area_ratio": round(float(area_ratio), 5),
+            }
+        )
 
     if not faces_detail:
         return {"face_count": len(face_data), "faces_detail": []}
 
     # 主脸 = 面积最大的（与历史行为一致）
-    main_idx = max(range(len(faces_detail)),
-                   key=lambda i: faces_detail[i]["area_ratio"])
+    main_idx = max(range(len(faces_detail)), key=lambda i: faces_detail[i]["area_ratio"])
     main = faces_detail[main_idx]
-    main_raw = face_data[face_data.index(face_data[main_idx])] if main_idx < len(face_data) else face_data[0]
     x1, y1, x2, y2 = main["bbox"]
 
     margin = max(2.0, min(full_w, full_h) * 0.008)
-    clipped = (x1 <= margin or x2 >= full_w - margin or y2 >= full_h - margin)
+    clipped = x1 <= margin or x2 >= full_w - margin or y2 >= full_h - margin
 
     return {
         "face_count": len(faces_detail),
@@ -613,5 +637,6 @@ def _compute_face_signals(img: Image.Image) -> dict:
       expert 模式跑到一半 InsightFace 崩了也假装"这张没人脸"，废片放过。
     """
     from inkmoment import vision
+
     faces = vision.extract_faces(img)
     return _face_signals_from_data(faces, img)

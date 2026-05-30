@@ -23,9 +23,7 @@ def serialize_job(job, since: int = 0, now: Callable[[], float] = time.time) -> 
         "error": job.error,
         "error_info": job.error_info,
         "skipped_count": len(job.skipped),
-        "skipped_sample": [
-            {"path": path, "reason": reason} for path, reason in job.skipped[:8]
-        ],
+        "skipped_sample": [{"path": path, "reason": reason} for path, reason in job.skipped[:8]],
         "elapsed": (job.finished_at or current_time) - (job.started_at or current_time),
         "events": events,
         "event_seq": job.event_seq,
@@ -63,7 +61,8 @@ def list_job_logs(session, jobs_dir_factory: Callable[[str], object]) -> tuple[d
                 "name": path.name,
                 "size": path.stat().st_size,
                 "mtime": path.stat().st_mtime,
-            } for path in files[:50]
+            }
+            for path in files[:50]
         ],
     }, 200
 

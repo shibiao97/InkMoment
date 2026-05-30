@@ -291,9 +291,13 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         description="Verify the desktop sidecar authorization flow against a remote auth server.",
     )
     parser.add_argument("--auth-base-url", required=True, help="Authorization server URL")
-    parser.add_argument("--admin-token", default="", help="Bootstrap token fallback, only works before the first admin exists")
+    parser.add_argument(
+        "--admin-token", default="", help="Bootstrap token fallback, only works before the first admin exists"
+    )
     parser.add_argument("--admin-session-token", default="", help="Existing admin session token")
-    parser.add_argument("--admin-username", default="", help="Admin username used to log in before management API calls")
+    parser.add_argument(
+        "--admin-username", default="", help="Admin username used to log in before management API calls"
+    )
     parser.add_argument("--admin-password", default="", help="Admin password used with --admin-username")
     parser.add_argument("--sidecar-url", default="", help="Already-running sidecar URL, e.g. http://127.0.0.1:5057")
     parser.add_argument("--sidecar-binary", default="", help="Packaged sidecar binary path to launch")

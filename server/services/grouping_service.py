@@ -35,10 +35,7 @@ def regroup_session(
     if session.prescreen_rejected:
         rejected = set(session.prescreen_rejected)
         restored = set(session.prescreen_restored)
-        selected_infos = [
-            info for info in infos
-            if info.path not in rejected or info.path in restored
-        ]
+        selected_infos = [info for info in infos if info.path not in rejected or info.path in restored]
 
     threshold_near = thresholds["threshold_near"]
     threshold_far = thresholds["threshold_far"]
@@ -92,14 +89,16 @@ def serialize_preview_groups(session) -> dict:
         if best and best in ordered:
             ordered.remove(best)
             ordered.insert(0, best)
-        out.append({
-            "id": group.id,
-            "size": len(group.images),
-            "samples": ordered[:4],
-            "best_path": best,
-            "earliest_dt": group_earliest_dt(session, group),
-            "span_seconds": _group_span_seconds(session, group),
-        })
+        out.append(
+            {
+                "id": group.id,
+                "size": len(group.images),
+                "samples": ordered[:4],
+                "best_path": best,
+                "earliest_dt": group_earliest_dt(session, group),
+                "span_seconds": _group_span_seconds(session, group),
+            }
+        )
     return {
         "groups": out,
         "total": len(session.groups),
@@ -181,12 +180,14 @@ def create_confirm_prescreen_handler(
                 if best and best in ordered:
                     ordered.remove(best)
                     ordered.insert(0, best)
-                grouping_state["groups"].append({
-                    "id": group.id,
-                    "size": len(group.images),
-                    "samples": ordered[:4],
-                    "best_path": best,
-                })
+                grouping_state["groups"].append(
+                    {
+                        "id": group.id,
+                        "size": len(group.images),
+                        "samples": ordered[:4],
+                        "best_path": best,
+                    }
+                )
                 time.sleep(0.05)
 
             grouping_state["total"] = len(new_session.groups)
@@ -215,10 +216,7 @@ def create_confirm_prescreen_handler(
                 return {"error": "缓存丢失，请重新开始"}, 400
             restored = set(session.prescreen_restored)
             rejected = set(session.prescreen_rejected)
-            accepted_infos = [
-                info for info in infos
-                if info.path not in rejected or info.path in restored
-            ]
+            accepted_infos = [info for info in infos if info.path not in rejected or info.path in restored]
             all_paths = [info.path for info in accepted_infos]
 
             grouping_state["status"] = "running"
@@ -254,17 +252,18 @@ def create_confirm_prescreen_handler(
 
     return confirm_prescreen
 
+
 def _group_span_seconds(session, group) -> float | None:
-    datetimes = sorted([
-        (session.meta.get(path) or {}).get("datetime")
-        for path in group.images
-        if (session.meta.get(path) or {}).get("datetime")
-    ])
+    datetimes = sorted(
+        [
+            (session.meta.get(path) or {}).get("datetime")
+            for path in group.images
+            if (session.meta.get(path) or {}).get("datetime")
+        ]
+    )
     if len(datetimes) < 2:
         return None
     try:
-        return (
-            datetime.fromisoformat(datetimes[-1]) - datetime.fromisoformat(datetimes[0])
-        ).total_seconds()
+        return (datetime.fromisoformat(datetimes[-1]) - datetime.fromisoformat(datetimes[0])).total_seconds()
     except (ValueError, TypeError):
         return None

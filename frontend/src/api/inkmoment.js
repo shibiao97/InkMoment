@@ -1,4 +1,5 @@
 import { fetchJSON } from "./http";
+import { resolveApiUrl } from "./runtime";
 
 export function getBranding() {
   return fetchJSON("/api/branding");
@@ -81,6 +82,13 @@ export function getDependencyDownloadStatus() {
 
 export function getJob(since = 0) {
   return fetchJSON(`/api/job?since=${encodeURIComponent(String(since))}`);
+}
+
+export function streamJob(since = 0) {
+  if (typeof window === "undefined" || typeof window.EventSource !== "function") {
+    return null;
+  }
+  return new window.EventSource(resolveApiUrl(`/api/job/stream?since=${encodeURIComponent(String(since))}`));
 }
 
 export function getTaskHistory(limit = 20) {

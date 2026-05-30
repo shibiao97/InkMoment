@@ -47,13 +47,15 @@ class TaskHistoryApiTest(unittest.TestCase):
         photos = self.tmp_path / "photos"
         photos.mkdir()
 
-        payload, status = self.app._start_job_payload({
-            "folder": str(photos),
-            "dry_run": True,
-            "mode": "copy",
-            "engine": "fast",
-            "wipe_cache": True,
-        })
+        payload, status = self.app._start_job_payload(
+            {
+                "folder": str(photos),
+                "dry_run": True,
+                "mode": "copy",
+                "engine": "fast",
+                "wipe_cache": True,
+            }
+        )
 
         self.assertEqual(status, 200)
         self.assertTrue(payload["ok"])
@@ -79,4 +81,3 @@ class TaskHistoryApiTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

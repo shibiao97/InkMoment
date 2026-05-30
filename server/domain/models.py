@@ -34,8 +34,8 @@ class GroupState:
 class SessionState:
     folder: str
     dry_run: bool
-    mode: str = "copy"                              # copy | move
-    engine: str = "fast"                            # fast | expert（极速 vs 专家）
+    mode: str = "copy"  # copy | move
+    engine: str = "fast"  # fast | expert（极速 vs 专家）
     groups: list[GroupState] = field(default_factory=list)
     current_group: int = 0
     threshold_near: int = DEFAULT_THRESHOLD_NEAR
@@ -55,8 +55,8 @@ class SessionState:
     # 每次擂台选择都会更新：用户更倾向哪个维度。值是 (winner_value, loser_value) 累积。
     # 用作 AI 候选排序的微调权重。
     pref_decisions: int = 0
-    pref_aesthetic_chosen: float = 0.0   # 当美学分高的被选时 += 1
-    pref_aesthetic_passed: float = 0.0   # 当美学分高的未被选 += 1
+    pref_aesthetic_chosen: float = 0.0  # 当美学分高的被选时 += 1
+    pref_aesthetic_passed: float = 0.0  # 当美学分高的未被选 += 1
     pref_sharper_chosen: float = 0.0
     pref_sharper_passed: float = 0.0
     pref_brighter_chosen: float = 0.0

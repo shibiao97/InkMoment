@@ -1,10 +1,9 @@
-import importlib
-import sys
-import types
+from PIL import Image, ImageDraw, ImageFilter
 
-from PIL import Image, ImageFilter, ImageDraw
-
+from inkmoment.grouper import ImageInfo
 from inkmoment.quality import analyze_image
+from server.services.analysis_cache_service import ImageAnalysisCache
+from server.state.local_store import LocalStateStore
 
 
 def checkerboard(size=256, block=8):
@@ -21,8 +20,8 @@ def test_blurry_image_is_rejected_more_than_sharp_image():
     sharp = checkerboard()
     blurry = sharp.filter(ImageFilter.GaussianBlur(radius=8))
 
-    sharp_q = analyze_image(sharp, file_size=200_000, strength="standard")
-    blurry_q = analyze_image(blurry, file_size=200_000, strength="standard")
+    sharp_q = analyze_image(sharp, file_size=200_000, strength="standard", face_aware=False)
+    blurry_q = analyze_image(blurry, file_size=200_000, strength="standard", face_aware=False)
 
     assert sharp_q.blur_score > blurry_q.blur_score
     assert "blurry" not in sharp_q.flags
@@ -34,8 +33,8 @@ def test_under_and_over_exposed_images_are_rejected():
     dark = Image.new("RGB", (256, 256), (4, 4, 4))
     bright = Image.new("RGB", (256, 256), (252, 252, 252))
 
-    dark_q = analyze_image(dark, file_size=200_000, strength="standard")
-    bright_q = analyze_image(bright, file_size=200_000, strength="standard")
+    dark_q = analyze_image(dark, file_size=200_000, strength="standard", face_aware=False)
+    bright_q = analyze_image(bright, file_size=200_000, strength="standard", face_aware=False)
 
     assert "underexposed" in dark_q.flags
     assert dark_q.auto_reject is True
@@ -46,7 +45,7 @@ def test_under_and_over_exposed_images_are_rejected():
 def test_low_information_image_is_rejected():
     flat = Image.new("RGB", (256, 256), (128, 128, 128))
 
-    q = analyze_image(flat, file_size=200_000, strength="standard")
+    q = analyze_image(flat, file_size=200_000, strength="standard", face_aware=False)
 
     assert "low_information" in q.flags
     assert q.auto_reject is True
@@ -56,8 +55,8 @@ def test_low_information_image_is_rejected():
 def test_prescreen_strength_changes_blur_strictness():
     mildly_blurry = checkerboard(block=16).filter(ImageFilter.GaussianBlur(radius=2.2))
 
-    conservative = analyze_image(mildly_blurry, file_size=200_000, strength="conservative")
-    aggressive = analyze_image(mildly_blurry, file_size=200_000, strength="aggressive")
+    conservative = analyze_image(mildly_blurry, file_size=200_000, strength="conservative", face_aware=False)
+    aggressive = analyze_image(mildly_blurry, file_size=200_000, strength="aggressive", face_aware=False)
 
     assert aggressive.blur_score == conservative.blur_score
     assert aggressive.quality_score <= conservative.quality_score
@@ -65,7 +64,7 @@ def test_prescreen_strength_changes_blur_strictness():
 
 
 def test_quality_info_can_be_serialized_to_plain_dict():
-    q = analyze_image(checkerboard(), file_size=123_456, strength="standard")
+    q = analyze_image(checkerboard(), file_size=123_456, strength="standard", face_aware=False)
     data = q.to_dict()
 
     assert data["blur_score"] == q.blur_score
@@ -74,9 +73,6 @@ def test_quality_info_can_be_serialized_to_plain_dict():
 
 
 def test_grouper_cache_round_trips_quality_metrics(tmp_path):
-    sys.modules.setdefault("imagehash", types.SimpleNamespace(phash=lambda *args, **kwargs: "0" * 16))
-    grouper = importlib.import_module("inkmoment.grouper")
-    ImageInfo = grouper.ImageInfo
     photo = tmp_path / "a.jpg"
     photo.write_bytes(b"fake")
     info = ImageInfo(
@@ -86,9 +82,13 @@ def test_grouper_cache_round_trips_quality_metrics(tmp_path):
         mtime=photo.stat().st_mtime,
         quality={"quality_score": 72.5, "flags": ["blurry"], "reject_reason": "画面模糊"},
     )
+    store = LocalStateStore(tmp_path / "state.sqlite3")
+    store.initialize()
+    cache = ImageAnalysisCache(store, str(tmp_path))
 
-    grouper._save_cache(str(tmp_path), {str(photo): info})
-    loaded = grouper._load_cache(str(tmp_path))
+    cache.put(info, engine="fast", strength="standard", face_aware=False, llm_model=None)
+    loaded = cache.get(str(photo), [], engine="fast", strength="standard", face_aware=False, llm_model=None)
 
-    assert loaded[str(photo)].quality["quality_score"] == 72.5
-    assert loaded[str(photo)].quality["flags"] == ["blurry"]
+    assert loaded is not None
+    assert loaded.quality["quality_score"] == 72.5
+    assert loaded.quality["flags"] == ["blurry"]

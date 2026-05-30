@@ -323,8 +323,10 @@ class DesktopReleaseBuildTest(unittest.TestCase):
     def test_check_desktop_release_prefers_project_venv_python(self):
         from scripts import check_desktop_release
 
-        expected = check_desktop_release.ROOT / ".venv" / (
-            "Scripts/python.exe" if check_desktop_release.os.name == "nt" else "bin/python"
+        expected = (
+            check_desktop_release.ROOT
+            / ".venv"
+            / ("Scripts/python.exe" if check_desktop_release.os.name == "nt" else "bin/python")
         )
         if not expected.exists():
             self.skipTest("project venv is not present")

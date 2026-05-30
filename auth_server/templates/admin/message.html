@@ -1,0 +1,15 @@
+{% extends "admin/base.html" %}
+{% block title %}InkMoment Admin{% endblock %}
+{% block body %}
+<main>
+  <section class="card" style="max-width: 560px; margin: 12vh auto 0;">
+    <div class="title-block">
+      <h1>操作未完成</h1>
+      <p class="danger-text">{{ message }}</p>
+    </div>
+    <div class="section">
+      <a class="btn secondary" href="{{ url_for('admin_dashboard.admin_dashboard') }}">返回后台</a>
+    </div>
+  </section>
+</main>
+{% endblock %}

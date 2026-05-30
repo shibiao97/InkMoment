@@ -6,6 +6,7 @@
 
 不需要 insightface — 只用 DINOv2 + EXIF + 时间 + 文件名信号诊断聚类质量。
 """
+
 import argparse
 import logging
 import os
@@ -54,6 +55,7 @@ class ImageInfo:
 def extract_for_test(path: str) -> Optional[ImageInfo]:
     """提取 DINOv2 + EXIF（跳过 InsightFace 和 NIMA）。"""
     from inkmoment.grouper import _read_exif_datetime, extract_exif_summary
+
     try:
         st = os.stat(path)
         with Image.open(path) as img:
@@ -64,6 +66,7 @@ def extract_for_test(path: str) -> Optional[ImageInfo]:
             ph = imagehash.phash(img_t, hash_size=8)
 
             from inkmoment import vision
+
             dinov2_vec = vision.extract_dinov2(img_t)
 
         return ImageInfo(
@@ -92,9 +95,9 @@ def main():
         log.setLevel(logging.DEBUG)
 
     folder = args.folder
-    print(f"\n{'='*70}")
+    print(f"\n{'=' * 70}")
     print(f"分组诊断  folder={folder}")
-    print(f"{'='*70}\n")
+    print(f"{'=' * 70}\n")
 
     # ---- 1. 扫描文件 ----
     files = []
@@ -107,7 +110,7 @@ def main():
                 files.append(str(Path(root) / n))
     files.sort()
     if args.limit > 0:
-        files = files[:args.limit]
+        files = files[: args.limit]
     print(f"找到 {len(files)} 张图片")
 
     # ---- 2. DINOv2 特征提取 ----
@@ -119,7 +122,7 @@ def main():
         if info:
             infos.append(info)
         if (i + 1) % 10 == 0 or i == len(files) - 1:
-            print(f"  {i+1}/{len(files)}...", flush=True)
+            print(f"  {i + 1}/{len(files)}...", flush=True)
     t_extract = time.time() - t0
     print(f"  完成：{len(infos)} 张，耗时 {t_extract:.1f}s")
 
@@ -137,21 +140,29 @@ def main():
             all_cosines.append(cos)
     all_cosines = np.array(all_cosines)
     print(f"  {len(all_cosines)} 对：")
-    print(f"    min={all_cosines.min():.3f}  p5={np.quantile(all_cosines, 0.05):.3f}  "
-          f"p10={np.quantile(all_cosines, 0.1):.3f}  p25={np.quantile(all_cosines, 0.25):.3f}  "
-          f"p50={np.quantile(all_cosines, 0.5):.3f}")
-    print(f"    p75={np.quantile(all_cosines, 0.75):.3f}  p90={np.quantile(all_cosines, 0.9):.3f}  "
-          f"p95={np.quantile(all_cosines, 0.95):.3f}  max={all_cosines.max():.3f}")
+    print(
+        f"    min={all_cosines.min():.3f}  p5={np.quantile(all_cosines, 0.05):.3f}  "
+        f"p10={np.quantile(all_cosines, 0.1):.3f}  p25={np.quantile(all_cosines, 0.25):.3f}  "
+        f"p50={np.quantile(all_cosines, 0.5):.3f}"
+    )
+    print(
+        f"    p75={np.quantile(all_cosines, 0.75):.3f}  p90={np.quantile(all_cosines, 0.9):.3f}  "
+        f"p95={np.quantile(all_cosines, 0.95):.3f}  max={all_cosines.max():.3f}"
+    )
 
     # 展示旧映射 vs 新映射的效果
     old_mapped = (all_cosines + 1.0) / 2.0
     new_mapped = np.clip(all_cosines, 0, 1)
-    print(f"\n  旧映射 (s+1)/2 分布：")
-    print(f"    min={old_mapped.min():.3f}  p10={np.quantile(old_mapped, 0.1):.3f}  "
-          f"p50={np.quantile(old_mapped, 0.5):.3f}  p90={np.quantile(old_mapped, 0.9):.3f}")
-    print(f"  新映射 max(0,s) 分布：")
-    print(f"    min={new_mapped.min():.3f}  p10={np.quantile(new_mapped, 0.1):.3f}  "
-          f"p50={np.quantile(new_mapped, 0.5):.3f}  p90={np.quantile(new_mapped, 0.9):.3f}")
+    print("\n  旧映射 (s+1)/2 分布：")
+    print(
+        f"    min={old_mapped.min():.3f}  p10={np.quantile(old_mapped, 0.1):.3f}  "
+        f"p50={np.quantile(old_mapped, 0.5):.3f}  p90={np.quantile(old_mapped, 0.9):.3f}"
+    )
+    print("  新映射 max(0,s) 分布：")
+    print(
+        f"    min={new_mapped.min():.3f}  p10={np.quantile(new_mapped, 0.1):.3f}  "
+        f"p50={np.quantile(new_mapped, 0.5):.3f}  p90={np.quantile(new_mapped, 0.9):.3f}"
+    )
 
     # ---- 4. 模拟旧 vs 新聚类 ----
     print("\n[3/3] 聚类对比（旧映射 vs 新映射）...")
@@ -180,9 +191,6 @@ def main():
 
     clustering._dinov2_similarity = old_dinov2_similarity
 
-    # 也暂时还原旧的人脸权重逻辑来对比
-    original_pair_sim = clustering._pair_similarity
-
     print("\n  --- 旧映射（Bug 原版）---")
     t0 = time.time()
     groups_old = clustering.cluster(infos)
@@ -197,9 +205,9 @@ def main():
     clustering._dinov2_similarity = original_fn
 
     # ---- 5. 详细对比 ----
-    print(f"\n{'='*70}")
-    print(f"对比总结")
-    print(f"{'='*70}")
+    print(f"\n{'=' * 70}")
+    print("对比总结")
+    print(f"{'=' * 70}")
     print(f"  旧映射: {len(groups_old)} 组（多图 {len(multi_old)}, 最大 {sizes_old[0] if sizes_old else 0}）")
     print(f"  新映射: {len(groups_new)} 组（多图 {len(multi_new)}, 最大 {sizes_new[0] if sizes_new else 0}）")
 
@@ -208,10 +216,10 @@ def main():
     elif len(multi_new) > len(multi_old):
         print(f"\n  新版多出了 {len(multi_new) - len(multi_old)} 个多图组")
     else:
-        print(f"\n  多图组数量相同，但组内成员可能不同")
+        print("\n  多图组数量相同，但组内成员可能不同")
 
     # 打印新版多图组详情
-    print(f"\n--- 新版多图组详情 ---")
+    print("\n--- 新版多图组详情 ---")
     for gi, g_indices in enumerate(groups_new, 1):
         if len(g_indices) <= 1:
             continue
@@ -233,7 +241,6 @@ def main():
         # 组内 DINOv2 cosine
         if len(g_indices) <= 12:
             vecs = [(infos[idx], infos[idx].dinov2) for idx in g_indices]
-            names_short = [Path(v[0].path).stem[-10:] for v in vecs]
             min_cos = 1.0
             max_cos = -1.0
             for i in range(len(vecs)):

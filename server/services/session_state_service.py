@@ -109,9 +109,7 @@ def migrate_state(data: dict) -> dict:
         data.setdefault("companions", {})
         data["schema"] = 6
         return data
-    raise ValueError(
-        f"state schema {schema} 太旧（仅支持 v4+）。请删除 .inkmoment_state.json 重新跑。"
-    )
+    raise ValueError(f"state schema {schema} 太旧（仅支持 v4+）。请删除 .inkmoment_state.json 重新跑。")
 
 
 def group_from_dict(data: dict) -> GroupState:
