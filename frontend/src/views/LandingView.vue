@@ -19,6 +19,7 @@ import { useBranding } from "../composables/useBranding";
 import { useFolderPeek } from "../composables/useFolderPeek";
 import {
   buildLandingStartPayload,
+  canContinueLandingStartPayload,
   hasSameLandingStartPayload,
   landingStartPayloadSignature,
 } from "../composables/useLandingStartPayload";
@@ -70,6 +71,7 @@ const dependencyDownloadStatus = ref(null);
 const dependencyCopied = ref(false);
 const pendingStartPayload = ref(null);
 const canPickFolder = isTauriRuntime();
+let dependencyPreflightSeq = 0;
 
 const {
   snapshot,
@@ -288,6 +290,7 @@ function buildStartPayload() {
 }
 
 async function runDependencyPreflight(payload, options = {}) {
+  const requestSeq = ++dependencyPreflightSeq;
   isCheckingDependencies.value = true;
   dependencyError.value = "";
   dependencyCopied.value = false;
@@ -297,13 +300,16 @@ async function runDependencyPreflight(payload, options = {}) {
       include_folder: options.includeFolder !== false,
       model_dir: dependencyDownloadDir.value,
     });
+    if (requestSeq !== dependencyPreflightSeq) return null;
     dependencyReport.value = report;
     if (report?.download_dir && !dependencyDownloadDir.value) {
       dependencyDownloadDir.value = report.download_dir;
     }
     return report;
   } finally {
-    isCheckingDependencies.value = false;
+    if (requestSeq === dependencyPreflightSeq) {
+      isCheckingDependencies.value = false;
+    }
   }
 }
 
@@ -317,6 +323,7 @@ async function handleDependencyCheckOnly() {
 
   try {
     const report = await runDependencyPreflight(buildStartPayload(), { includeFolder: false });
+    if (!report) return;
     if (report.ok) {
       dependencyMessage.value = "当前模式运行资源已就绪";
     } else if ((report.missing || []).some((item) => item.downloadable)) {
@@ -351,8 +358,14 @@ async function handleStart() {
     const payload = buildStartPayload();
     pendingStartPayload.value = payload;
     const report = await runDependencyPreflight(payload);
+    if (!report) return;
     if (!report.ok) {
       startError.value = "当前模式缺少运行资源，请先处理后再开始";
+      return;
+    }
+    if (!hasSameLandingStartPayload(payload, buildStartPayload())) {
+      pendingStartPayload.value = null;
+      dependencyMessage.value = "启动参数已变化，请重新点击开始以使用最新设置。";
       return;
     }
     await launchJob(payload);
@@ -384,7 +397,12 @@ async function handleDependencyRecheck() {
   const payload = pendingStartPayload.value || buildStartPayload();
   try {
     const report = await runDependencyPreflight(payload);
+    if (!report) return;
     if (report.ok) {
+      if (pendingStartPayload.value && !canContinuePendingStartPayload(payload)) {
+        dependencyMessage.value = "启动参数已变化，请重新点击开始以使用最新设置。";
+        return;
+      }
       dependencyMessage.value = "当前模式运行资源已就绪，正在开始处理";
       await launchJob(payload);
     } else {
@@ -418,6 +436,7 @@ async function handleDependencyDownload() {
     }
     dependencyMessage.value = finalStatus?.message || "下载完成";
     const report = await runDependencyPreflight(payload, { includeFolder: shouldLaunchAfterDownload });
+    if (!report) return;
     if (!report.ok) {
       startError.value = shouldLaunchAfterDownload
         ? "下载完成，但仍有资源未就绪"
@@ -426,6 +445,10 @@ async function handleDependencyDownload() {
       return;
     }
     if (shouldLaunchAfterDownload) {
+      if (!canContinuePendingStartPayload(payload)) {
+        dependencyMessage.value = "下载完成，但启动参数已变化，请重新点击开始以使用最新设置。";
+        return;
+      }
       await launchJob(payload);
     } else {
       dependencyMessage.value = "下载完成，当前模式运行资源已就绪";
@@ -486,6 +509,8 @@ async function copyDependencyReport() {
 }
 
 function clearDependencyState() {
+  dependencyPreflightSeq += 1;
+  isCheckingDependencies.value = false;
   dependencyReport.value = null;
   dependencyMessage.value = "";
   dependencyError.value = "";
@@ -499,6 +524,10 @@ function clearStalePendingStartPayload() {
   if (hasSameLandingStartPayload(pendingStartPayload.value, buildStartPayload())) return;
   pendingStartPayload.value = null;
   dependencyMessage.value = "启动参数已变化，请重新点击开始以使用最新设置。";
+}
+
+function canContinuePendingStartPayload(payload) {
+  return canContinueLandingStartPayload(pendingStartPayload.value, buildStartPayload(), payload);
 }
 
 function sleep(ms) {
@@ -564,7 +593,10 @@ function friendlyDependencyError(error, fallback) {
     <form class="start-form" @submit.prevent="handleStart">
       <LandingFlowPanel :items="flowItems" />
 
-      <EngineSwitch v-model="engine" />
+      <EngineSwitch
+        v-model="engine"
+        :disabled="isStarting || isCheckingDependencies || isDownloadingDependencies"
+      />
 
       <LandingLlmPanel
         v-if="llmPanelVisible"

@@ -1,4 +1,11 @@
 <script setup>
+defineProps({
+  disabled: {
+    type: Boolean,
+    default: false,
+  },
+});
+
 const model = defineModel({ type: String, required: true });
 
 const engines = [
@@ -27,8 +34,8 @@ const engines = [
       :key="engine.id"
       type="button"
       class="engine-opt"
-      :class="{ 'is-active': model === engine.id, 'is-disabled': engine.disabled }"
-      :disabled="engine.disabled"
+      :class="{ 'is-active': model === engine.id, 'is-disabled': disabled || engine.disabled }"
+      :disabled="disabled || engine.disabled"
       @click="model = engine.id"
     >
       <span class="engine-title">{{ engine.title }}</span>

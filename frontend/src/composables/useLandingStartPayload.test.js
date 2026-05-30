@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildLandingStartPayload,
+  canContinueLandingStartPayload,
   hasSameLandingStartPayload,
   landingStartPayloadSignature,
 } from "./useLandingStartPayload";
@@ -56,5 +57,16 @@ describe("landing start payload", () => {
 
     expect(hasSameLandingStartPayload(pending, current)).toBe(false);
     expect(landingStartPayloadSignature(pending)).not.toBe(landingStartPayloadSignature(current));
+  });
+
+  it("only continues a pending launch when pending, captured, and current payloads still match", () => {
+    const pending = buildLandingStartPayload(baseOptions());
+    const current = buildLandingStartPayload(baseOptions());
+    const changed = buildLandingStartPayload(baseOptions({ prescreenEnabled: false }));
+
+    expect(canContinueLandingStartPayload(pending, current, pending)).toBe(true);
+    expect(canContinueLandingStartPayload(null, current, pending)).toBe(false);
+    expect(canContinueLandingStartPayload(pending, changed, pending)).toBe(false);
+    expect(canContinueLandingStartPayload(changed, current, pending)).toBe(false);
   });
 });

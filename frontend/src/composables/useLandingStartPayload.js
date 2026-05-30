@@ -35,3 +35,11 @@ export function landingStartPayloadSignature(payload) {
 export function hasSameLandingStartPayload(left, right) {
   return landingStartPayloadSignature(left) === landingStartPayloadSignature(right);
 }
+
+export function canContinueLandingStartPayload(pendingPayload, currentPayload, capturedPayload) {
+  return Boolean(
+    pendingPayload
+      && hasSameLandingStartPayload(pendingPayload, capturedPayload)
+      && hasSameLandingStartPayload(capturedPayload, currentPayload),
+  );
+}
