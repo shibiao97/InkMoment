@@ -11,6 +11,10 @@ import EngineSwitch from "../components/EngineSwitch.vue";
 import FolderSnapshot from "../components/FolderSnapshot.vue";
 import ThemePicker from "../components/ThemePicker.vue";
 import StatusBadge from "../components/StatusBadge.vue";
+import LandingAdvancedOptions from "../components/landing/LandingAdvancedOptions.vue";
+import LandingDependencyPanel from "../components/landing/LandingDependencyPanel.vue";
+import LandingFlowPanel from "../components/landing/LandingFlowPanel.vue";
+import LandingLlmPanel from "../components/landing/LandingLlmPanel.vue";
 import { useBranding } from "../composables/useBranding";
 import { useFolderPeek } from "../composables/useFolderPeek";
 import { useLlmConfig } from "../composables/useLlmConfig";
@@ -549,99 +553,30 @@ function friendlyDependencyError(error, fallback) {
     </section>
 
     <form class="start-form" @submit.prevent="handleStart">
-      <section class="flow-panel" aria-label="启动状态">
-        <div
-          v-for="item in flowItems"
-          :key="item.id"
-          class="flow-item"
-          :class="`is-${item.state}`"
-        >
-          <span>{{ item.label }}</span>
-          <strong>{{ item.value }}</strong>
-        </div>
-      </section>
+      <LandingFlowPanel :items="flowItems" />
 
       <EngineSwitch v-model="engine" />
 
-      <section v-if="llmPanelVisible" class="llm-panel">
-        <div class="llm-head">
-          <div>
-            <div class="option-label">模型服务</div>
-            <h2>土豪模式配置</h2>
-          </div>
-          <button class="btn-ghost" type="button" :disabled="llmLoading" @click="refreshLlm({ forceModels: true })">
-            {{ llmLoading ? "检查中" : "刷新状态" }}
-          </button>
-        </div>
-
-        <div class="llm-status-grid">
-          <div>
-            <span>Key</span>
-            <strong>{{ llmConfigured ? llmStatus?.masked || "已配置" : "未配置" }}</strong>
-          </div>
-          <div>
-            <span>并发</span>
-            <strong>{{ llmConcurrency?.limit ?? "—" }}</strong>
-          </div>
-          <div>
-            <span>可用模型</span>
-            <strong>{{ llmModels.length }}</strong>
-          </div>
-        </div>
-
-        <div class="llm-config-grid">
-          <label>
-            <span>服务地址</span>
-            <input
-              v-model="llmBaseUrlInput"
-              type="url"
-              placeholder="https://api.openai.com/v1"
-              spellcheck="false"
-            >
-          </label>
-          <label>
-            <span>API Key</span>
-            <input
-              v-model="llmKeyInput"
-              type="password"
-              placeholder="粘贴新的 Key 后保存"
-              autocomplete="off"
-              spellcheck="false"
-            >
-          </label>
-        </div>
-
-        <div class="llm-actions">
-          <button class="btn-primary" type="button" :disabled="llmSaving || !llmKeyInput.trim()" @click="saveLlmConfig">
-            {{ llmSaving ? "保存中" : "保存并验证" }}
-          </button>
-          <button class="btn-ghost" type="button" :disabled="checkingModels || !llmConfigured" @click="refreshModels">
-            {{ checkingModels ? "刷新中" : "刷新模型" }}
-          </button>
-          <button class="btn-ghost" type="button" :disabled="llmSaving || !llmConfigured" @click="clearLlmConfig">
-            清除 Key
-          </button>
-        </div>
-
-        <label class="llm-model-select">
-          <span>视觉模型</span>
-          <select v-model="selectedLlmModel" :disabled="!llmModels.length">
-            <option value="">请选择模型</option>
-            <option v-for="model in llmModels" :key="model.id" :value="model.id">
-              {{ model.label || model.id }}
-            </option>
-          </select>
-        </label>
-
-        <p v-if="llmStatus?.base_url" class="llm-note">
-          当前地址：{{ llmStatus.base_url }} · 来源：{{ llmStatus.base_url_source || "default" }}
-        </p>
-        <p v-if="llmDiagnostics?.llm" class="llm-note">
-          诊断：{{ llmDiagnostics.llm.configured ? "已读取到 Key" : "未读取到 Key" }}
-        </p>
-        <p v-if="llmMessage" class="start-note">{{ llmMessage }}</p>
-        <p v-if="llmError" class="form-error">{{ llmError }}</p>
-      </section>
+      <LandingLlmPanel
+        v-if="llmPanelVisible"
+        v-model:base-url="llmBaseUrlInput"
+        v-model:api-key="llmKeyInput"
+        v-model:selected-model="selectedLlmModel"
+        :status="llmStatus"
+        :models="llmModels"
+        :concurrency="llmConcurrency"
+        :diagnostics="llmDiagnostics"
+        :loading="llmLoading"
+        :checking-models="checkingModels"
+        :saving="llmSaving"
+        :configured="llmConfigured"
+        :message="llmMessage"
+        :error="llmError"
+        @refresh="refreshLlm({ forceModels: true })"
+        @save="saveLlmConfig"
+        @clear="clearLlmConfig"
+        @refresh-models="refreshModels"
+      />
 
       <label class="field-label" for="folder-input">照片文件夹</label>
       <div class="field-row">
@@ -673,187 +608,43 @@ function friendlyDependencyError(error, fallback) {
 
       <FolderSnapshot :snapshot="snapshot" />
 
-      <section class="dependency-panel">
-        <div class="dependency-head">
-          <div>
-            <div class="option-label">运行资源</div>
-            <h2>{{ dependencyPanelTitle }}</h2>
-          </div>
-          <button
-            class="btn-primary"
-            type="button"
-            :disabled="isCheckingDependencies || isDownloadingDependencies"
-            @click="handleDependencyCheckOnly"
-          >
-            {{ isCheckingDependencies ? "检查中" : "检查当前模式" }}
-          </button>
-        </div>
+      <LandingDependencyPanel
+        v-model:download-dir="dependencyDownloadDir"
+        :can-pick-folder="canPickFolder"
+        :is-checking="isCheckingDependencies"
+        :is-downloading="isDownloadingDependencies"
+        :report="dependencyReport"
+        :title="dependencyPanelTitle"
+        :missing-count="dependencyMissingCount"
+        :downloadable-count="dependencyDownloadableCount"
+        :manual-count="dependencyManualCount"
+        :has-pending-start="Boolean(pendingStartPayload)"
+        :action-hint="dependencyPrimaryActionHint"
+        :download-status="dependencyDownloadStatus"
+        :message="dependencyMessage"
+        :error="dependencyError"
+        :download-status-text="downloadStatusText"
+        :can-download="canDownloadDependencies"
+        :download-button-text="downloadButtonText"
+        :report-text="dependencyReportText"
+        :copied="dependencyCopied"
+        @check="handleDependencyCheckOnly"
+        @pick-folder="handlePickDependencyFolder"
+        @recheck="handleDependencyRecheck"
+        @download="handleDependencyDownload"
+        @copy="copyDependencyReport"
+      />
 
-        <label class="dependency-dir">
-          <span>模型 / 资源下载位置</span>
-          <input
-            v-model="dependencyDownloadDir"
-            type="text"
-            placeholder="留空则使用默认资源目录"
-            spellcheck="false"
-          >
-        </label>
-
-        <div v-if="dependencyReport" class="dependency-summary">
-          <div>
-            <span>缺失项</span>
-            <strong>{{ dependencyMissingCount }}</strong>
-          </div>
-          <div>
-            <span>可下载</span>
-            <strong>{{ dependencyDownloadableCount }}</strong>
-          </div>
-          <div>
-            <span>需手动处理</span>
-            <strong>{{ dependencyManualCount }}</strong>
-          </div>
-        </div>
-
-        <ul v-if="dependencyReport?.missing?.length" class="dependency-list">
-          <li v-for="item in dependencyReport.missing" :key="item.id">
-            <div>
-              <strong>{{ item.label }}</strong>
-              <span>{{ item.detail }}</span>
-              <small v-if="item.hint">{{ item.hint }}</small>
-            </div>
-            <em :class="{ 'is-downloadable': item.downloadable }">
-              {{ item.downloadable ? "可自动下载" : "需手动处理" }}
-            </em>
-          </li>
-        </ul>
-
-        <p v-else-if="dependencyReport?.ok" class="start-note">
-          当前模式运行资源已就绪。
-        </p>
-
-        <p v-if="dependencyReport?.manual_required" class="dependency-blocker">
-          {{ pendingStartPayload ? "存在无法自动下载的依赖，需要处理后再点击“检查并继续”。" : "存在无法自动下载的依赖，需要处理后重新检查。" }}
-        </p>
-        <p v-if="dependencyReport" class="dependency-hint">
-          {{ dependencyPrimaryActionHint }}
-        </p>
-
-        <div v-if="isDownloadingDependencies || dependencyDownloadStatus" class="dependency-progress">
-          <span :class="`is-${dependencyDownloadStatus?.status || 'running'}`"></span>
-          <div>
-            <strong>{{ downloadStatusText }}</strong>
-            <small>{{ dependencyDownloadStatus?.message || dependencyMessage || "正在处理下载任务" }}</small>
-          </div>
-        </div>
-
-        <div class="dependency-actions">
-          <button
-            v-if="canPickFolder"
-            class="btn-ghost"
-            type="button"
-            :disabled="isDownloadingDependencies"
-            @click="handlePickDependencyFolder"
-          >
-            指定下载位置
-          </button>
-          <button
-            v-if="pendingStartPayload"
-            class="btn-ghost"
-            type="button"
-            :disabled="isCheckingDependencies || isDownloadingDependencies"
-            @click="handleDependencyRecheck"
-          >
-            {{ isCheckingDependencies ? "检查中" : "检查并继续" }}
-          </button>
-          <button
-            class="btn-primary"
-            type="button"
-            :disabled="!canDownloadDependencies || isDownloadingDependencies"
-            @click="handleDependencyDownload"
-          >
-            {{ downloadButtonText }}
-          </button>
-          <button
-            class="btn-ghost"
-            type="button"
-            :disabled="!dependencyReportText"
-            @click="copyDependencyReport"
-          >
-            {{ dependencyCopied ? "已复制" : "复制检查结果" }}
-          </button>
-        </div>
-
-        <p v-if="dependencyMessage" class="start-note">{{ dependencyMessage }}</p>
-        <p v-if="dependencyError" class="form-error">{{ dependencyError }}</p>
-      </section>
-
-      <details class="advanced">
-        <summary>更多选项</summary>
-        <div class="advanced-body">
-          <section class="option-section">
-            <div class="option-label">归档方式</div>
-            <label class="radio-row">
-              <input v-model="mode" type="radio" value="move">
-              <span><strong>移动</strong> · 原片直接归入 winners/ losers/</span>
-            </label>
-            <label class="radio-row">
-              <input v-model="mode" type="radio" value="copy">
-              <span><strong>复制</strong> · 原片保留，winners/ 为副本</span>
-            </label>
-          </section>
-
-          <section class="option-section">
-            <label class="check-row">
-              <input v-model="prescreenEnabled" type="checkbox">
-              <span>智能初筛 · 先自动淘汰明显的失焦 / 闭眼 / 过曝</span>
-            </label>
-            <label class="check-row" :class="{ 'is-disabled': faceAwareDisabled }">
-              <input v-model="faceAware" type="checkbox" :disabled="faceAwareDisabled">
-              <span>人脸感知 · 极速模式下自动关闭</span>
-            </label>
-          </section>
-
-          <section class="option-section" :class="{ 'is-disabled': !prescreenEnabled }">
-            <div class="option-label">初筛力度</div>
-            <label class="radio-row">
-              <input
-                v-model="prescreenStrength"
-                type="radio"
-                value="standard"
-                :disabled="!prescreenEnabled"
-              >
-              <span><strong>标准</strong> · 识别主体糊/严重歪斜/曝光问题</span>
-            </label>
-            <label class="radio-row">
-              <input
-                v-model="prescreenStrength"
-                type="radio"
-                value="advanced"
-                :disabled="!prescreenEnabled"
-              >
-              <span><strong>进阶</strong> · 推荐档位，阈值更严</span>
-            </label>
-          </section>
-
-          <section class="option-section sliders">
-            <label>
-              <span>同场景宽容度</span>
-              <input v-model="thresholdNear" type="range" min="4" max="16" step="1">
-              <output>{{ thresholdNear }}</output>
-            </label>
-            <label>
-              <span>跨场景严格度</span>
-              <input v-model="thresholdFar" type="range" min="3" max="12" step="1">
-              <output>{{ thresholdFar }}</output>
-            </label>
-            <label>
-              <span>同场景时间窗（分钟）</span>
-              <input v-model="nearMinutes" type="range" min="1" max="30" step="1">
-              <output>{{ nearMinutes }}</output>
-            </label>
-          </section>
-        </div>
-      </details>
+      <LandingAdvancedOptions
+        v-model:mode="mode"
+        v-model:prescreen-enabled="prescreenEnabled"
+        v-model:face-aware="faceAware"
+        v-model:prescreen-strength="prescreenStrength"
+        v-model:threshold-near="thresholdNear"
+        v-model:threshold-far="thresholdFar"
+        v-model:near-minutes="nearMinutes"
+        :face-aware-disabled="faceAwareDisabled"
+      />
 
       <p class="form-error">{{ startError }}</p>
       <p v-if="lastStartPayload" class="start-note">
