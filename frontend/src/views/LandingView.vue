@@ -17,6 +17,11 @@ import LandingFlowPanel from "../components/landing/LandingFlowPanel.vue";
 import LandingLlmPanel from "../components/landing/LandingLlmPanel.vue";
 import { useBranding } from "../composables/useBranding";
 import { useFolderPeek } from "../composables/useFolderPeek";
+import {
+  buildLandingStartPayload,
+  hasSameLandingStartPayload,
+  landingStartPayloadSignature,
+} from "../composables/useLandingStartPayload";
 import { useLlmConfig } from "../composables/useLlmConfig";
 import { useTheme } from "../composables/useTheme";
 
@@ -222,14 +227,13 @@ const startButtonText = computed(() => {
   if (isStarting.value) return "启动中";
   return "开始";
 });
+const startPayloadSignature = computed(() => landingStartPayloadSignature(buildStartPayload()));
 
 watch(engine, () => {
   clearDependencyState();
 });
 
-watch(folder, () => {
-  pendingStartPayload.value = null;
-});
+watch(startPayloadSignature, clearStalePendingStartPayload);
 
 watch(engine, (nextEngine) => {
   if (nextEngine === "tycoon") {
@@ -269,20 +273,18 @@ function validateStartInputs() {
 }
 
 function buildStartPayload() {
-  return {
-    folder: folder.value.trim(),
-    dry_run: false,
-    wipe_cache: true,
+  return buildLandingStartPayload({
+    folder: folder.value,
     mode: mode.value,
     engine: engine.value,
-    threshold_near: Number(thresholdNear.value),
-    threshold_far: Number(thresholdFar.value),
-    near_seconds: Number(nearMinutes.value) * 60,
-    prescreen_enabled: prescreenEnabled.value,
-    prescreen_strength: prescreenStrength.value,
-    face_aware: engine.value === "expert" && faceAware.value,
-    llm_model: engine.value === "tycoon" ? selectedLlmModel.value : "",
-  };
+    thresholdNear: thresholdNear.value,
+    thresholdFar: thresholdFar.value,
+    nearMinutes: nearMinutes.value,
+    prescreenEnabled: prescreenEnabled.value,
+    prescreenStrength: prescreenStrength.value,
+    faceAware: faceAware.value,
+    selectedLlmModel: selectedLlmModel.value,
+  });
 }
 
 async function runDependencyPreflight(payload, options = {}) {
@@ -490,6 +492,13 @@ function clearDependencyState() {
   dependencyDownloadStatus.value = null;
   dependencyCopied.value = false;
   pendingStartPayload.value = null;
+}
+
+function clearStalePendingStartPayload() {
+  if (!pendingStartPayload.value) return;
+  if (hasSameLandingStartPayload(pendingStartPayload.value, buildStartPayload())) return;
+  pendingStartPayload.value = null;
+  dependencyMessage.value = "启动参数已变化，请重新点击开始以使用最新设置。";
 }
 
 function sleep(ms) {
