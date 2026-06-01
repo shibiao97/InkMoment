@@ -299,7 +299,7 @@ auth_server/
 
 R2 原计划已收口。后续不再按 R2 继续扩大同一批改动，建议只做有明确收益的小步重构：
 
-1. 前端大视图瘦身：`LandingView.vue` 已抽出 flow、LLM 配置、依赖面板、更多选项 4 个 UI 组件，并把启动/依赖检查/下载编排拆入 `useLandingDependencyFlow`；同时修复过期 preflight 错误污染 UI、下载后参数变化误用旧报告、取消下载序列后按钮卡在启动态等竞态问题。后续可视情况处理 `ArenaView.vue`、`DoneView.vue`、`ProcessingPhotoWall.vue`。
+1. 前端大视图瘦身：`LandingView.vue` 已抽出 flow、LLM 配置、依赖面板、更多选项 4 个 UI 组件，并把启动/依赖检查/下载编排拆入 `useLandingDependencyFlow`；同时修复过期 preflight 错误污染 UI、下载后参数变化误用旧报告、取消下载序列后按钮卡在启动态等竞态问题。`ArenaView.vue` 已抽出进度、选片舞台、缩放弹层 3 个 UI 组件，并修复选择已记录但状态刷新失败时前端仍停在旧组的问题。后续可视情况处理 `DoneView.vue`、`ProcessingPhotoWall.vue`。
 2. `inkmoment/grouper.py` 已拆为兼容 facade + `inkmoment/grouping/` 分层模块：常量、模型、EXIF、特征、扫描、单图处理、并发计算、分组分发各自独立；旧导入路径继续可用，算法语义不变。
 3. `job_runner_service.py` 已拆为兼容 facade + `server/services/job_runner/` 分层模块：模型、日志、状态标记、分析扫描、阶段编排、生命周期各自独立；旧导入路径继续可用。
 4. `dependency_service.py` 已拆为兼容 facade + `server/services/dependencies/` 分层模块：缓存目录、依赖探测、payload 组装、后台下载管理各自独立；旧导入路径与测试 patch 点继续可用。

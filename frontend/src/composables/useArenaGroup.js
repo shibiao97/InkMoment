@@ -98,9 +98,13 @@ export function useArenaGroup() {
     error.value = "";
     try {
       const groupData = await action();
-      await refreshStatusOnly();
       done.value = Boolean(groupData?.done);
       group.value = groupData?.group || null;
+      try {
+        await refreshStatusOnly();
+      } catch (statusError) {
+        error.value = statusError.message || "选择已记录，但刷新进度失败";
+      }
       return true;
     } catch (err) {
       error.value = err.message || "操作失败";

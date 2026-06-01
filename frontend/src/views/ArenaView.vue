@@ -1,6 +1,9 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { imageUrl } from "../api/http";
+import ArenaProgress from "../components/arena/ArenaProgress.vue";
+import ArenaStage from "../components/arena/ArenaStage.vue";
+import ArenaZoomOverlay from "../components/arena/ArenaZoomOverlay.vue";
 import ErrorPanel from "../components/ErrorPanel.vue";
 import LoadingState from "../components/LoadingState.vue";
 import StatusBadge from "../components/StatusBadge.vue";
@@ -186,22 +189,12 @@ onBeforeUnmount(() => {
       </div>
     </header>
 
-    <section class="arena-progress">
-      <div>
-        <span>总进度</span>
-        <strong>{{ status?.finished_multi_groups || 0 }} / {{ status?.multi_groups || 0 }} 组</strong>
-      </div>
-      <div class="progress-bar">
-        <div class="progress-fill" :style="{ width: `${overallPercent}%` }"></div>
-      </div>
-      <div>
-        <span>当前组</span>
-        <strong>{{ group?.decided || 0 }} / {{ group?.total_images || 0 }} 已决</strong>
-      </div>
-      <div class="progress-bar">
-        <div class="progress-fill" :style="{ width: `${groupPercent}%` }"></div>
-      </div>
-    </section>
+    <ArenaProgress
+      :status="status"
+      :group="group"
+      :overall-percent="overallPercent"
+      :group-percent="groupPercent"
+    />
 
     <ErrorPanel title="选片操作失败" :message="error" />
 
@@ -217,64 +210,17 @@ onBeforeUnmount(() => {
     <section v-else-if="!group" class="arena-empty">
       暂时没有可选的分组。
     </section>
-    <section v-else class="arena-stage" :class="{ 'single-review': isSingleReview }">
-      <article class="arena-side">
-        <div class="arena-photo">
-          <button
-            v-if="group.left"
-            class="arena-photo-button"
-            type="button"
-            @click="openZoom('left')"
-          >
-            <img :src="imageUrl(group.left, 1200)" :alt="basename(group.left)">
-          </button>
-        </div>
-        <div class="arena-meta">
-          <h2>{{ basename(group.left) }}</h2>
-          <div class="meta-pills">
-            <span
-              v-for="item in leftMeta"
-              :key="item.key"
-              :class="{ diff: item.different }"
-            >
-              {{ item.value }}
-            </span>
-          </div>
-        </div>
-        <button class="btn-primary" type="button" :disabled="disableActions" @click="chooseLeft">
-          {{ isSingleReview ? "保留这张" : "留左边" }}
-        </button>
-      </article>
-
-      <article v-if="!isSingleReview" class="arena-side" :class="{ empty: !group.right }">
-        <div class="arena-photo">
-          <button
-            v-if="group.right"
-            class="arena-photo-button"
-            type="button"
-            @click="openZoom('right')"
-          >
-            <img :src="imageUrl(group.right, 1200)" :alt="basename(group.right)">
-          </button>
-          <span v-else>右侧无图</span>
-        </div>
-        <div class="arena-meta">
-          <h2>{{ basename(group.right) }}</h2>
-          <div class="meta-pills">
-            <span
-              v-for="item in rightMeta"
-              :key="item.key"
-              :class="{ diff: item.different }"
-            >
-              {{ item.value }}
-            </span>
-          </div>
-        </div>
-        <button class="btn-primary" type="button" :disabled="disableActions || !group.right" @click="chooseRight">
-          留右边
-        </button>
-      </article>
-    </section>
+    <ArenaStage
+      v-else
+      :group="group"
+      :left-meta="leftMeta"
+      :right-meta="rightMeta"
+      :disable-actions="disableActions"
+      :is-single-review="isSingleReview"
+      @choose-left="chooseLeft"
+      @choose-right="chooseRight"
+      @zoom="openZoom"
+    />
 
     <section v-if="group && !done" class="arena-command-bar">
       <button class="btn-ghost" type="button" :disabled="disableActions || (!isSingleReview && !group.right)" @click="choose('neither')">
@@ -323,33 +269,15 @@ onBeforeUnmount(() => {
     </section>
 
     <Teleport to="body">
-      <div
+      <ArenaZoomOverlay
         v-if="zoomTarget && zoomedPath"
-        class="zoom-overlay"
-        role="dialog"
-        aria-modal="true"
-        @click.self="closeZoom"
-      >
-        <div class="zoom-topbar">
-          <div>
-            <span>{{ zoomTarget === "left" ? "左图" : "右图" }}</span>
-            <strong>{{ zoomedName }}</strong>
-          </div>
-          <div class="zoom-actions">
-            <button class="btn-ghost" type="button" @click="setZoom(zoomScale - 0.5)">缩小</button>
-            <button class="btn-ghost" type="button" @click="setZoom(1)">{{ zoomScale.toFixed(1) }}×</button>
-            <button class="btn-ghost" type="button" @click="setZoom(zoomScale + 0.5)">放大</button>
-            <button class="btn-primary" type="button" @click="closeZoom">关闭</button>
-          </div>
-        </div>
-        <div class="zoom-stage">
-          <img
-            :src="imageUrl(zoomedPath, 1800)"
-            :alt="zoomedName"
-            :style="{ transform: `scale(${zoomScale})` }"
-          >
-        </div>
-      </div>
+        :target="zoomTarget"
+        :path="zoomedPath"
+        :name="zoomedName"
+        :scale="zoomScale"
+        @close="closeZoom"
+        @set-scale="setZoom"
+      />
     </Teleport>
   </main>
 </template>
