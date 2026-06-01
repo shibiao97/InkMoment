@@ -103,7 +103,8 @@ def run_audit(*, completion: bool = False, require_local_artifacts: bool = True)
         ),
         Check(
             "grouper accepts cache callbacks",
-            contains("inkmoment/grouper.py", "cache_get", "cache_put"),
+            contains("inkmoment/grouping/compute.py", "cache_get", "cache_put")
+            and contains("inkmoment/grouper.py", "compute_infos"),
             "Image analysis can reuse cache hits and persist misses.",
         ),
         Check(
