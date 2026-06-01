@@ -1,12 +1,16 @@
-"""Backward-compatible facade for runtime dependency checks and downloads."""
-
-from server.services.dependencies import (
+from server.services.dependencies.cache import (
+    MODEL_CACHE_SETTING,
+    configure_model_cache_environment,
+    configure_runtime_model_cache,
+    default_model_cache_dir,
+    resolve_model_cache_dir,
+    save_model_cache_dir,
+)
+from server.services.dependencies.checks import (
     DEFAULT_ENDPOINTS,
     DINO_MODEL_ID,
     DINO_REQUIRED_FILES,
     HF_ALLOW_PATTERNS,
-    MODEL_CACHE_SETTING,
-    DependencyDownloadManager,
     _bool_setting,
     _download_hf_model,
     _has_missing,
@@ -16,14 +20,9 @@ from server.services.dependencies import (
     _modules_for_engine,
     _normalize_engine,
     _opencv_orb_error,
-    configure_model_cache_environment,
-    configure_runtime_model_cache,
-    default_model_cache_dir,
-    download_dependencies_payload,
-    preflight_dependencies_payload,
-    resolve_model_cache_dir,
-    save_model_cache_dir,
 )
+from server.services.dependencies.manager import DependencyDownloadManager
+from server.services.dependencies.payloads import download_dependencies_payload, preflight_dependencies_payload
 
 __all__ = [
     "DEFAULT_ENDPOINTS",
