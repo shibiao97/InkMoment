@@ -301,11 +301,12 @@ R2 原计划已收口。后续不再按 R2 继续扩大同一批改动，建议�
 
 1. 前端大视图瘦身：`LandingView.vue` 已先抽出 flow、LLM 配置、依赖面板、更多选项 4 个 UI 组件；如继续，可再把启动/依赖检查编排抽为 composable，并视情况处理 `ArenaView.vue`、`DoneView.vue`、`ProcessingPhotoWall.vue`。
 2. `inkmoment/grouper.py` 已拆为兼容 facade + `inkmoment/grouping/` 分层模块：常量、模型、EXIF、特征、扫描、单图处理、并发计算、分组分发各自独立；旧导入路径继续可用，算法语义不变。
-3. 服务层大文件：`auth_client_service.py`、`job_runner_service.py`、`dependency_service.py` 仍偏大，但需要先围绕具体变更点拆，不建议只按行数机械切分。
-4. `inkmoment/vision.py`：fast 路径懒导入已由测试保护；完整模块拆分和 coverage 纳入仍可做，但会触碰重依赖加载边界，优先级低于 UI 和已完成的 grouper facade。
-5. 桌面签名/公证：文档已齐，CI 仍按 `--no-sign`；真正启用需要 Apple/Windows 证书和 GitHub Secrets，属于发布配置任务。
-6. Tauri event 替代 SSE：当前无已验证瓶颈，继续保持可选，只有桌面端事件延迟或可靠性成为实测问题时再做。
-7. 暂不建议拆 `quality/fast_quality`、`clustering/fast_clustering`：它们是 fast/expert 双实现，不是重复代码；除非有明确算法维护痛点，否则维持现状。
+3. `job_runner_service.py` 已拆为兼容 facade + `server/services/job_runner/` 分层模块：模型、日志、状态标记、分析扫描、阶段编排、生命周期各自独立；旧导入路径继续可用。
+4. 服务层大文件：`auth_client_service.py`、`dependency_service.py` 仍偏大，但需要先围绕具体变更点拆，不建议只按行数机械切分。
+5. `inkmoment/vision.py`：fast 路径懒导入已由测试保护；完整模块拆分和 coverage 纳入仍可做，但会触碰重依赖加载边界，优先级低于 UI 和已完成的 grouper facade。
+6. 桌面签名/公证：文档已齐，CI 仍按 `--no-sign`；真正启用需要 Apple/Windows 证书和 GitHub Secrets，属于发布配置任务。
+7. Tauri event 替代 SSE：当前无已验证瓶颈，继续保持可选，只有桌面端事件延迟或可靠性成为实测问题时再做。
+8. 暂不建议拆 `quality/fast_quality`、`clustering/fast_clustering`：它们是 fast/expert 双实现，不是重复代码；除非有明确算法维护痛点，否则维持现状。
 
 ---
 
