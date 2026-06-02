@@ -51,6 +51,7 @@ describe("useJobPolling", () => {
     expect(streamJob).toHaveBeenCalledWith(0);
 
     source.emit("job", {
+      task_id: "job-1",
       status: "done",
       done: 4,
       total: 4,
@@ -68,6 +69,7 @@ describe("useJobPolling", () => {
   it("falls back to polling when SSE is unavailable", async () => {
     streamJob.mockReturnValue(null);
     getJob.mockResolvedValue({
+      task_id: "job-1",
       status: "running",
       done: 2,
       total: 5,
@@ -84,5 +86,52 @@ describe("useJobPolling", () => {
 
     polling.stop();
     expect(polling.isPolling.value).toBe(false);
+  });
+
+  it("restarts streaming from the first event when start is called again", () => {
+    const firstSource = createEventSource();
+    const secondSource = createEventSource();
+    streamJob.mockReturnValueOnce(firstSource).mockReturnValueOnce(secondSource);
+
+    const polling = useJobPolling();
+    polling.start();
+    firstSource.emit("job", {
+      task_id: "job-1",
+      status: "done",
+      done: 3,
+      total: 3,
+      events: [{ seq: 3, message: "finished" }],
+    });
+    expect(polling.events.value).toHaveLength(1);
+
+    polling.start();
+
+    expect(streamJob).toHaveBeenLastCalledWith(0);
+    expect(polling.events.value).toEqual([]);
+    expect(polling.isStreaming.value).toBe(true);
+  });
+
+  it("clears stale events when the backend payload switches to a new task", () => {
+    const source = createEventSource();
+    streamJob.mockReturnValue(source);
+
+    const polling = useJobPolling();
+    polling.start();
+    source.emit("job", {
+      task_id: "job-1",
+      status: "hashing",
+      done: 5,
+      total: 10,
+      events: [{ seq: 5, message: "old task" }],
+    });
+    source.emit("job", {
+      task_id: "job-2",
+      status: "hashing",
+      done: 1,
+      total: 10,
+      events: [{ seq: 1, message: "new task" }],
+    });
+
+    expect(polling.events.value).toEqual([{ seq: 1, message: "new task" }]);
   });
 });

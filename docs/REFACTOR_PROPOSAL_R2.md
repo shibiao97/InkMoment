@@ -279,7 +279,7 @@ auth_server/
 | P1-1 `selection_service.py` 三分 | ✅ 完成 | 原文件 51 行 facade；实现拆入 `server/services/selection/{compute,apply,actions,undo,handlers}.py`，单文件最大 246 行。 |
 | P1-2 `vision.py` fast 懒导入验证 | ✅ 完成 | 新增 `-X importtime` 回归，fast `compute_infos` 不 import `inkmoment.vision` / `torch` / `pyiqa` / `insightface` 等专家栈。 |
 | P1-3 `llm_bp` Deps 化 | ✅ 完成 | `server/routes/llm.py` 已有 `LlmDeps`，`test_blueprint_deps_contract.py` 覆盖 14/14 blueprint 工厂。 |
-| P1-4 前端 Vitest 起步 | ✅ 完成 | `frontend` 已有 Vitest + 3 个 composable 测试；`quality.yml` 与 `npm run quality:frontend` 均纳入前端测试。 |
+| P1-4 前端 Vitest 起步 | ✅ 完成 | `frontend` 已有 Vitest，关键 composable 测试已持续扩展到 8 个测试文件 / 30 条测试；`quality.yml` 与 `npm run quality:frontend` 均纳入前端测试。 |
 | P2-1 `session_builder_service.py` 轻拆 | ✅ 完成 | 原文件 43 行 facade；实现拆入 `server/services/session_builder/{builder,groups,metadata,scoring,subjects}.py`。 |
 | P2-2 coverage 纳入 `auth_server` | ✅ 完成 | `pyproject.toml` coverage source 已包含 `auth_server`，全量 coverage 门槛通过。 |
 | P2-3 桌面签名 / 公证文档 | ✅ 完成 | 新增 `docs/DESKTOP_SIGNING.md`，覆盖 macOS notarization、Windows code signing、secrets 模板、验证与回滚。 |
@@ -291,7 +291,7 @@ auth_server/
 - `ruff format --check .`：通过。
 - `mypy inkmoment server`：通过。
 - `pytest --cov=auth_server --cov=inkmoment --cov=server --cov-fail-under=60`：213 passed, 1 skipped, coverage 66.74%。
-- `npm run quality:frontend`：lint / typecheck / Vitest 通过，3 个测试文件 7 条测试通过。
+- `npm run quality:frontend`：lint / typecheck / Vitest 通过，8 个测试文件 30 条测试通过。
 - `uv lock --locked` + `uv export --locked ...` + `diff requirements.txt`：通过。
 - `python scripts/check_desktop_release.py`：通过，含 unittest、frontend build、desktop audit、macOS DMG artifact 校验。
 
@@ -299,7 +299,7 @@ auth_server/
 
 R2 原计划已收口。后续不再按 R2 继续扩大同一批改动，建议只做有明确收益的小步重构：
 
-1. 前端大视图瘦身：`LandingView.vue` 已抽出 flow、LLM 配置、依赖面板、更多选项 4 个 UI 组件，并把启动/依赖检查/下载编排拆入 `useLandingDependencyFlow`；同时修复过期 preflight 错误污染 UI、下载后参数变化误用旧报告、取消下载序列后按钮卡在启动态等竞态问题。`ArenaView.vue` 已抽出进度、选片舞台、缩放弹层 3 个 UI 组件，并修复选择已记录但状态刷新失败时前端仍停在旧组的问题。`DoneView.vue` 已抽出水印面板、胜出照片网格 2 个 UI 组件，并修复重做 payload 缺少布尔字段时错误关闭预筛/人脸感知的问题。后续可视情况处理 `ProcessingPhotoWall.vue`。
+1. 前端大视图瘦身：`LandingView.vue` 已抽出 flow、LLM 配置、依赖面板、更多选项 4 个 UI 组件，并把启动/依赖检查/下载编排拆入 `useLandingDependencyFlow`；同时修复过期 preflight 错误污染 UI、下载后参数变化误用旧报告、取消下载序列后按钮卡在启动态等竞态问题。`ArenaView.vue` 已抽出进度、选片舞台、缩放弹层 3 个 UI 组件，并修复选择已记录但状态刷新失败时前端仍停在旧组的问题。`DoneView.vue` 已抽出水印面板、胜出照片网格 2 个 UI 组件，并修复重做 payload 缺少布尔字段时错误关闭预筛/人脸感知的问题。`ProcessingPhotoWall.vue` 已抽出 `useProcessingPhotoWall`，并修复新任务事件序号重置、非 idle 状态重启、卸载后替换动画计时器残留等边界问题。
 2. `inkmoment/grouper.py` 已拆为兼容 facade + `inkmoment/grouping/` 分层模块：常量、模型、EXIF、特征、扫描、单图处理、并发计算、分组分发各自独立；旧导入路径继续可用，算法语义不变。
 3. `job_runner_service.py` 已拆为兼容 facade + `server/services/job_runner/` 分层模块：模型、日志、状态标记、分析扫描、阶段编排、生命周期各自独立；旧导入路径继续可用。
 4. `dependency_service.py` 已拆为兼容 facade + `server/services/dependencies/` 分层模块：缓存目录、依赖探测、payload 组装、后台下载管理各自独立；旧导入路径与测试 patch 点继续可用。

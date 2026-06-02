@@ -22,6 +22,7 @@ export function useJobPolling() {
   let timer = null;
   let eventSource = null;
   let eventSeq = 0;
+  let currentTaskId = "";
 
   const progressPercent = computed(() => {
     if (!job.value?.total) return 0;
@@ -45,9 +46,26 @@ export function useJobPolling() {
     }
   }
 
+  function resetEventState() {
+    events.value = [];
+    eventSeq = 0;
+    currentTaskId = "";
+  }
+
+  function syncTaskCursor(data) {
+    const nextTaskId = data?.task_id ? String(data.task_id) : "";
+    if (!nextTaskId) return;
+    if (currentTaskId && currentTaskId !== nextTaskId) {
+      events.value = [];
+      eventSeq = 0;
+    }
+    currentTaskId = nextTaskId;
+  }
+
   function applyJobPayload(data) {
     pollFailStreak.value = 0;
     error.value = "";
+    syncTaskCursor(data);
     job.value = data;
     mergeEvents(data.events || []);
     if (typeof data.event_seq === "number" && data.event_seq > eventSeq && !data.events?.length) {
@@ -71,6 +89,7 @@ export function useJobPolling() {
   function start() {
     stop();
     error.value = "";
+    resetEventState();
     if (!startStreaming()) {
       startPolling();
     }
@@ -131,10 +150,9 @@ export function useJobPolling() {
   function reset() {
     stop();
     job.value = null;
-    events.value = [];
     error.value = "";
     pollFailStreak.value = 0;
-    eventSeq = 0;
+    resetEventState();
   }
 
   onBeforeUnmount(stop);

@@ -11,6 +11,7 @@ from server.services.job_stream_service import sse_message, stream_job_events
 def make_job(**overrides):
     base = {
         "status": "hashing",
+        "task_id": "job-1",
         "folder": "/photos",
         "dry_run": False,
         "mode": "copy",
@@ -55,6 +56,7 @@ class JobStreamServiceTest(unittest.TestCase):
         self.assertEqual(len(messages), 1)
         data_line = next(line for line in messages[0].splitlines() if line.startswith("data: "))
         payload = json.loads(data_line.removeprefix("data: "))
+        self.assertEqual(payload["task_id"], "job-1")
         self.assertEqual(payload["event_seq"], 1)
         self.assertEqual(payload["events"], [{"seq": 1, "name": "a.jpg", "ok": True}])
 

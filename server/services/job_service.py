@@ -10,6 +10,7 @@ def serialize_job(job, since: int = 0, now: Callable[[], float] = time.time) -> 
     rejected_total = sum(1 for event in job.recent_events if event.get("reject"))
     current_time = now()
     return {
+        "task_id": getattr(job, "task_id", ""),
         "status": job.status,
         "folder": job.folder,
         "dry_run": job.dry_run,
