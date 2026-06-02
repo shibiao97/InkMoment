@@ -18,6 +18,10 @@ function addDefined(payload, key, value) {
   }
 }
 
+function boolSetting(value, defaultValue) {
+  return value === undefined || value === null ? defaultValue : Boolean(value);
+}
+
 function buildRedoPayload(currentStatus) {
   if (!currentStatus?.folder) return null;
   const payload = {
@@ -26,8 +30,8 @@ function buildRedoPayload(currentStatus) {
     wipe_cache: true,
     mode: currentStatus.mode || "copy",
     engine: currentStatus.engine || "fast",
-    prescreen_enabled: Boolean(currentStatus.prescreen_enabled),
-    face_aware: Boolean(currentStatus.face_aware),
+    prescreen_enabled: boolSetting(currentStatus.prescreen_enabled, true),
+    face_aware: boolSetting(currentStatus.face_aware, true),
     llm_model: currentStatus.llm_model || "",
   };
   addDefined(payload, "threshold_near", currentStatus.threshold_near);
