@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from threading import Event
 from typing import Any
 
 from inkmoment.engines import ENGINE_LABELS, get_engine, normalize_engine
@@ -11,6 +12,9 @@ from server.services.dependencies.cache import (
 )
 from server.services.dependencies.checks import DINO_MODEL_ID, DINO_REQUIRED_FILES
 from server.state.local_store import LocalStateStore
+
+EXPERT_RUNTIME_READY_SETTING = "expert_runtime_assets_ready"
+TYCOON_RUNTIME_READY_SETTING = "tycoon_runtime_assets_ready"
 
 
 def _facade():
@@ -89,6 +93,38 @@ def preflight_dependencies_payload(data: dict[str, Any], store: LocalStateStore)
                     "target_dir": str(cache_dir),
                 }
             )
+        if (
+            engine == "expert"
+            and not _has_blocking_manual_dependency(missing)
+            and not _runtime_assets_ready(store, EXPERT_RUNTIME_READY_SETTING, cache_dir)
+        ):
+            missing.append(
+                {
+                    "id": "runtime:expert-models",
+                    "kind": "model",
+                    "label": "质感优选运行模型",
+                    "detail": "NIMA / MUSIQ / CLIP-IQA+ / InsightFace 首次运行资源尚未完成预热，可能需要下载额外权重。",
+                    "downloadable": True,
+                    "required_by": [ENGINE_LABELS[engine]],
+                    "target_dir": str(cache_dir),
+                }
+            )
+        elif (
+            engine == "tycoon"
+            and not _has_blocking_manual_dependency(missing)
+            and not _runtime_assets_ready(store, TYCOON_RUNTIME_READY_SETTING, cache_dir)
+        ):
+            missing.append(
+                {
+                    "id": "runtime:tycoon-models",
+                    "kind": "model",
+                    "label": "云端精评本地运行模型",
+                    "detail": "DINOv2 / InsightFace 首次运行资源尚未完成预热，可能需要下载额外权重。",
+                    "downloadable": True,
+                    "required_by": [ENGINE_LABELS[engine]],
+                    "target_dir": str(cache_dir),
+                }
+            )
 
     if engine_spec.requires_llm_model:
         llm_model = str(data.get("llm_model") or "").strip()
@@ -118,19 +154,33 @@ def preflight_dependencies_payload(data: dict[str, Any], store: LocalStateStore)
     }, 200
 
 
-def download_dependencies_payload(data: dict[str, Any], store: LocalStateStore) -> tuple[dict[str, Any], int]:
+def download_dependencies_payload(
+    data: dict[str, Any],
+    store: LocalStateStore,
+    *,
+    progress=None,
+    cancel_event: Event | None = None,
+) -> tuple[dict[str, Any], int]:
     facade = _facade()
     engine = facade._normalize_engine(data.get("engine"))
     engine_spec = get_engine(engine)
     cache_dir = configure_model_cache_environment(resolve_model_cache_dir(store, data.get("model_dir")))
     save_model_cache_dir(store, cache_dir)
 
-    repair_result = facade.repair_runtime_dependencies(engine, cache_dir)
+    _raise_if_cancelled(cancel_event)
+    _emit_progress(progress, phase="repair", progress=12, message="正在检查可修复运行资源")
+    repair_result = facade.repair_runtime_dependencies(
+        engine,
+        cache_dir,
+        progress=progress,
+        cancel_event=cancel_event,
+    )
     repaired: list[dict[str, Any]] = repair_result.get("repaired") or []
     downloaded: list[dict[str, Any]] = []
     skipped = repair_result.get("skipped") or []
 
     if not engine_spec.requires_dino_model:
+        _raise_if_cancelled(cancel_event)
         if skipped:
             return _skipped_payload(engine, cache_dir, repaired, downloaded, skipped), 409
         return {
@@ -142,6 +192,7 @@ def download_dependencies_payload(data: dict[str, Any], store: LocalStateStore) 
             "message": _download_message(engine, repaired, []),
         }, 200
 
+    _emit_progress(progress, phase="dino:check", progress=30, message="正在检查 DINOv2 模型缓存")
     status = facade._hf_model_cache_status(DINO_MODEL_ID, DINO_REQUIRED_FILES, cache_dir)
     if status.get("error"):
         return {
@@ -150,38 +201,44 @@ def download_dependencies_payload(data: dict[str, Any], store: LocalStateStore) 
             "download_dir": str(cache_dir),
             "repaired": repaired,
         }, 409
-    if status.get("cached"):
-        if skipped:
-            return _skipped_payload(engine, cache_dir, repaired, downloaded, skipped), 409
-        return {
-            "ok": True,
-            "engine": engine,
-            "download_dir": str(cache_dir),
-            "repaired": repaired,
-            "downloaded": [],
-            "message": _download_message(engine, repaired, []),
-        }, 200
+    dino_cached = bool(status.get("cached"))
+    if not dino_cached:
+        try:
+            _raise_if_cancelled(cancel_event)
+            _emit_progress(progress, phase="dino:download", progress=38, message="正在下载 DINOv2-small 模型")
+            local_dir = facade._download_hf_model(DINO_MODEL_ID, cache_dir)
+            _raise_if_cancelled(cancel_event)
+        except Exception as exc:
+            return {
+                "error": f"模型下载失败：{type(exc).__name__}: {exc}",
+                "engine": engine,
+                "download_dir": str(cache_dir),
+                "repaired": repaired,
+            }, 502
 
-    try:
-        local_dir = facade._download_hf_model(DINO_MODEL_ID, cache_dir)
-    except Exception as exc:
-        return {
-            "error": f"模型下载失败：{type(exc).__name__}: {exc}",
-            "engine": engine,
-            "download_dir": str(cache_dir),
-            "repaired": repaired,
-        }, 502
+        final_status = facade._hf_model_cache_status(DINO_MODEL_ID, DINO_REQUIRED_FILES, cache_dir)
+        if not final_status.get("cached"):
+            return {
+                "error": f"模型下载后仍缺少：{', '.join(final_status.get('missing') or DINO_REQUIRED_FILES)}",
+                "engine": engine,
+                "download_dir": str(cache_dir),
+                "repaired": repaired,
+            }, 502
 
-    final_status = facade._hf_model_cache_status(DINO_MODEL_ID, DINO_REQUIRED_FILES, cache_dir)
-    if not final_status.get("cached"):
-        return {
-            "error": f"模型下载后仍缺少：{', '.join(final_status.get('missing') or DINO_REQUIRED_FILES)}",
-            "engine": engine,
-            "download_dir": str(cache_dir),
-            "repaired": repaired,
-        }, 502
+        downloaded.append({"model": DINO_MODEL_ID, "path": local_dir})
+    else:
+        _emit_progress(progress, phase="dino:cached", progress=42, message="DINOv2-small 模型已存在")
 
-    downloaded = [{"model": DINO_MODEL_ID, "path": local_dir}]
+    runtime_payload, runtime_status = _prepare_runtime_models(engine, store, cache_dir, progress, cancel_event)
+    if runtime_status >= 400:
+        runtime_payload.setdefault("engine", engine)
+        runtime_payload.setdefault("download_dir", str(cache_dir))
+        runtime_payload.setdefault("repaired", repaired)
+        runtime_payload.setdefault("downloaded", downloaded)
+        return runtime_payload, runtime_status
+    downloaded.extend(runtime_payload.get("downloaded") or [])
+
+    _raise_if_cancelled(cancel_event)
     if skipped:
         return _skipped_payload(engine, cache_dir, repaired, downloaded, skipped), 409
     return {
@@ -192,6 +249,90 @@ def download_dependencies_payload(data: dict[str, Any], store: LocalStateStore) 
         "downloaded": downloaded,
         "message": _download_message(engine, repaired, downloaded),
     }, 200
+
+
+def _prepare_runtime_models(
+    engine: str,
+    store: LocalStateStore,
+    cache_dir: Path,
+    progress,
+    cancel_event: Event | None,
+) -> tuple[dict[str, Any], int]:
+    _raise_if_cancelled(cancel_event)
+    if engine == "expert":
+        setting = EXPERT_RUNTIME_READY_SETTING
+        if _runtime_assets_ready(store, setting, cache_dir):
+            _emit_progress(progress, phase="runtime:cached", progress=92, message="质感优选运行资源已完成预热")
+            return {"downloaded": []}, 200
+        try:
+            _emit_progress(progress, phase="runtime:expert", progress=48, message="正在预热质感优选运行模型")
+            from inkmoment import vision
+
+            vision.require_expert_capabilities()
+            vision.prewarm_all(
+                progress=progress,
+                cancel_check=lambda: bool(cancel_event and cancel_event.is_set()),
+            )
+            _mark_runtime_assets_ready(store, setting, cache_dir)
+            return {
+                "downloaded": [{"model": "runtime:expert-models", "path": str(cache_dir)}],
+            }, 200
+        except Exception as exc:
+            if cancel_event is not None and cancel_event.is_set():
+                raise
+            return {
+                "error": f"质感优选运行资源预热失败：{type(exc).__name__}: {exc}",
+            }, 502
+
+    if engine == "tycoon":
+        setting = TYCOON_RUNTIME_READY_SETTING
+        if _runtime_assets_ready(store, setting, cache_dir):
+            _emit_progress(progress, phase="runtime:cached", progress=92, message="云端精评本地运行资源已完成预热")
+            return {"downloaded": []}, 200
+        try:
+            _emit_progress(progress, phase="runtime:tycoon", progress=55, message="正在预热云端精评本地运行模型")
+            from inkmoment import vision
+
+            vision.require_tycoon_capabilities()
+            vision.prewarm_tycoon(
+                progress=progress,
+                cancel_check=lambda: bool(cancel_event and cancel_event.is_set()),
+            )
+            _mark_runtime_assets_ready(store, setting, cache_dir)
+            return {
+                "downloaded": [{"model": "runtime:tycoon-models", "path": str(cache_dir)}],
+            }, 200
+        except Exception as exc:
+            if cancel_event is not None and cancel_event.is_set():
+                raise
+            return {
+                "error": f"云端精评本地运行资源预热失败：{type(exc).__name__}: {exc}",
+            }, 502
+
+    return {"downloaded": []}, 200
+
+
+def _runtime_assets_ready(store: LocalStateStore, setting: str, cache_dir: Path) -> bool:
+    value = store.get_setting(setting, default={}) or {}
+    return bool(value.get("ready") and value.get("cache_dir") == str(cache_dir))
+
+
+def _mark_runtime_assets_ready(store: LocalStateStore, setting: str, cache_dir: Path) -> None:
+    store.set_setting(setting, {"ready": True, "cache_dir": str(cache_dir)})
+
+
+def _has_blocking_manual_dependency(missing: list[dict[str, Any]]) -> bool:
+    return any(not item.get("downloadable") and not item.get("repairable") for item in missing)
+
+
+def _emit_progress(callback, **changes: Any) -> None:
+    if callback is not None:
+        callback(**changes)
+
+
+def _raise_if_cancelled(cancel_event: Event | None) -> None:
+    if cancel_event is not None and cancel_event.is_set():
+        raise RuntimeError("用户已停止资源下载")
 
 
 def _skipped_payload(

@@ -5,6 +5,7 @@ import { getJob, getStatus } from "./api/inkmoment";
 import { initDesktopBackend, isTauriRuntime } from "./api/runtime";
 import AppViewHost from "./components/AppViewHost.vue";
 import DebugLogOverlay from "./components/DebugLogOverlay.vue";
+import GlobalBusyOverlay from "./components/GlobalBusyOverlay.vue";
 import AuthView from "./views/AuthView.vue";
 import { useAuthSession } from "./composables/useAuthSession";
 import { useDebugLogs } from "./composables/useDebugLogs";
@@ -20,6 +21,7 @@ const STARTUP_AUTH_TIMEOUT_MS = 6000;
 const booting = ref(true);
 const bootMessage = ref("正在启动本地服务...");
 const bootError = ref("");
+const globalBusy = ref(null);
 const { resetting, resetError, resetCurrentSession } = useSessionReset();
 const auth = useAuthSession();
 const { themeStyle } = useTheme();
@@ -138,7 +140,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="theme-frame" :style="themeStyle">
+  <div class="theme-frame" :style="themeStyle" :inert="globalBusy ? '' : null">
     <AuthView v-if="!booting && !auth.authorized.value" :auth="auth" @authorized="handleAuthAuthorized" />
     <AppViewHost
       v-else-if="!booting"
@@ -151,6 +153,7 @@ onUnmounted(() => {
       @enter-preview="enterPreview"
       @enter-arena="enterArena"
       @enter-done="enterDone"
+      @busy-change="globalBusy = $event"
     />
     <main v-else class="app-shell app-boot-shell">
       <div class="app-boot-panel">
@@ -160,7 +163,6 @@ onUnmounted(() => {
     </main>
 
     <div v-if="bannerText" class="session-reset-banner" :class="{ error: bannerError }">{{ bannerText }}</div>
-
     <DebugLogOverlay
       v-if="isTauriRuntime()"
       :open="debugOpen"
@@ -173,5 +175,6 @@ onUnmounted(() => {
       @refresh="refreshDebugLogs"
       @copy="copyDebugLogs"
     />
+    <GlobalBusyOverlay :state="globalBusy" @cancel="globalBusy?.onCancel?.()" />
   </div>
 </template>

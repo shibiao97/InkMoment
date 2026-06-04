@@ -22,7 +22,12 @@ from server.services.dependencies.checks import (
     _opencv_orb_error,
 )
 from server.services.dependencies.manager import DependencyDownloadManager
-from server.services.dependencies.payloads import download_dependencies_payload, preflight_dependencies_payload
+from server.services.dependencies.payloads import (
+    EXPERT_RUNTIME_READY_SETTING,
+    TYCOON_RUNTIME_READY_SETTING,
+    download_dependencies_payload,
+    preflight_dependencies_payload,
+)
 from server.services.dependencies.repair import (
     is_repairable_dependency,
     repair_pyiqa_assets,
@@ -34,8 +39,10 @@ __all__ = [
     "DINO_MODEL_ID",
     "DINO_REQUIRED_FILES",
     "DependencyDownloadManager",
+    "EXPERT_RUNTIME_READY_SETTING",
     "HF_ALLOW_PATTERNS",
     "MODEL_CACHE_SETTING",
+    "TYCOON_RUNTIME_READY_SETTING",
     "_bool_setting",
     "_download_hf_model",
     "_has_missing",

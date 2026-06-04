@@ -10,7 +10,8 @@ import tempfile
 import urllib.request
 import zipfile
 from pathlib import Path
-from typing import Any
+from threading import Event
+from typing import Any, Callable
 
 from inkmoment.engines import get_engine, normalize_engine
 
@@ -25,21 +26,37 @@ def is_repairable_dependency(item_id: str, detail: str = "") -> bool:
     return False
 
 
-def repair_runtime_dependencies(engine: str, cache_dir: Path) -> dict[str, Any]:
+def repair_runtime_dependencies(
+    engine: str,
+    cache_dir: Path,
+    *,
+    progress: Callable[..., None] | None = None,
+    cancel_event: Event | None = None,
+) -> dict[str, Any]:
     """Repair bundled module assets and model cache content for the selected engine."""
     normalized = normalize_engine(engine)
     checked: list[dict[str, str]] = []
     repaired: list[dict[str, str]] = []
     skipped: list[dict[str, str]] = []
 
+    _raise_if_cancelled(cancel_event)
     modules = {module for module, _label in get_engine(normalized).dependency_modules}
     if PYIQA_PACKAGE in modules:
-        result = repair_pyiqa_assets(cache_dir)
+        if progress is not None:
+            progress(phase="repair", progress=18, message="正在检查 pyiqa 模块资源")
+        result = repair_pyiqa_assets(cache_dir, cancel_event=cancel_event)
         checked.append(result)
         if result["ok"] and result.get("changed"):
             repaired.append(result)
         elif not result["ok"]:
             skipped.append(result)
+        if progress is not None:
+            progress(
+                phase="repair",
+                progress=26,
+                message=result.get("message") or "pyiqa 模块资源检查完成",
+            )
+    _raise_if_cancelled(cancel_event)
 
     return {
         "ok": not skipped,
@@ -50,7 +67,8 @@ def repair_runtime_dependencies(engine: str, cache_dir: Path) -> dict[str, Any]:
     }
 
 
-def repair_pyiqa_assets(cache_dir: Path) -> dict[str, str]:
+def repair_pyiqa_assets(cache_dir: Path, *, cancel_event: Event | None = None) -> dict[str, str]:
+    _raise_if_cancelled(cancel_event)
     package_root = _package_root(PYIQA_PACKAGE)
     if package_root is None:
         return {
@@ -72,7 +90,8 @@ def repair_pyiqa_assets(cache_dir: Path) -> dict[str, str]:
             "path": str(package_root),
         }
 
-    wheel_path = _download_pypi_wheel(PYIQA_PACKAGE, cache_dir / "packages")
+    wheel_path = _download_pypi_wheel(PYIQA_PACKAGE, cache_dir / "packages", cancel_event=cancel_event)
+    _raise_if_cancelled(cancel_event)
     extracted = _extract_package_tree(wheel_path, PYIQA_PACKAGE, package_root.parent)
     if not extracted:
         return {
@@ -117,11 +136,13 @@ def _package_root(package: str) -> Path | None:
     return origin.parent / package
 
 
-def _download_pypi_wheel(package: str, target_dir: Path) -> Path:
+def _download_pypi_wheel(package: str, target_dir: Path, *, cancel_event: Event | None = None) -> Path:
+    _raise_if_cancelled(cancel_event)
     target_dir.mkdir(parents=True, exist_ok=True)
     metadata_url = f"https://pypi.org/pypi/{package}/json"
     with urllib.request.urlopen(metadata_url, timeout=30) as response:
         metadata = json.loads(response.read().decode("utf-8"))
+    _raise_if_cancelled(cancel_event)
 
     candidates = [
         file_info
@@ -140,10 +161,12 @@ def _download_pypi_wheel(package: str, target_dir: Path) -> Path:
     if target.is_file() and target.stat().st_size > 0:
         return target
 
+    _raise_if_cancelled(cancel_event)
     with urllib.request.urlopen(str(candidate["url"]), timeout=120) as response:
         with tempfile.NamedTemporaryFile(delete=False, dir=target_dir, suffix=".tmp") as tmp:
             shutil.copyfileobj(response, tmp)
             tmp_path = Path(tmp.name)
+    _raise_if_cancelled(cancel_event)
     tmp_path.replace(target)
     return target
 
@@ -171,6 +194,11 @@ def _purge_modules(package: str) -> None:
     for name in list(sys.modules):
         if name == package or name.startswith(f"{package}."):
             sys.modules.pop(name, None)
+
+
+def _raise_if_cancelled(cancel_event: Event | None) -> None:
+    if cancel_event is not None and cancel_event.is_set():
+        raise RuntimeError("用户已停止资源下载")
 
 
 def main(argv: list[str] | None = None) -> int:

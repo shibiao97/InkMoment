@@ -23,6 +23,7 @@ AUTH_PUBLIC_API_PREFIXES = ("/api/auth/",)
 
 AUTH_AUTHENTICATED_API_PATHS = {
     "/api/dependencies/download",
+    "/api/dependencies/download/cancel",
     "/api/dependencies/download/status",
 }
 

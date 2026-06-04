@@ -24,7 +24,7 @@ import logging
 import os
 import threading
 from pathlib import Path
-from typing import List
+from typing import Callable, List
 
 import numpy as np
 from PIL import Image
@@ -482,16 +482,54 @@ def require_tycoon_capabilities() -> None:
         raise VisionUnavailable(f"云端精评缺少依赖：{', '.join(missing)}。请按 requirements.txt 安装。")
 
 
-def prewarm_all() -> None:
+def expert_runtime_models_loaded() -> bool:
+    """Return whether all Expert runtime models are loaded in this process."""
+    return all(key in _models for key in ("dinov2", "nima", "musiq", "clipiqa", "insightface"))
+
+
+def tycoon_runtime_models_loaded() -> bool:
+    """Return whether all Tycoon local runtime models are loaded in this process."""
+    return all(key in _models for key in ("dinov2", "insightface"))
+
+
+def prewarm_all(
+    progress: Callable[..., None] | None = None,
+    cancel_check: Callable[[], bool] | None = None,
+) -> None:
     """质感优选预热全部模型；任一失败抛出。"""
-    _ensure_dinov2()
-    _ensure_nima()
-    _ensure_musiq()
-    _ensure_clipiqa()
-    _ensure_insightface()
+    _prewarm_step("dinov2", "DINOv2-small", _ensure_dinov2, 55, progress, cancel_check)
+    _prewarm_step("nima", "NIMA / MobileNetV2", _ensure_nima, 65, progress, cancel_check)
+    _prewarm_step("musiq", "MUSIQ", _ensure_musiq, 76, progress, cancel_check)
+    _prewarm_step("clipiqa", "CLIP-IQA+", _ensure_clipiqa, 87, progress, cancel_check)
+    _prewarm_step("insightface", "InsightFace", _ensure_insightface, 96, progress, cancel_check)
 
 
-def prewarm_tycoon() -> None:
+def prewarm_tycoon(
+    progress: Callable[..., None] | None = None,
+    cancel_check: Callable[[], bool] | None = None,
+) -> None:
     """云端精评预热：仅 DINOv2 + InsightFace（分组依赖）。"""
-    _ensure_dinov2()
-    _ensure_insightface()
+    _prewarm_step("dinov2", "DINOv2-small", _ensure_dinov2, 65, progress, cancel_check)
+    _prewarm_step("insightface", "InsightFace", _ensure_insightface, 96, progress, cancel_check)
+
+
+def _prewarm_step(
+    phase: str,
+    label: str,
+    loader: Callable[[], object],
+    done_progress: int,
+    progress: Callable[..., None] | None,
+    cancel_check: Callable[[], bool] | None,
+) -> None:
+    _raise_if_cancelled(cancel_check)
+    if progress is not None:
+        progress(phase=f"runtime:{phase}", progress=max(1, done_progress - 8), message=f"正在准备 {label} 资源")
+    loader()
+    if progress is not None:
+        progress(phase=f"runtime:{phase}", progress=done_progress, message=f"{label} 资源已就绪")
+    _raise_if_cancelled(cancel_check)
+
+
+def _raise_if_cancelled(cancel_check: Callable[[], bool] | None) -> None:
+    if cancel_check is not None and cancel_check():
+        raise VisionUnavailable("用户已停止资源下载")

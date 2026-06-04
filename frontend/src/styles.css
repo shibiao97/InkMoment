@@ -89,6 +89,76 @@ input:disabled {
   font-weight: 760;
 }
 
+.global-busy-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1400;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(20, 29, 23, 0.38);
+  backdrop-filter: blur(5px);
+  cursor: wait;
+}
+
+.global-busy-panel {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 16px;
+  width: min(420px, 100%);
+  padding: 20px;
+  color: var(--im-text, #1f2922);
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid var(--im-border, #dfe8d8);
+  border-radius: 8px;
+  box-shadow: 0 22px 60px rgba(19, 29, 23, 0.22);
+}
+
+.global-busy-panel h2,
+.global-busy-panel p {
+  margin: 0;
+}
+
+.global-busy-panel h2 {
+  margin-top: 4px;
+  font-size: 18px;
+  letter-spacing: 0;
+}
+
+.global-busy-panel p:not(.eyebrow) {
+  margin-top: 8px;
+  color: var(--im-muted, #607063);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.global-busy-progress {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+}
+
+.global-busy-progress .progress-bar {
+  margin: 0;
+}
+
+.global-busy-progress span {
+  min-width: 42px;
+  color: var(--im-muted, #607063);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.global-busy-cancel {
+  grid-column: 1 / -1;
+  justify-self: end;
+  color: var(--im-danger, #b0443f);
+  border-color: color-mix(in srgb, var(--im-danger, #b0443f) 42%, var(--im-border));
+}
+
 .debug-log-overlay {
   position: fixed;
   inset: 0;
@@ -819,6 +889,12 @@ input:disabled {
   box-shadow: 0 0 0 5px rgba(199, 125, 120, 0.16);
 }
 
+.dependency-progress > span.is-cancelling,
+.dependency-progress > span.is-cancelled {
+  background: var(--im-danger);
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--im-danger) 18%, transparent);
+}
+
 .dependency-progress strong {
   display: block;
   color: #1f2922;
@@ -929,10 +1005,54 @@ input:disabled {
   margin-top: 22px;
 }
 
-.advanced summary {
-  color: #607063;
+.advanced-trigger {
+  width: 100%;
+  padding: 12px 14px;
+  color: #1f2922;
+  background: #ffffff;
+  border: 1px solid #dbe6d4;
+  border-radius: 10px;
   cursor: pointer;
   font-size: 14px;
+  font-weight: 700;
+  text-align: left;
+}
+
+.advanced-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(31, 41, 34, 0.38);
+}
+
+.advanced-modal {
+  display: grid;
+  gap: 16px;
+  width: min(720px, 100%);
+  max-height: min(760px, calc(100vh - 48px));
+  padding: 18px;
+  overflow: auto;
+  color: #1f2922;
+  background: #fbfcf4;
+  border: 1px solid #d1ddcc;
+  border-radius: 10px;
+  box-shadow: 0 28px 80px rgba(31, 41, 34, 0.28);
+}
+
+.advanced-modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.advanced-modal-head h2 {
+  margin: 4px 0 0;
+  font-size: 22px;
+  letter-spacing: 0;
 }
 
 .advanced-body {
@@ -3329,6 +3449,15 @@ select {
   border-color: var(--im-border);
 }
 
+.btn-danger {
+  color: var(--im-danger);
+  border-color: color-mix(in srgb, var(--im-danger) 48%, var(--im-border));
+}
+
+.btn-danger:hover:not(:disabled) {
+  border-color: var(--im-danger);
+}
+
 .btn-primary,
 .btn-ghost {
   display: inline-flex;
@@ -3559,13 +3688,22 @@ select {
   margin-top: 0;
 }
 
-.advanced summary {
+.advanced-trigger {
   color: var(--im-text);
+  background: var(--im-surface);
+  border-color: var(--im-border);
   font-weight: 650;
 }
 
 .advanced-body {
   gap: 10px;
+}
+
+.advanced-modal {
+  color: var(--im-text);
+  background: var(--im-surface);
+  border-color: var(--im-border);
+  border-radius: 8px;
 }
 
 .option-section {
@@ -3978,8 +4116,7 @@ select {
     min-height: 0;
   }
 
-  .studio-inspector .flow-panel,
-  .studio-inspector .advanced-body {
+  .studio-inspector .flow-panel {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
@@ -4038,7 +4175,6 @@ select {
   }
 
   .studio-inspector .flow-panel,
-  .studio-inspector .advanced-body,
   .llm-config-grid,
   .llm-status-grid,
   .dependency-summary,

@@ -10,6 +10,10 @@ const props = defineProps({
     type: Boolean,
     required: true,
   },
+  isCancelling: {
+    type: Boolean,
+    default: false,
+  },
   report: {
     type: Object,
     default: null,
@@ -76,7 +80,7 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits(["check", "recheck", "download", "copy"]);
+const emit = defineEmits(["check", "recheck", "download", "cancel-download", "copy"]);
 
 const manualDialogOpen = ref(false);
 const manualItems = computed(() => props.report?.missing?.filter((item) => !item.downloadable) || []);
@@ -177,6 +181,15 @@ const manualItems = computed(() => props.report?.missing?.filter((item) => !item
       >
         <span v-if="isDownloading" class="btn-spinner" aria-hidden="true"></span>
         {{ downloadButtonText }}
+      </button>
+      <button
+        v-if="isDownloading"
+        class="btn-ghost btn-danger"
+        type="button"
+        :disabled="isCancelling"
+        @click="emit('cancel-download')"
+      >
+        {{ isCancelling ? "停止中" : "停止处理" }}
       </button>
       <button
         class="btn-ghost"

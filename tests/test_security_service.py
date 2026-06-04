@@ -107,9 +107,11 @@ class SecurityServiceTest(unittest.TestCase):
         ).test_client()
 
         response = client.post("/api/dependencies/download")
+        cancel = client.post("/api/dependencies/download/cancel")
         status = client.get("/api/dependencies/download/status")
 
         self.assertEqual(response.status_code, 202)
+        self.assertEqual(cancel.status_code, 200)
         self.assertEqual(status.status_code, 200)
         self.assertEqual(cancel_calls, [])
 
@@ -179,6 +181,10 @@ class SecurityServiceTest(unittest.TestCase):
 
         @flask_app.route("/api/dependencies/download/status")
         def dependency_download_status():
+            return jsonify({"status": "idle"})
+
+        @flask_app.route("/api/dependencies/download/cancel", methods=["POST"])
+        def dependency_download_cancel():
             return jsonify({"status": "idle"})
 
         return flask_app

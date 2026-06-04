@@ -20,7 +20,7 @@ import {
 import { useLlmConfig } from "../composables/useLlmConfig";
 import { useTheme } from "../composables/useTheme";
 
-const emit = defineEmits(["job-started"]);
+const emit = defineEmits(["job-started", "busy-change"]);
 
 const ENGINE_META = {
   fast: {
@@ -94,6 +94,7 @@ const {
   isStarting,
   isCheckingDependencies,
   isDownloadingDependencies,
+  isCancellingDownload,
   lastStartPayload,
   dependencyReport,
   dependencyMessage,
@@ -109,12 +110,14 @@ const {
   dependencyPanelTitle,
   dependencyReportText,
   dependencyManualCommands,
+  dependencyBusyOverlay,
   downloadStatusText,
   downloadButtonText,
   resourceState,
   startButtonText,
   handleDependencyCheckOnly,
   handleDependencyDownload,
+  handleDependencyDownloadCancel,
   handleDependencyRecheck,
   handleStart,
   copyDependencyReport,
@@ -124,7 +127,10 @@ const {
   buildStartPayload,
   validateStartInputs,
   selectedEngineLabel,
-  onJobStarted: (payload) => emit("job-started", payload),
+  onJobStarted: (payload) => {
+    emit("busy-change", null);
+    emit("job-started", payload);
+  },
 });
 const flowItems = computed(() => {
   const items = [
@@ -164,6 +170,7 @@ watch(engine, () => {
 });
 
 watch(startPayloadSignature, clearStalePendingStartPayload);
+watch(dependencyBusyOverlay, (state) => emit("busy-change", state), { immediate: true });
 
 watch(engine, (nextEngine) => {
   if (nextEngine === "tycoon") {
@@ -334,6 +341,7 @@ function buildStartPayload() {
       <LandingDependencyPanel
         :is-checking="isCheckingDependencies"
         :is-downloading="isDownloadingDependencies"
+        :is-cancelling="isCancellingDownload"
         :report="dependencyReport"
         :title="dependencyPanelTitle"
         :missing-count="dependencyMissingCount"
@@ -353,6 +361,7 @@ function buildStartPayload() {
         @check="handleDependencyCheckOnly"
         @recheck="handleDependencyRecheck"
         @download="handleDependencyDownload"
+        @cancel-download="handleDependencyDownloadCancel"
         @copy="copyDependencyReport"
       />
 

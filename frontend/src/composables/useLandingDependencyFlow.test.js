@@ -1,6 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
 import {
+  cancelDependencyDownload,
   downloadDependencies,
   getDependencyDownloadStatus,
   preflightDependencies,
@@ -9,6 +10,7 @@ import {
 import { buildManualCommands, useLandingDependencyFlow } from "./useLandingDependencyFlow";
 
 vi.mock("../api/inkmoment", () => ({
+  cancelDependencyDownload: vi.fn(),
   downloadDependencies: vi.fn(),
   getDependencyDownloadStatus: vi.fn(),
   preflightDependencies: vi.fn(),
@@ -217,6 +219,99 @@ describe("useLandingDependencyFlow", () => {
 
     expect(downloadDependencies).toHaveBeenCalledWith({ engine: "expert" });
     expect(flow.dependencyMessage.value).toBe("处理完成，当前模式运行资源已就绪");
+  });
+
+  it("exposes a global busy overlay while dependency resources are being handled", async () => {
+    let resolveStatus;
+    downloadDependencies.mockResolvedValueOnce({
+      id: "download-1",
+      status: "pending",
+      message: "准备下载资源",
+    });
+    getDependencyDownloadStatus
+      .mockImplementationOnce(() => new Promise((resolve) => {
+        resolveStatus = resolve;
+      }))
+      .mockResolvedValueOnce({
+        id: "download-1",
+        status: "done",
+        message: "处理完成",
+      });
+    preflightDependencies.mockResolvedValueOnce({
+      ok: true,
+      engine: "expert",
+      engine_label: "质感优选",
+      missing: [],
+    });
+    const { flow } = createFlow();
+
+    const handling = flow.handleDependencyDownload();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(flow.dependencyBusyOverlay.value).toMatchObject({
+      title: "正在处理运行资源",
+      status: "排队中",
+      message: "准备下载资源",
+      cancelable: true,
+      cancelText: "停止下载",
+    });
+    expect(typeof flow.dependencyBusyOverlay.value.onCancel).toBe("function");
+    expect(flow.dependencyBusyOverlay.value.progress).toBeGreaterThanOrEqual(12);
+
+    resolveStatus({
+      id: "download-1",
+      status: "running",
+      message: "正在下载缺失资源",
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(flow.dependencyBusyOverlay.value.status).toBe("处理中");
+    expect(flow.dependencyBusyOverlay.value.progress).toBeGreaterThanOrEqual(45);
+
+    await handling;
+
+    expect(flow.dependencyBusyOverlay.value).toBeNull();
+    expect(flow.dependencyDownloadProgress.value).toBe(0);
+  });
+
+  it("cancels a running dependency download and releases the global overlay", async () => {
+    let resolveStatus;
+    downloadDependencies.mockResolvedValueOnce({
+      id: "download-1",
+      status: "running",
+      message: "正在下载缺失资源",
+    });
+    getDependencyDownloadStatus.mockImplementationOnce(() => new Promise((resolve) => {
+      resolveStatus = resolve;
+    }));
+    cancelDependencyDownload.mockResolvedValueOnce({
+      id: "download-1",
+      status: "cancelling",
+      message: "正在停止下载",
+    });
+    const { flow } = createFlow();
+
+    const handling = flow.handleDependencyDownload();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(flow.isDownloadingDependencies.value).toBe(true);
+    await flow.handleDependencyDownloadCancel();
+
+    expect(cancelDependencyDownload).toHaveBeenCalledOnce();
+    expect(flow.isDownloadingDependencies.value).toBe(false);
+    expect(flow.isStarting.value).toBe(false);
+    expect(flow.dependencyBusyOverlay.value).toBeNull();
+    expect(flow.dependencyMessage.value).toBe("已请求停止下载");
+
+    resolveStatus({
+      id: "download-1",
+      status: "cancelled",
+      message: "已停止资源下载",
+    });
+    await handling;
   });
 });
 

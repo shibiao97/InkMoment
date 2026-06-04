@@ -1,5 +1,6 @@
 import { computed, ref, unref } from "vue";
 import {
+  cancelDependencyDownload,
   downloadDependencies,
   getDependencyDownloadStatus,
   preflightDependencies,
@@ -11,7 +12,8 @@ import {
   hasSameLandingStartPayload,
 } from "./useLandingStartPayload";
 
-const DOWNLOAD_BUSY_STATUSES = new Set(["pending", "running"]);
+const DOWNLOAD_BUSY_STATUSES = new Set(["pending", "running", "cancelling"]);
+const DOWNLOAD_CANCELLED_STATUSES = new Set(["cancelled", "cancelling"]);
 const DEFAULT_DOWNLOAD_WAIT_MS = 60 * 60 * 1000;
 const DEFAULT_DOWNLOAD_POLL_MS = 1500;
 const PYTHON_PACKAGE_COMMANDS = {
@@ -58,8 +60,10 @@ export function useLandingDependencyFlow({
   const dependencyMessage = ref("");
   const dependencyError = ref("");
   const dependencyDownloadStatus = ref(null);
+  const dependencyDownloadProgress = ref(0);
   const dependencyCopied = ref(false);
   const pendingStartPayload = ref(null);
+  const isCancellingDownload = ref(false);
   let dependencyPreflightSeq = 0;
   let dependencyDownloadSeq = 0;
 
@@ -97,14 +101,30 @@ export function useLandingDependencyFlow({
     const status = dependencyDownloadStatus.value?.status || "";
     if (status === "pending") return "排队中";
     if (status === "running") return "处理中";
+    if (status === "cancelling") return "停止中";
+    if (status === "cancelled") return "已停止";
     if (status === "done") return "处理完成";
     if (status === "error") return "处理失败";
     return "处理中";
   });
   const downloadButtonText = computed(() => {
+    if (isCancellingDownload.value) return "停止中";
     if (isDownloadingDependencies.value) return downloadStatusText.value;
+    if (dependencyDownloadStatus.value?.status === "cancelled") return "重新处理";
     if (dependencyDownloadStatus.value?.status === "error") return "重试下载";
     return pendingStartPayload.value ? "处理并继续" : "检查并处理资源";
+  });
+  const dependencyBusyOverlay = computed(() => {
+    if (!isDownloadingDependencies.value) return null;
+    return {
+      title: pendingStartPayload.value ? "正在处理运行资源并准备开始" : "正在处理运行资源",
+      status: downloadStatusText.value,
+      message: dependencyDownloadStatus.value?.message || dependencyMessage.value || "正在检查并处理资源",
+      progress: dependencyDownloadProgress.value,
+      cancelable: !isCancellingDownload.value,
+      cancelText: "停止下载",
+      onCancel: handleDependencyDownloadCancel,
+    };
   });
   const dependencyReportText = computed(() => {
     const report = dependencyReport.value;
@@ -312,6 +332,8 @@ export function useLandingDependencyFlow({
     dependencyCopied.value = false;
     isStarting.value = shouldLaunchAfterDownload;
     isDownloadingDependencies.value = true;
+    isCancellingDownload.value = false;
+    dependencyDownloadProgress.value = 8;
 
     try {
       const result = await startOrAttachDependencyDownload(payload);
@@ -320,12 +342,14 @@ export function useLandingDependencyFlow({
         dependencyDownloadDir.value = result.download_dir;
       }
       dependencyDownloadStatus.value = result || null;
+      updateDependencyDownloadProgress(result);
       dependencyMessage.value = result?.message || "已开始下载资源";
       const finalStatus = await waitForDependencyDownload(result?.id, downloadSeq);
       if (downloadSeq !== dependencyDownloadSeq || !finalStatus) return;
       if (finalStatus?.download_dir) {
         dependencyDownloadDir.value = finalStatus.download_dir;
       }
+      dependencyDownloadProgress.value = 94;
       dependencyMessage.value = finalStatus?.message || "处理完成";
       if (shouldLaunchAfterDownload && !canContinuePendingStartPayload(payload)) {
         dependencyMessage.value = "处理完成，但启动参数已变化，请重新点击开始以使用最新设置。";
@@ -340,6 +364,7 @@ export function useLandingDependencyFlow({
         dependencyMessage.value = "处理完成，但当前模式仍有资源未就绪";
         return;
       }
+      dependencyDownloadProgress.value = 100;
       if (shouldLaunchAfterDownload) {
         if (!canContinuePendingStartPayload(payload)) {
           dependencyMessage.value = "处理完成，但启动参数已变化，请重新点击开始以使用最新设置。";
@@ -357,6 +382,7 @@ export function useLandingDependencyFlow({
       if (downloadSeq === dependencyDownloadSeq) {
         isDownloadingDependencies.value = false;
         isStarting.value = false;
+        dependencyDownloadProgress.value = 0;
       }
     }
   }
@@ -381,6 +407,7 @@ export function useLandingDependencyFlow({
       const status = await getDependencyDownloadStatus();
       if (downloadSeq !== dependencyDownloadSeq) return null;
       dependencyDownloadStatus.value = status || null;
+      updateDependencyDownloadProgress(status);
       if (jobId && status?.id && status.id !== jobId) {
         throw new Error("处理任务状态不匹配，请重新点击处理");
       }
@@ -393,9 +420,48 @@ export function useLandingDependencyFlow({
       if (status?.status === "error") {
         throw new Error(status.error || status.message || "资源处理失败");
       }
+      if (status?.status === "cancelled") {
+        const error = new Error(status.message || "已停止资源下载");
+        error.code = "download_cancelled";
+        throw error;
+      }
       await sleep(downloadPollMs);
     }
     throw new Error("资源处理超时，请检查网络后重试");
+  }
+
+  function updateDependencyDownloadProgress(status) {
+    const current = dependencyDownloadProgress.value || 0;
+    if (status?.progress != null) {
+      dependencyDownloadProgress.value = Math.max(current, Math.min(98, Number(status.progress) || current));
+      return;
+    }
+    if (status?.status === "pending") dependencyDownloadProgress.value = Math.max(current, 12);
+    else if (status?.status === "running") dependencyDownloadProgress.value = Math.min(88, Math.max(current + 7, 45));
+    else if (status?.status === "cancelling") dependencyDownloadProgress.value = current;
+    else if (status?.status === "cancelled") dependencyDownloadProgress.value = 0;
+    else if (status?.status === "done") dependencyDownloadProgress.value = 92;
+  }
+
+  async function handleDependencyDownloadCancel() {
+    if (!isDownloadingDependencies.value || isCancellingDownload.value) return;
+    isCancellingDownload.value = true;
+    try {
+      const status = await cancelDependencyDownload();
+      dependencyDownloadSeq += 1;
+      dependencyDownloadStatus.value = status || { status: "cancelled" };
+      dependencyMessage.value = status?.message || "已停止资源下载";
+      if (DOWNLOAD_CANCELLED_STATUSES.has(status?.status)) {
+        dependencyMessage.value = status?.status === "cancelling" ? "已请求停止下载" : "已停止资源下载";
+      }
+      isDownloadingDependencies.value = false;
+      isStarting.value = false;
+      dependencyDownloadProgress.value = 0;
+    } catch (error) {
+      dependencyError.value = friendlyDependencyError(error, "停止下载失败");
+    } finally {
+      isCancellingDownload.value = false;
+    }
   }
 
   async function copyDependencyReport() {
@@ -414,10 +480,12 @@ export function useLandingDependencyFlow({
     isCheckingDependencies.value = false;
     isDownloadingDependencies.value = false;
     isStarting.value = false;
+    isCancellingDownload.value = false;
     dependencyReport.value = null;
     dependencyMessage.value = "";
     dependencyError.value = "";
     dependencyDownloadStatus.value = null;
+    dependencyDownloadProgress.value = 0;
     dependencyCopied.value = false;
     pendingStartPayload.value = null;
   }
@@ -438,6 +506,7 @@ export function useLandingDependencyFlow({
     isStarting,
     isCheckingDependencies,
     isDownloadingDependencies,
+    isCancellingDownload,
     lastStartPayload,
     dependencyReport,
     dependencyDownloadDir,
@@ -455,12 +524,15 @@ export function useLandingDependencyFlow({
     dependencyPanelTitle,
     dependencyReportText,
     dependencyManualCommands,
+    dependencyBusyOverlay,
+    dependencyDownloadProgress,
     downloadStatusText,
     downloadButtonText,
     resourceState,
     startButtonText,
     handleDependencyCheckOnly,
     handleDependencyDownload,
+    handleDependencyDownloadCancel,
     handleDependencyRecheck,
     handlePickDependencyFolder,
     handleStart,

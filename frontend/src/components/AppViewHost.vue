@@ -24,6 +24,7 @@ defineProps({
 const emit = defineEmits([
   "back-home",
   "job-started",
+  "busy-change",
   "continue-step",
   "enter-preview",
   "enter-arena",
@@ -35,6 +36,7 @@ const emit = defineEmits([
   <LandingView
     v-if="currentView === 'landing'"
     @job-started="emit('job-started', $event)"
+    @busy-change="emit('busy-change', $event)"
   />
   <ProcessingView
     v-else-if="currentView === 'processing'"

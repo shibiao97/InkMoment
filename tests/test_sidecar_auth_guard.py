@@ -56,6 +56,7 @@ class SidecarAuthGuardTest(unittest.TestCase):
             ("POST", "/api/peek_folder", {"folder": str(Path(self.tmp.name))}),
             ("GET", "/api/capabilities", None),
             ("POST", "/api/dependencies/download", {"engine": "expert"}),
+            ("POST", "/api/dependencies/download/cancel", {}),
             ("GET", "/api/dependencies/download/status", None),
             ("GET", "/api/ark_key", None),
             ("GET", "/api/llm_models", None),
@@ -110,6 +111,36 @@ class SidecarAuthGuardTest(unittest.TestCase):
             if status.get("status") in {"done", "error"}:
                 break
             time.sleep(0.02)
+
+    def test_dependency_download_cancel_requires_login_but_not_activation(self):
+        os.environ["INKMOMENT_AUTH_SERVER_URL"] = "https://auth.example.com"
+        client = self.app_module.create_app().test_client()
+
+        unauthenticated = client.post(
+            "/api/dependencies/download/cancel",
+            headers={"Origin": "http://localhost"},
+            json={},
+        )
+        self.assertEqual(unauthenticated.status_code, 401)
+        self.assertEqual(unauthenticated.get_json()["code"], "unauthenticated")
+
+        self.app_module.RUNTIME.auth = self.app_module.AuthRuntime(
+            token="logged-in-token",
+            license={
+                "authorized": False,
+                "reason": "not_activated",
+                "expires_at": None,
+            },
+            last_checked_at=time.time(),
+        )
+
+        allowed = client.post(
+            "/api/dependencies/download/cancel",
+            headers={"Origin": "http://localhost"},
+            json={},
+        )
+        self.assertEqual(allowed.status_code, 200)
+        self.assertEqual(allowed.get_json()["status"], "idle")
 
     def test_dependency_download_status_requires_login_but_not_activation(self):
         os.environ["INKMOMENT_AUTH_SERVER_URL"] = "https://auth.example.com"

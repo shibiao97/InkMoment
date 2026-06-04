@@ -80,6 +80,12 @@ export function getDependencyDownloadStatus() {
   return fetchJSON("/api/dependencies/download/status");
 }
 
+export function cancelDependencyDownload() {
+  return fetchJSON("/api/dependencies/download/cancel", {
+    method: "POST",
+  });
+}
+
 export function getJob(since = 0) {
   return fetchJSON(`/api/job?since=${encodeURIComponent(String(since))}`);
 }

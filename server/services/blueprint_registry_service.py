@@ -144,6 +144,7 @@ def register_app_blueprints(flask_app: Flask, deps: BlueprintRegistryDeps) -> No
                 preflight_dependencies=lambda data: preflight_dependencies_payload(data, deps.state_store()),
                 download_dependencies=lambda data: deps.dependency_download_manager().start(data),
                 download_status=lambda: deps.dependency_download_manager().status(),
+                download_cancel=lambda: deps.dependency_download_manager().cancel(),
             )
         )
     )
