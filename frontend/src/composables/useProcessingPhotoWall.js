@@ -3,6 +3,7 @@ import { computed, getCurrentInstance, onBeforeUnmount, ref, toValue, watch } fr
 export const MAX_WALL_CELL_COUNT = 40;
 export const FALLBACK_WALL_CELL_COUNT = 1;
 const WALL_FILL_MS = 200;
+const WALL_COLLECTING_DRAIN_MS = 60;
 const WALL_REPLACE_MS = 420;
 const WALL_LEAVE_MS = 220;
 const WALL_QUEUE_CAP = 80;
@@ -61,6 +62,15 @@ export function processingWallCellState(event) {
     };
   }
   return { kind: "ok", category: "other", label: "", reason: "" };
+}
+
+export function processingEventImagePath(event) {
+  return event?.path
+    || event?.image_path
+    || event?.original_path
+    || event?.thumbnail_path
+    || event?.thumb_path
+    || "";
 }
 
 function createEmptyCells(count) {
@@ -225,10 +235,10 @@ export function useProcessingPhotoWall({
 
   function scheduleDrain() {
     clearDrainTimer();
-    if (collecting.value) return;
     if (!queue.length) return;
     const hasEmpty = cells.value.some((cell) => !cell.event);
-    drainTimer = window.setTimeout(drainQueue, hasEmpty ? WALL_FILL_MS : WALL_REPLACE_MS);
+    const delay = collecting.value ? WALL_COLLECTING_DRAIN_MS : (hasEmpty ? WALL_FILL_MS : WALL_REPLACE_MS);
+    drainTimer = window.setTimeout(drainQueue, delay);
   }
 
   function clearDrainTimer() {

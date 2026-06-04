@@ -82,7 +82,7 @@ def parse_start_request(data: dict, defaults: dict) -> tuple[Optional[StartJobRe
     if not Path(folder).is_dir():
         return None, {"error": f"目录不存在: {folder}"}, 400
     if engine_requires_llm_model(engine) and not llm_model:
-        return None, {"error": "土豪模式需要选择 LLM 模型"}, 400
+        return None, {"error": "云端精评需要选择视觉模型"}, 400
 
     return (
         StartJobRequest(

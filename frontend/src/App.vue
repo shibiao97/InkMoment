@@ -12,14 +12,17 @@ import { useDesktopBackendMonitor } from "./composables/useDesktopBackendMonitor
 import { useFlowState } from "./composables/useFlowState";
 import { resolveNextStep } from "./composables/useNextStep";
 import { useSessionReset } from "./composables/useSessionReset";
+import { useTheme } from "./composables/useTheme";
 
 const ACTIVE_JOB_STATUSES = new Set(["pending", "scanning", "hashing", "grouping", "checking"]);
+const STARTUP_AUTH_TIMEOUT_MS = 6000;
 
 const booting = ref(true);
 const bootMessage = ref("正在启动本地服务...");
 const bootError = ref("");
 const { resetting, resetError, resetCurrentSession } = useSessionReset();
 const auth = useAuthSession();
+const { themeStyle } = useTheme();
 const { currentView, startedPayload, enterProcessing, clearStartedPayload, resumeStep, enterPreview, enterArena, enterDone, enterHome } = useFlowState();
 const { desktopBackendError, startDesktopBackendMonitor, stopDesktopBackendMonitor } = useDesktopBackendMonitor();
 
@@ -63,7 +66,7 @@ async function resumeFromBackend() {
     });
     if (backend) startDesktopBackendMonitor();
     bootMessage.value = "正在检查登录状态...";
-    const authStatus = await auth.refresh(true);
+    const authStatus = await auth.refresh(true, { timeoutMs: STARTUP_AUTH_TIMEOUT_MS });
     if (!authStatus?.authorized) {
       enterHome();
       return;
@@ -135,44 +138,40 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <AuthView
-    v-if="!booting && !auth.authorized.value"
-    :auth="auth"
-    @authorized="handleAuthAuthorized"
-  />
-  <AppViewHost
-    v-else-if="!booting"
-    :current-view="currentView"
-    :started-payload="startedPayload"
-    :returning-home="resetting"
-    @job-started="enterProcessing"
-    @back-home="backHome"
-    @continue-step="resumeStep"
-    @enter-preview="enterPreview"
-    @enter-arena="enterArena"
-    @enter-done="enterDone"
-  />
-  <main v-else class="app-shell app-boot-shell">
-    <div class="app-boot-panel">
-      <p class="eyebrow">InkMoment</p>
-      <h1>{{ bootMessage }}</h1>
-    </div>
-  </main>
+  <div class="theme-frame" :style="themeStyle">
+    <AuthView v-if="!booting && !auth.authorized.value" :auth="auth" @authorized="handleAuthAuthorized" />
+    <AppViewHost
+      v-else-if="!booting"
+      :current-view="currentView"
+      :started-payload="startedPayload"
+      :returning-home="resetting"
+      @job-started="enterProcessing"
+      @back-home="backHome"
+      @continue-step="resumeStep"
+      @enter-preview="enterPreview"
+      @enter-arena="enterArena"
+      @enter-done="enterDone"
+    />
+    <main v-else class="app-shell app-boot-shell">
+      <div class="app-boot-panel">
+        <p class="eyebrow">InkMoment</p>
+        <h1>{{ bootMessage }}</h1>
+      </div>
+    </main>
 
-  <div v-if="bannerText" class="session-reset-banner" :class="{ error: bannerError }">
-    {{ bannerText }}
+    <div v-if="bannerText" class="session-reset-banner" :class="{ error: bannerError }">{{ bannerText }}</div>
+
+    <DebugLogOverlay
+      v-if="isTauriRuntime()"
+      :open="debugOpen"
+      :loading="debugLoading"
+      :error="debugError"
+      :log-text="debugLogText"
+      :copied="debugCopied"
+      @open="openDebugLogs"
+      @close="debugOpen = false"
+      @refresh="refreshDebugLogs"
+      @copy="copyDebugLogs"
+    />
   </div>
-
-  <DebugLogOverlay
-    v-if="isTauriRuntime()"
-    :open="debugOpen"
-    :loading="debugLoading"
-    :error="debugError"
-    :log-text="debugLogText"
-    :copied="debugCopied"
-    @open="openDebugLogs"
-    @close="debugOpen = false"
-    @refresh="refreshDebugLogs"
-    @copy="copyDebugLogs"
-  />
 </template>

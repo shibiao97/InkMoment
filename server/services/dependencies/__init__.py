@@ -23,6 +23,11 @@ from server.services.dependencies.checks import (
 )
 from server.services.dependencies.manager import DependencyDownloadManager
 from server.services.dependencies.payloads import download_dependencies_payload, preflight_dependencies_payload
+from server.services.dependencies.repair import (
+    is_repairable_dependency,
+    repair_pyiqa_assets,
+    repair_runtime_dependencies,
+)
 
 __all__ = [
     "DEFAULT_ENDPOINTS",
@@ -45,6 +50,9 @@ __all__ = [
     "default_model_cache_dir",
     "download_dependencies_payload",
     "preflight_dependencies_payload",
+    "is_repairable_dependency",
+    "repair_pyiqa_assets",
+    "repair_runtime_dependencies",
     "resolve_model_cache_dir",
     "save_model_cache_dir",
 ]

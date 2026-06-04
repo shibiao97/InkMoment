@@ -4,6 +4,7 @@ import unittest
 from unittest import mock
 
 from server.services import auth_client_service
+from server.services.auth_client import device as device_module
 
 
 class AuthClientDeviceInfoTest(unittest.TestCase):
@@ -43,6 +44,14 @@ class AuthClientDeviceInfoTest(unittest.TestCase):
         self.assertEqual(info["fingerprint"], expected)
         self.assertEqual(info["details"]["fingerprint_source"], "unit_machine_id")
         self.assertNotIn(raw_machine_id, str(info))
+
+    def test_current_device_info_does_not_perform_reverse_dns_lookup(self):
+        os.environ["INKMOMENT_DEVICE_ID"] = "test-device-a"
+
+        with mock.patch.object(device_module.socket, "getfqdn", side_effect=AssertionError("must not resolve fqdn")):
+            info = auth_client_service.current_device_info()
+
+        self.assertEqual(info["details"]["fqdn"], info["details"]["hostname"])
 
     def _restore_env(self):
         if self.old_device_id is None:

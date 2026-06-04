@@ -8,7 +8,7 @@ def classify_job_error(exc: BaseException) -> dict:
         return {
             "category": "model_cache",
             "title": "DINOv2 模型未下载完整",
-            "message": "专家/土豪模式需要先下载本地 DINOv2 模型文件。当前缓存缺失或下载中断。",
+            "message": "质感优选/云端精评需要先下载本地 DINOv2 模型文件。当前缓存缺失或下载中断。",
             "detail": raw,
             "actions": [
                 "保持启动器窗口打开，等待模型预下载完成后重试。",
@@ -31,10 +31,10 @@ def classify_job_error(exc: BaseException) -> dict:
         return {
             "category": "llm_config",
             "title": "模型服务 API Key 不可用",
-            "message": "土豪模式需要可用的模型服务 API Key。",
+            "message": "云端精评需要可用的模型服务 API Key。",
             "detail": raw,
             "actions": [
-                "回到首页土豪模式，重新填写模型服务地址和 API Key。",
+                "回到首页云端精评，重新填写模型服务地址和 API Key。",
                 "只粘贴平台生成的 Key 本体，不要带空格、引号或状态符号。",
             ],
         }

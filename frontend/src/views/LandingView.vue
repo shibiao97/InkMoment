@@ -5,6 +5,7 @@ import EngineSwitch from "../components/EngineSwitch.vue";
 import FolderSnapshot from "../components/FolderSnapshot.vue";
 import ThemePicker from "../components/ThemePicker.vue";
 import StatusBadge from "../components/StatusBadge.vue";
+import WorkflowSidebar from "../components/WorkflowSidebar.vue";
 import LandingAdvancedOptions from "../components/landing/LandingAdvancedOptions.vue";
 import LandingDependencyPanel from "../components/landing/LandingDependencyPanel.vue";
 import LandingFlowPanel from "../components/landing/LandingFlowPanel.vue";
@@ -23,24 +24,24 @@ const emit = defineEmits(["job-started"]);
 
 const ENGINE_META = {
   fast: {
-    label: "极速模式",
-    resource: "本地依赖",
+    label: "轻量快选",
+    resource: "基础运行包",
   },
   expert: {
-    label: "专家模式",
-    resource: "本地模型",
+    label: "质感优选",
+    resource: "本地评估资源",
   },
   tycoon: {
-    label: "土豪模式",
-    resource: "模型服务",
+    label: "云端精评",
+    resource: "云端模型服务",
   },
 };
 const { branding, loadingBranding } = useBranding();
-const { themes, selectedTheme, theme } = useTheme();
+const { themes, selectedTheme } = useTheme();
 
 const folder = ref("");
 const engine = ref("fast");
-const mode = ref("move");
+const mode = ref("copy");
 const prescreenEnabled = ref(true);
 const prescreenStrength = ref("advanced");
 const faceAware = ref(true);
@@ -95,7 +96,6 @@ const {
   isDownloadingDependencies,
   lastStartPayload,
   dependencyReport,
-  dependencyDownloadDir,
   dependencyMessage,
   dependencyError,
   dependencyDownloadStatus,
@@ -108,6 +108,7 @@ const {
   dependencyPrimaryActionHint,
   dependencyPanelTitle,
   dependencyReportText,
+  dependencyManualCommands,
   downloadStatusText,
   downloadButtonText,
   resourceState,
@@ -115,7 +116,6 @@ const {
   handleDependencyCheckOnly,
   handleDependencyDownload,
   handleDependencyRecheck,
-  handlePickDependencyFolder,
   handleStart,
   copyDependencyReport,
   clearDependencyState,
@@ -219,91 +219,119 @@ function buildStartPayload() {
 </script>
 
 <template>
-  <main class="app-shell" :style="{ '--accent': theme.accent }">
+  <main class="app-shell studio-shell landing-workbench">
     <StatusBadge :label="statusText" :state="statusState" />
 
-    <header class="topbar">
-      <div class="brand">
-        <span class="brand-mark" aria-hidden="true"></span>
-        <span class="brand-name">{{ branding.app_name }}</span>
-      </div>
+    <WorkflowSidebar
+      active-step="landing"
+      :summary-value="selectedEngineLabel"
+      :summary-detail="folderSummary"
+    />
 
-      <div class="top-actions">
-        <ThemePicker v-model="selectedTheme" :themes="themes" />
-        <span class="site-tag">{{ branding.tagline }}</span>
-      </div>
-    </header>
+    <form class="studio-main start-form" @submit.prevent="handleStart">
+      <header class="topbar studio-topbar">
+        <div>
+          <p class="eyebrow">{{ loadingBranding ? "加载中" : branding.hero_eyebrow }}</p>
+          <h1>{{ branding.hero_title }}</h1>
+          <p class="subtitle">{{ branding.hero_subtitle }}</p>
+        </div>
 
-    <section class="hero hero-compact">
-      <div>
-        <p class="eyebrow">{{ loadingBranding ? "加载中" : branding.hero_eyebrow }}</p>
-        <h1>{{ branding.hero_title }}</h1>
-      </div>
-      <p class="subtitle">{{ branding.hero_subtitle }}</p>
-    </section>
+        <div class="top-actions">
+          <ThemePicker v-model="selectedTheme" :themes="themes" />
+        </div>
+      </header>
 
-    <form class="start-form" @submit.prevent="handleStart">
+      <section class="studio-panel import-panel">
+        <div class="panel-title">
+          <div>
+            <p class="eyebrow">导入照片</p>
+            <h2>选择这次要处理的照片文件夹</h2>
+          </div>
+          <span>{{ selectedEngineMeta.resource }}</span>
+        </div>
+
+        <label class="field-label" for="folder-input">照片文件夹</label>
+        <div class="field-row">
+          <input
+            id="folder-input"
+            v-model="folder"
+            type="text"
+            placeholder="粘贴照片文件夹绝对路径"
+            spellcheck="false"
+            required
+          >
+          <button
+            v-if="canPickFolder"
+            class="btn-ghost"
+            type="button"
+            :disabled="isPickingFolder || isStarting"
+            @click="handlePickFolder"
+          >
+            {{ isPickingFolder ? "选择中" : "选择文件夹" }}
+          </button>
+          <button
+            class="btn-primary"
+            type="submit"
+            :disabled="isStarting || isCheckingDependencies || isDownloadingDependencies || !tycoonReady"
+          >
+            {{ startButtonText }}
+          </button>
+        </div>
+
+        <FolderSnapshot :snapshot="snapshot" />
+      </section>
+
+      <section class="studio-panel analysis-mode-panel">
+        <div class="panel-title">
+          <div>
+            <p class="eyebrow">筛选方案</p>
+            <h2>{{ selectedEngineLabel }}</h2>
+          </div>
+          <span>{{ modelSummary }}</span>
+        </div>
+
+        <EngineSwitch
+          v-model="engine"
+          :disabled="isStarting || isCheckingDependencies || isDownloadingDependencies"
+        />
+
+        <LandingLlmPanel
+          v-if="llmPanelVisible"
+          v-model:base-url="llmBaseUrlInput"
+          v-model:api-key="llmKeyInput"
+          v-model:selected-model="selectedLlmModel"
+          :status="llmStatus"
+          :models="llmModels"
+          :concurrency="llmConcurrency"
+          :diagnostics="llmDiagnostics"
+          :loading="llmLoading"
+          :checking-models="checkingModels"
+          :saving="llmSaving"
+          :configured="llmConfigured"
+          :message="llmMessage"
+          :error="llmError"
+          @refresh="refreshLlm({ forceModels: true })"
+          @save="saveLlmConfig"
+          @clear="clearLlmConfig"
+          @refresh-models="refreshModels"
+        />
+      </section>
+    </form>
+
+    <aside class="studio-inspector">
       <LandingFlowPanel :items="flowItems" />
-
-      <EngineSwitch
-        v-model="engine"
-        :disabled="isStarting || isCheckingDependencies || isDownloadingDependencies"
+      <LandingAdvancedOptions
+        v-model:mode="mode"
+        v-model:prescreen-enabled="prescreenEnabled"
+        v-model:face-aware="faceAware"
+        v-model:prescreen-strength="prescreenStrength"
+        v-model:threshold-near="thresholdNear"
+        v-model:threshold-far="thresholdFar"
+        v-model:near-minutes="nearMinutes"
+        :face-aware-disabled="faceAwareDisabled"
       />
-
-      <LandingLlmPanel
-        v-if="llmPanelVisible"
-        v-model:base-url="llmBaseUrlInput"
-        v-model:api-key="llmKeyInput"
-        v-model:selected-model="selectedLlmModel"
-        :status="llmStatus"
-        :models="llmModels"
-        :concurrency="llmConcurrency"
-        :diagnostics="llmDiagnostics"
-        :loading="llmLoading"
-        :checking-models="checkingModels"
-        :saving="llmSaving"
-        :configured="llmConfigured"
-        :message="llmMessage"
-        :error="llmError"
-        @refresh="refreshLlm({ forceModels: true })"
-        @save="saveLlmConfig"
-        @clear="clearLlmConfig"
-        @refresh-models="refreshModels"
-      />
-
-      <label class="field-label" for="folder-input">照片文件夹</label>
-      <div class="field-row">
-        <input
-          id="folder-input"
-          v-model="folder"
-          type="text"
-          placeholder="粘贴照片文件夹绝对路径"
-          spellcheck="false"
-          required
-        >
-        <button
-          v-if="canPickFolder"
-          class="btn-ghost"
-          type="button"
-          :disabled="isPickingFolder || isStarting"
-          @click="handlePickFolder"
-        >
-          {{ isPickingFolder ? "选择中" : "选择文件夹" }}
-        </button>
-        <button
-          class="btn-primary"
-          type="submit"
-          :disabled="isStarting || isCheckingDependencies || isDownloadingDependencies || !tycoonReady"
-        >
-          {{ startButtonText }}
-        </button>
-      </div>
-
-      <FolderSnapshot :snapshot="snapshot" />
 
       <LandingDependencyPanel
-        v-model:download-dir="dependencyDownloadDir"
-        :can-pick-folder="canPickFolder"
         :is-checking="isCheckingDependencies"
         :is-downloading="isDownloadingDependencies"
         :report="dependencyReport"
@@ -320,29 +348,18 @@ function buildStartPayload() {
         :can-download="canDownloadDependencies"
         :download-button-text="downloadButtonText"
         :report-text="dependencyReportText"
+        :manual-commands="dependencyManualCommands"
         :copied="dependencyCopied"
         @check="handleDependencyCheckOnly"
-        @pick-folder="handlePickDependencyFolder"
         @recheck="handleDependencyRecheck"
         @download="handleDependencyDownload"
         @copy="copyDependencyReport"
-      />
-
-      <LandingAdvancedOptions
-        v-model:mode="mode"
-        v-model:prescreen-enabled="prescreenEnabled"
-        v-model:face-aware="faceAware"
-        v-model:prescreen-strength="prescreenStrength"
-        v-model:threshold-near="thresholdNear"
-        v-model:threshold-far="thresholdFar"
-        v-model:near-minutes="nearMinutes"
-        :face-aware-disabled="faceAwareDisabled"
       />
 
       <p class="form-error">{{ startError }}</p>
       <p v-if="lastStartPayload" class="start-note">
         已向 Flask API 发起任务，正在进入 Vue 处理页。
       </p>
-    </form>
+    </aside>
   </main>
 </template>

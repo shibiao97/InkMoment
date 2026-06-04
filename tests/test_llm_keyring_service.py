@@ -17,6 +17,7 @@ class LLMKeyringServiceTest(unittest.TestCase):
         }
         os.environ.pop("ARK_API_KEY", None)
         os.environ.pop("ARK_BASE_URL", None)
+        llm_service._ARK_KEY_SECRET_LOADED = False
         self.addCleanup(self._restore_env)
 
     def test_set_ark_key_persists_to_keyring_without_plaintext_file(self):
@@ -52,6 +53,30 @@ class LLMKeyringServiceTest(unittest.TestCase):
         )
         self.assertFalse(key_file.exists())
 
+    def test_startup_load_can_skip_keyring_secret(self):
+        keyring = FakeKeyring({(llm_service.ARK_KEYRING_SERVICE, llm_service.ARK_KEYRING_ACCOUNT): "stored-secret"})
+        with tempfile.TemporaryDirectory() as tmp:
+            key_file = Path(tmp) / "ark_key"
+            config_file = Path(tmp) / "llm_config.json"
+            config_file.write_text('{"base_url": "https://llm.example.com"}', encoding="utf-8")
+
+            with self._patched_paths(key_file, config_file), patch.dict(sys.modules, {"keyring": keyring}):
+                llm_service.load_llm_config_from_file(include_secret=False)
+
+        self.assertEqual(os.environ["ARK_BASE_URL"], "https://llm.example.com/v1")
+        self.assertIsNone(os.environ.get("ARK_API_KEY"))
+
+    def test_ark_key_status_lazy_loads_keyring_secret(self):
+        keyring = FakeKeyring({(llm_service.ARK_KEYRING_SERVICE, llm_service.ARK_KEYRING_ACCOUNT): "stored-secret"})
+        with tempfile.TemporaryDirectory() as tmp:
+            with self._patched_paths(Path(tmp) / "ark_key", Path(tmp) / "llm_config.json"):
+                with patch.dict(sys.modules, {"keyring": keyring}):
+                    status = llm_service.get_ark_key_status()
+
+        self.assertTrue(status["configured"])
+        self.assertEqual(status["source"], "keyring")
+        self.assertEqual(os.environ["ARK_API_KEY"], "stored-secret")
+
     def test_file_fallback_remains_available_without_keyring(self):
         with tempfile.TemporaryDirectory() as tmp:
             key_file = Path(tmp) / "ark_key"
@@ -85,6 +110,7 @@ class LLMKeyringServiceTest(unittest.TestCase):
                 os.environ.pop(name, None)
             else:
                 os.environ[name] = value
+        llm_service._ARK_KEY_SECRET_LOADED = False
 
 
 class FakeKeyring(types.SimpleNamespace):

@@ -50,7 +50,7 @@ class StartServiceTest(unittest.TestCase):
 
         self.assertIsNone(request)
         self.assertEqual(status, 400)
-        self.assertEqual(payload["error"], "土豪模式需要选择 LLM 模型")
+        self.assertEqual(payload["error"], "云端精评需要选择视觉模型")
 
 
 if __name__ == "__main__":

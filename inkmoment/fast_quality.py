@@ -1,6 +1,6 @@
-"""极速模式质量评估：零模型依赖，纯 numpy + opencv。
+"""轻量快选质量评估：零模型依赖，纯 numpy + opencv。
 
-与 quality.py（专家模式）的差异：
+与 quality.py（质感优选）的差异：
 - 不调 mediapipe、不依赖任何深度学习权重
 - 多锐度指标融合：拉普拉斯 + Tenengrad + FFT 高频比 + 边缘宽度（Marziliano）
 - 区分失焦 vs 运动模糊：FFT 谱的方向性 + 边缘宽度
@@ -16,7 +16,7 @@ from __future__ import annotations
 import math
 from typing import Literal, Optional
 
-import cv2  # 极速模式硬依赖；缺失就让本模块导入失败，启动期暴露
+import cv2  # 轻量快选硬依赖；缺失就让本模块导入失败，启动期暴露
 import numpy as np
 from PIL import Image
 
@@ -31,7 +31,7 @@ from inkmoment.quality import (
 Strength = Literal["standard", "aggressive"]
 
 
-# 极速模式独有的 flag / 原因
+# 轻量快选独有的 flag / 原因
 EXTRA_REASONS = {
     "motion_blur": "运动模糊 · 手抖或模特动",
     "subject_blurry": "主体不够清晰",
@@ -463,7 +463,7 @@ def analyze_image_fast(
     file_size: int,
     strength: Strength | str = "standard",
 ) -> QualityInfo:
-    """极速模式：纯传统 CV，返回与 QualityInfo 字段兼容的结果。
+    """轻量快选：纯传统 CV，返回与 QualityInfo 字段兼容的结果。
 
     face_* 字段恒为 None / 0 / False。
     """
@@ -483,7 +483,7 @@ def analyze_image_fast(
     entropy = _entropy(arr)
 
     # ---- 多锐度指标 ----
-    # 拉普拉斯（中心 60% 取大者，与专家模式保持一致的 baseline）
+    # 拉普拉斯（中心 60% 取大者，与质感优选保持一致的 baseline）
     lap = max(_laplacian_variance(arr), _laplacian_variance(_center_crop(arr, 0.6)))
     teng = _tenengrad(arr)
     high_ratio, motion_aniso = _fft_high_freq_ratio(arr)

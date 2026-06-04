@@ -2,6 +2,7 @@ import { computed, onBeforeUnmount, ref } from "vue";
 import { cancelJob, getJob, streamJob } from "../api/inkmoment";
 
 const POLL_INTERVAL_MS = 700;
+const TERMINAL_STATUSES = new Set(["done", "error", "cancelled", "idle"]);
 
 function formatElapsed(seconds) {
   if (seconds == null || Number.isNaN(seconds) || seconds < 0) return "";
@@ -23,6 +24,8 @@ export function useJobPolling() {
   let eventSource = null;
   let eventSeq = 0;
   let currentTaskId = "";
+  let terminalBackfillPromise = null;
+  let eventGeneration = 0;
 
   const progressPercent = computed(() => {
     if (!job.value?.total) return 0;
@@ -32,7 +35,7 @@ export function useJobPolling() {
   const elapsedText = computed(() => formatElapsed(job.value?.elapsed || 0));
 
   const isTerminal = computed(() => {
-    return ["done", "error", "cancelled", "idle"].includes(job.value?.status);
+    return TERMINAL_STATUSES.has(job.value?.status);
   });
 
   function mergeEvents(nextEvents = []) {
@@ -50,6 +53,8 @@ export function useJobPolling() {
     events.value = [];
     eventSeq = 0;
     currentTaskId = "";
+    eventGeneration += 1;
+    terminalBackfillPromise = null;
   }
 
   function syncTaskCursor(data) {
@@ -58,6 +63,7 @@ export function useJobPolling() {
     if (currentTaskId && currentTaskId !== nextTaskId) {
       events.value = [];
       eventSeq = 0;
+      eventGeneration += 1;
     }
     currentTaskId = nextTaskId;
   }
@@ -68,10 +74,61 @@ export function useJobPolling() {
     syncTaskCursor(data);
     job.value = data;
     mergeEvents(data.events || []);
-    if (typeof data.event_seq === "number" && data.event_seq > eventSeq && !data.events?.length) {
+    const terminal = isTerminalPayload(data);
+    if (!terminal && typeof data.event_seq === "number" && data.event_seq > eventSeq && !data.events?.length) {
       eventSeq = data.event_seq;
     }
-    if (isTerminal.value) stop();
+    if (terminal) {
+      backfillTerminalEvents(data);
+      stop();
+    }
+  }
+
+  function isTerminalPayload(data) {
+    return TERMINAL_STATUSES.has(data?.status);
+  }
+
+  function shouldBackfillTerminalEvents(data) {
+    return (
+      isTerminalPayload(data)
+      && events.value.length === 0
+      && !data.events?.length
+      && Number(data.event_seq || 0) > 0
+    );
+  }
+
+  function replaceEventHistory(nextEvents = []) {
+    if (!nextEvents.length || nextEvents.length <= events.value.length) return;
+    events.value = [];
+    eventSeq = 0;
+    mergeEvents([...nextEvents].sort((left, right) => (left.seq || 0) - (right.seq || 0)));
+  }
+
+  function backfillTerminalEvents(data) {
+    if (!shouldBackfillTerminalEvents(data) || terminalBackfillPromise) return;
+    const expectedTaskId = data?.task_id ? String(data.task_id) : currentTaskId;
+    const generation = eventGeneration;
+    const request = getJob(0)
+      .then((snapshot) => {
+        if (generation !== eventGeneration) return;
+        const snapshotTaskId = snapshot?.task_id ? String(snapshot.task_id) : "";
+        if (expectedTaskId && snapshotTaskId && snapshotTaskId !== expectedTaskId) return;
+        syncTaskCursor(snapshot);
+        job.value = snapshot || data;
+        replaceEventHistory(snapshot?.events || []);
+      })
+      .catch((err) => {
+        if (generation !== eventGeneration) return;
+        if (events.value.length === 0) {
+          error.value = err.message || "读取照片墙记录失败";
+        }
+      })
+      .finally(() => {
+        if (terminalBackfillPromise === request) {
+          terminalBackfillPromise = null;
+        }
+      });
+    terminalBackfillPromise = request;
   }
 
   async function refresh() {

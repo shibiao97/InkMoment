@@ -52,10 +52,10 @@ class QualityInfo:
     clipiqa_score: Optional[float] = None
     # 每张脸的明细：bbox/sharpness/eye_score/det_score/area_ratio；用于多脸硬拒规则
     faces_detail: list[dict] = field(default_factory=list)
-    # 土豪模式：LLM 给的判定 + 中文短理由（其他模式恒为 None）
+    # 云端精评：LLM 给的判定 + 中文短理由（其他模式恒为 None）
     llm_verdict: Optional[str] = None  # "pass" | "reject"
     llm_reason: Optional[str] = None
-    # 极速模式专属：fast_quality 产出的中间量；expert 模式恒为 None
+    # 轻量快选专属：fast_quality 产出的中间量；质感优选恒为 None
     blur_combined: Optional[float] = None  # 0-1，归一化综合锐度
     motion_anisotropy: Optional[float] = None  # 0-1，FFT 方向集中度
     edge_width_pix: Optional[float] = None  # Marziliano 平均边宽
@@ -360,7 +360,7 @@ def analyze_basic(
     llm_verdict: Optional[str] = None,
     llm_reason: Optional[str] = None,
 ) -> QualityInfo:
-    """土豪模式专用：仅算公共基础指标 + 接收 LLM 判定，不跑任何本地拒片规则。
+    """云端精评专用：仅算公共基础指标 + 接收 LLM 判定，不跑任何本地拒片规则。
 
     返回的 QualityInfo：
       - 基础信号（尺寸、亮度、对比度、曝光比、entropy、blur_score）正常填写，
@@ -509,8 +509,8 @@ def _rejecting_flags(flags: list[str]) -> list[str]:
         "eyes_closed",
         "all_eyes_closed",
         "llm_reject",
-        # 美学三模型 2-of-3 低 → 真的拒；之前不在 hard 里，导致 expert
-        # 模式独有的美学信号完全不参与拒片决策
+        # 美学三模型 2-of-3 低 → 真的拒；之前不在 hard 里，导致质感优选
+        # 独有的美学信号完全不参与拒片决策
         "low_aesthetic",
     }
     return [f for f in flags if f in hard]
@@ -627,14 +627,14 @@ def _face_signals_from_data(face_data: list[dict], img: Image.Image) -> dict:
 
 
 def _compute_face_signals(img: Image.Image) -> dict:
-    """独立人脸检测（非 expert 模式、或 face_data 未传入时的后备路径）。
+    """独立人脸检测（非质感优选、或 face_data 未传入时的后备路径）。
     用 InsightFace 直接检测。
 
     **不再静默吞异常**（A2 修复）：
     - vision.extract_faces 返回 [] = "图里没人脸" → 合法，返回 {face_count: 0}
     - 抛 VisionUnavailable / 任何其他异常 → 向上抛，由 worker 区分是
       整图 skip 还是把任务挂掉。以前 `except Exception: return {}` 会让
-      expert 模式跑到一半 InsightFace 崩了也假装"这张没人脸"，废片放过。
+      质感优选跑到一半 InsightFace 崩了也假装"这张没人脸"，废片放过。
     """
     from inkmoment import vision
 

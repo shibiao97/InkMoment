@@ -134,4 +134,35 @@ describe("useJobPolling", () => {
 
     expect(polling.events.value).toEqual([{ seq: 1, message: "new task" }]);
   });
+
+  it("backfills image events when a terminal stream payload only carries event_seq", async () => {
+    const source = createEventSource();
+    streamJob.mockReturnValue(source);
+    getJob.mockResolvedValue({
+      task_id: "job-1",
+      status: "done",
+      done: 2,
+      total: 2,
+      event_seq: 2,
+      events: [
+        { seq: 1, message: "first image" },
+        { seq: 2, message: "second image" },
+      ],
+    });
+
+    const polling = useJobPolling();
+    polling.start();
+    source.emit("job", {
+      task_id: "job-1",
+      status: "done",
+      done: 2,
+      total: 2,
+      event_seq: 2,
+      events: [],
+    });
+    await flushPromises();
+
+    expect(getJob).toHaveBeenCalledWith(0);
+    expect(polling.events.value.map((event) => event.message)).toEqual(["first image", "second image"]);
+  });
 });

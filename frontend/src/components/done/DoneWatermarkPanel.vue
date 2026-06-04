@@ -120,16 +120,6 @@ const watermarkExifRows = computed(() => {
             <span>{{ template.desc }}</span>
           </button>
         </div>
-
-        <div class="watermark-exif-vue">
-          <span>预览照片 EXIF</span>
-          <dl>
-            <template v-for="[label, value] in watermarkExifRows" :key="label">
-              <dt>{{ label }}</dt>
-              <dd :class="{ empty: !value }">{{ value || "未读到" }}</dd>
-            </template>
-          </dl>
-        </div>
       </aside>
 
       <section class="watermark-preview-vue">
@@ -147,14 +137,28 @@ const watermarkExifRows = computed(() => {
           <img v-else-if="watermarkPreviewSrc" :src="watermarkPreviewSrc" alt="水印预览">
           <span v-else>暂无预览</span>
         </div>
+      </section>
+
+      <aside class="watermark-details-vue">
+        <div class="watermark-exif-vue">
+          <span>预览照片 EXIF</span>
+          <dl>
+            <template v-for="[label, value] in watermarkExifRows" :key="label">
+              <dt>{{ label }}</dt>
+              <dd :class="{ empty: !value }">{{ value || "未读到" }}</dd>
+            </template>
+          </dl>
+        </div>
+
         <div class="watermark-progress-vue">
+          <span>导出状态</span>
           <div class="progress-bar">
             <div class="progress-fill" :style="{ width: `${watermark.progressPercent.value}%` }"></div>
           </div>
           <p>{{ watermarkStatusText }}</p>
           <p v-if="watermark.error.value" class="watermark-error-vue">{{ watermark.error.value }}</p>
         </div>
-      </section>
+      </aside>
     </div>
   </section>
 </template>

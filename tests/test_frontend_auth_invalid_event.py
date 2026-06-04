@@ -111,6 +111,21 @@ class FrontendAuthInvalidEventTest(unittest.TestCase):
             });
             await assert.rejects(() => fetchJSON("/api/status"));
             assert.equal(window.events.length, 0);
+
+            globalThis.fetch = async (_url, options = {}) => new Promise((_resolve, reject) => {
+              options.signal.addEventListener("abort", () => {
+                const error = new Error("aborted");
+                error.name = "AbortError";
+                reject(error);
+              });
+            });
+            await assert.rejects(
+              () => fetchJSON("/api/auth/status", { timeoutMs: 1 }),
+              (error) => {
+                assert.equal(error.code, "request_timeout");
+                return true;
+              },
+            );
             """
             ).replace("__HTTP_URL__", json.dumps(http_path.as_uri()))
             result = subprocess.run(

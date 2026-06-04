@@ -20,7 +20,10 @@ from server.services.dependencies import (
     configure_runtime_model_cache,
     default_model_cache_dir,
     download_dependencies_payload,
+    is_repairable_dependency,
     preflight_dependencies_payload,
+    repair_pyiqa_assets,
+    repair_runtime_dependencies,
     resolve_model_cache_dir,
     save_model_cache_dir,
 )
@@ -45,7 +48,10 @@ __all__ = [
     "configure_runtime_model_cache",
     "default_model_cache_dir",
     "download_dependencies_payload",
+    "is_repairable_dependency",
     "preflight_dependencies_payload",
+    "repair_pyiqa_assets",
+    "repair_runtime_dependencies",
     "resolve_model_cache_dir",
     "save_model_cache_dir",
 ]

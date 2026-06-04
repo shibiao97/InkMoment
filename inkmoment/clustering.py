@@ -306,7 +306,7 @@ def _face_overlap_similarity(faces1, faces2) -> float:
 
 
 def _dinov2_similarity(v1, v2) -> float:
-    """专家模式核心信号；缺失即任务失败。
+    """质感优选核心信号；缺失即任务失败。
 
     DINOv2 CLS token 在自然图片上的余弦相似度分布约 [0.0, 1.0]，
     不相关图片 ~0.1-0.3，相似场景 ~0.5-0.7，近乎相同 ~0.8+。
@@ -314,7 +314,7 @@ def _dinov2_similarity(v1, v2) -> float:
     """
     if v1 is None or v2 is None:
         raise RuntimeError(
-            "DINOv2 向量缺失。专家模式应在 _run_job 启动前 prewarm 模型；"
+            "DINOv2 向量缺失。质感优选应在 _run_job 启动前 prewarm 模型；"
             "若到这里仍为 None，说明 vision.extract_dinov2 静默失败了。"
         )
     s = float(np.dot(v1, v2))
@@ -336,7 +336,7 @@ def _filename_similarity(name1: str, name2: str) -> float:
 def _pair_similarity(info_a, info_b, meta_a, meta_b) -> float:
     """加权融合多个信号。返回 [0, 1]。
 
-    DINOv2 缺失 → 抛 RuntimeError（专家模式核心信号，不静默降级）。
+    DINOv2 缺失 → 抛 RuntimeError（质感优选核心信号，不静默降级）。
     """
     from pathlib import Path
 

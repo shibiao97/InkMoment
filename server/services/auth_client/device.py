@@ -35,6 +35,9 @@ def current_device_info() -> dict[str, Any]:
         fingerprint = facade._hash_device_fingerprint(machine_identifier, fingerprint_source)
 
     hostname = socket.gethostname() or platform.node()
+    # Avoid socket.getfqdn(): on macOS it can block on reverse DNS/mDNS during
+    # desktop startup before the authorization HTTP timeout even starts.
+    fqdn = hostname
     return {
         "fingerprint": fingerprint,
         "name": hostname,
@@ -46,7 +49,7 @@ def current_device_info() -> dict[str, Any]:
             "fingerprint_source": fingerprint_source,
             "hostname": hostname,
             "node": platform.node(),
-            "fqdn": socket.getfqdn(),
+            "fqdn": fqdn,
             "system": platform.system(),
             "platform": platform.platform(),
             "release": platform.release(),

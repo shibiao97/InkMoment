@@ -1,4 +1,4 @@
-"""极速模式分组：零模型依赖，纯传统 CV。
+"""轻量快选分组：零模型依赖，纯传统 CV。
 
 四阶段渐进：
 1. 时间硬切段：间隔 > HARD_BREAK_SECONDS → 不可跨段合并
@@ -7,7 +7,7 @@
    inlier 数是"是不是同一物理场景"的硬证据，决定 sim 的最终值
 4. complete linkage 聚类（保留反链式特性）→ 限制组大小 → 组内按 quality 排序
 
-每张图需要预先在 ImageInfo 上挂的字段（fast 模式专属，由 grouper._process_one 写入）：
+每张图需要预先在 ImageInfo 上挂的字段（轻量快选专属，由 grouper._process_one 写入）：
 - phash / dhash / whash / ahash：4 个 64-bit hex hash
 - color_hist：144 维 float32（HSV 3×3 块 × 16 bins，归一化）
 - orb_descs：(N, 32) uint8，N≤500；None 表示提取失败
@@ -21,7 +21,7 @@ import re
 from pathlib import Path
 from typing import Optional, Sequence
 
-import cv2  # 极速模式硬依赖：ORB 匹配 / RANSAC；缺失就在模块导入时挂掉
+import cv2  # 轻量快选硬依赖：ORB 匹配 / RANSAC；缺失就在模块导入时挂掉
 import numpy as np
 
 logger = logging.getLogger("inkmoment")

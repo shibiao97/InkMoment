@@ -25,7 +25,7 @@ EXPERT_DEPENDENCY_MODULES = (
 @dataclass(frozen=True)
 class ExpertEngine:
     name: str = "expert"
-    label: str = "专家模式"
+    label: str = "质感优选"
     requires_llm_model: bool = False
     requires_dino_model: bool = True
     requires_opencv_orb: bool = False

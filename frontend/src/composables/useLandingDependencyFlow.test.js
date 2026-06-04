@@ -6,7 +6,7 @@ import {
   preflightDependencies,
   startJob,
 } from "../api/inkmoment";
-import { useLandingDependencyFlow } from "./useLandingDependencyFlow";
+import { buildManualCommands, useLandingDependencyFlow } from "./useLandingDependencyFlow";
 
 vi.mock("../api/inkmoment", () => ({
   downloadDependencies: vi.fn(),
@@ -40,7 +40,7 @@ function createFlow(options = {}) {
   const flow = useLandingDependencyFlow({
     buildStartPayload: () => ({ ...payload }),
     validateStartInputs: () => true,
-    selectedEngineLabel: "专家模式",
+    selectedEngineLabel: "质感优选",
     sleep: () => Promise.resolve(),
     downloadWaitMs: 100,
     downloadPollMs: 0,
@@ -68,7 +68,7 @@ describe("useLandingDependencyFlow", () => {
       .mockResolvedValueOnce({
         ok: true,
         engine: "expert",
-        engine_label: "专家模式",
+        engine_label: "质感优选",
         missing: [],
         download_dir: "/models",
       });
@@ -91,7 +91,7 @@ describe("useLandingDependencyFlow", () => {
     preflightDependencies.mockResolvedValueOnce({
       ok: false,
       engine: "expert",
-      engine_label: "专家模式",
+      engine_label: "质感优选",
       can_download: true,
       missing: [{ id: "model", label: "模型", detail: "missing", downloadable: true }],
     });
@@ -148,5 +148,103 @@ describe("useLandingDependencyFlow", () => {
     expect(flow.isStarting.value).toBe(false);
     expect(flow.isDownloadingDependencies.value).toBe(false);
     expect(getDependencyDownloadStatus).not.toHaveBeenCalled();
+  });
+
+  it("builds manual install commands for missing pyiqa dependencies", async () => {
+    preflightDependencies.mockResolvedValueOnce({
+      ok: false,
+      engine: "expert",
+      engine_label: "质感优选",
+      missing: [{
+        id: "python:pyiqa",
+        label: "pyiqa",
+        detail: "Python 模块不可导入：ModuleNotFoundError",
+        downloadable: false,
+      }],
+      manual_required: true,
+    });
+    const { flow } = createFlow();
+
+    await flow.handleDependencyCheckOnly();
+
+    expect(flow.dependencyManualCommands.value.join("\n")).toContain("'pyiqa>=0.1.10' 'timm>=0.9'");
+    expect(flow.dependencyManualCommands.value.join("\n")).not.toContain("opencv-python");
+    expect(flow.dependencyReportText.value).toContain("recommended_commands:");
+  });
+
+  it("allows one-click handling for repairable manual dependencies", async () => {
+    preflightDependencies
+      .mockResolvedValueOnce({
+        ok: false,
+        engine: "expert",
+        engine_label: "质感优选",
+        can_download: true,
+        missing: [{
+          id: "python:pyiqa",
+          label: "pyiqa",
+          detail: "Python 模块不可导入：FileNotFoundError: missing pyiqa/models",
+          downloadable: false,
+          repairable: true,
+        }],
+        manual_required: true,
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        engine: "expert",
+        engine_label: "质感优选",
+        missing: [],
+      });
+    downloadDependencies.mockResolvedValueOnce({
+      id: "download-1",
+      status: "done",
+      message: "模块资源已修复完成。",
+      repaired: [{ id: "python:pyiqa" }],
+    });
+    getDependencyDownloadStatus.mockResolvedValueOnce({
+      id: "download-1",
+      status: "done",
+      message: "模块资源已修复完成。",
+    });
+    const { flow } = createFlow();
+
+    await flow.handleDependencyCheckOnly();
+
+    expect(flow.dependencyManualCount.value).toBe(1);
+    expect(flow.dependencyActionableCount.value).toBe(1);
+    expect(flow.canDownloadDependencies.value).toBe(true);
+
+    await flow.handleDependencyDownload();
+
+    expect(downloadDependencies).toHaveBeenCalledWith({ engine: "expert" });
+    expect(flow.dependencyMessage.value).toBe("处理完成，当前模式运行资源已就绪");
+  });
+});
+
+describe("buildManualCommands", () => {
+  it("recommends the full mode install, package command, and model download when needed", () => {
+    const commands = buildManualCommands({
+      engine: "expert",
+      missing: [
+        { id: "python:pyiqa", downloadable: false },
+        { id: "model:facebook/dinov2-small", downloadable: true },
+      ],
+    });
+
+    expect(commands[0]).toContain("'torch>=2.2'");
+    expect(commands.some((command) => command.includes("'pyiqa>=0.1.10' 'timm>=0.9'"))).toBe(true);
+    expect(commands.some((command) => command.includes("scripts/download_models.py"))).toBe(true);
+  });
+
+  it("recommends manual model download even when the missing model is auto-downloadable", () => {
+    const commands = buildManualCommands({
+      engine: "expert",
+      missing: [
+        { id: "model:facebook/dinov2-small", downloadable: true },
+      ],
+    });
+
+    expect(commands).toEqual([
+      ".venv/bin/python scripts/download_models.py --model facebook/dinov2-small",
+    ]);
   });
 });

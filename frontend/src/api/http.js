@@ -1,6 +1,7 @@
 import { resolveApiUrl } from "./runtime";
 
 export const AUTH_INVALID_EVENT = "inkmoment-auth-invalid";
+const REQUEST_TIMEOUT_CODE = "request_timeout";
 
 const AUTH_INVALID_CODES = new Set([
   "auth_server_not_configured",
@@ -12,17 +13,38 @@ const AUTH_INVALID_CODES = new Set([
 ]);
 
 export async function fetchJSON(url, options = {}) {
+  const { timeoutMs = 0, signal, ...fetchOptions } = options;
   const headers = { ...(options.headers || {}) };
-  const body = options.body && typeof options.body === "object"
-    ? JSON.stringify(options.body)
-    : options.body;
+  const body = fetchOptions.body && typeof fetchOptions.body === "object"
+    ? JSON.stringify(fetchOptions.body)
+    : fetchOptions.body;
 
   if (body && !headers["Content-Type"]) {
     headers["Content-Type"] = "application/json";
   }
 
-  const response = await fetch(resolveApiUrl(url), { ...options, body, headers });
-  const text = await response.text();
+  const timeoutController = createTimeoutController(timeoutMs, signal);
+  let response;
+  let text;
+  try {
+    response = await fetch(resolveApiUrl(url), {
+      ...fetchOptions,
+      body,
+      headers,
+      signal: timeoutController.signal,
+    });
+    text = await response.text();
+  } catch (err) {
+    if (timeoutController.timedOut) {
+      const error = new Error("请求超时");
+      error.status = 0;
+      error.code = REQUEST_TIMEOUT_CODE;
+      throw error;
+    }
+    throw err;
+  } finally {
+    timeoutController.clear();
+  }
   let data;
 
   try {
@@ -42,6 +64,44 @@ export async function fetchJSON(url, options = {}) {
   }
 
   return data;
+}
+
+function createTimeoutController(timeoutMs, upstreamSignal) {
+  let timedOut = false;
+  let timeoutId = null;
+  if (!Number.isFinite(Number(timeoutMs)) || Number(timeoutMs) <= 0 || typeof AbortController !== "function") {
+    return {
+      get timedOut() {
+        return false;
+      },
+      signal: upstreamSignal,
+      clear() {},
+    };
+  }
+  const controller = new AbortController();
+  const timeout = Number(timeoutMs);
+  const abortFromUpstream = () => controller.abort(upstreamSignal?.reason);
+  if (upstreamSignal?.aborted) {
+    abortFromUpstream();
+  } else if (upstreamSignal?.addEventListener) {
+    upstreamSignal.addEventListener("abort", abortFromUpstream, { once: true });
+  }
+  timeoutId = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeout);
+  return {
+    get timedOut() {
+      return timedOut;
+    },
+    signal: controller.signal,
+    clear() {
+      if (timeoutId) clearTimeout(timeoutId);
+      if (upstreamSignal?.removeEventListener) {
+        upstreamSignal.removeEventListener("abort", abortFromUpstream);
+      }
+    },
+  };
 }
 
 function notifyAuthInvalid(url, status, data) {

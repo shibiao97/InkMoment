@@ -26,7 +26,7 @@ FAST_DEPENDENCY_MODULES = (
 @dataclass(frozen=True)
 class FastEngine:
     name: str = "fast"
-    label: str = "极速模式"
+    label: str = "轻量快选"
     requires_llm_model: bool = False
     requires_dino_model: bool = False
     requires_opencv_orb: bool = True

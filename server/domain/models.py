@@ -92,7 +92,7 @@ class JobState:
     prescreen_enabled: bool = True
     prescreen_strength: str = "standard"
     face_aware: bool = True
-    # 土豪模式：用户选定的模型服务模型 ID
+    # 云端精评：用户选定的模型服务模型 ID
     llm_model: Optional[str] = None
     # 流式事件——每过一张图后端追加一条，前端 streaming log 用
     recent_events: list[dict] = field(default_factory=list)

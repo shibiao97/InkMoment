@@ -12,6 +12,7 @@ import os
 import shutil
 import subprocess
 import sys
+import importlib.util
 from pathlib import Path
 
 
@@ -60,6 +61,10 @@ def add_pyinstaller_collection_args(cmd: list[str]) -> None:
         cmd.extend(["--collect-data", module])
     for module in PYINSTALLER_COLLECT_SUBMODULES:
         cmd.extend(["--collect-submodules", module])
+    pyiqa_spec = importlib.util.find_spec("pyiqa")
+    if pyiqa_spec and pyiqa_spec.origin:
+        pyiqa_root = Path(pyiqa_spec.origin).parent
+        cmd.extend(["--add-data", f"{pyiqa_root}{os.pathsep}pyiqa"])
 
 
 def main() -> int:

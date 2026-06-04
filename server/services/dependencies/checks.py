@@ -110,7 +110,14 @@ def _download_hf_model(model_id: str, cache_dir: Path) -> str:
     raise last_error
 
 
-def _manual_item(item_id: str, label: str, detail: str, hint: str = "") -> dict[str, Any]:
+def _manual_item(
+    item_id: str,
+    label: str,
+    detail: str,
+    hint: str = "",
+    *,
+    repairable: bool = False,
+) -> dict[str, Any]:
     return {
         "id": item_id,
         "kind": "dependency",
@@ -118,4 +125,5 @@ def _manual_item(item_id: str, label: str, detail: str, hint: str = "") -> dict[
         "detail": detail,
         "downloadable": False,
         "hint": hint,
+        "repairable": repairable,
     }

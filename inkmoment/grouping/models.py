@@ -20,16 +20,16 @@ class ImageInfo:
     # 同 stem 同目录的伴随文件（与 primary 一起搬运，不单独参与分析）
     # 例如 primary = IMG_001.CR2，companions = ["IMG_001.JPG"]
     companions: list[str] = field(default_factory=list)
-    # ---- 视觉模型产物（专家模式 / vision.py 生成）----
+    # ---- 视觉模型产物（质感优选 / vision.py 生成）----
     dinov2: Optional[Any] = None  # 384 维 float32 np.ndarray，L2 归一
     aesthetic_score: Optional[float] = None  # 1-10 美学分（NIMA）
     musiq_score: Optional[float] = None  # 0-100 技术质量（pyiqa MUSIQ）
     clipiqa_score: Optional[float] = None  # 0-1 LAION 美学（pyiqa CLIP-IQA+）
     face_embeddings: Optional[list] = None  # [512 维 np.ndarray, ...]，InsightFace ArcFace
-    # ---- 土豪模式（tycoon）专属 ----
+    # ---- 云端精评（tycoon）专属 ----
     llm_verdict: Optional[str] = None  # "pass" | "reject"
     llm_reason: Optional[str] = None  # 一句中文短理由
-    # ---- 极速模式签名（fast_clustering 消费）----
+    # ---- 轻量快选签名（fast_clustering 消费）----
     dhash: Optional[str] = None  # 64 位 hex
     whash: Optional[str] = None  # 64 位 hex
     ahash: Optional[str] = None  # 64 位 hex

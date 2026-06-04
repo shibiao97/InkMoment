@@ -5,8 +5,8 @@ import DoneWinnersGrid from "../components/done/DoneWinnersGrid.vue";
 import ErrorPanel from "../components/ErrorPanel.vue";
 import LoadingState from "../components/LoadingState.vue";
 import StatusBadge from "../components/StatusBadge.vue";
+import WorkflowSidebar from "../components/WorkflowSidebar.vue";
 import { useDoneResults } from "../composables/useDoneResults";
-import { useTheme } from "../composables/useTheme";
 import { useWatermarkExport } from "../composables/useWatermarkExport";
 
 defineProps({
@@ -18,7 +18,6 @@ defineProps({
 
 const emit = defineEmits(["back-home", "continue-arena", "job-started"]);
 
-const { theme } = useTheme();
 const {
   status,
   winners,
@@ -78,10 +77,18 @@ onMounted(loadPage);
 </script>
 
 <template>
-  <main class="app-shell done-shell-vue" :style="{ '--accent': theme.accent }">
-    <StatusBadge :label="statusLabel" :state="statusState" />
+  <main class="app-shell studio-shell flow-workbench done-shell-vue">
+    <WorkflowSidebar
+      active-step="done"
+      summary-label="最终导出"
+      :summary-value="`${kept.toLocaleString()} 张胜出`"
+      :summary-detail="status?.folder || '等待结果'"
+    />
 
-    <header class="done-topbar">
+    <section class="studio-main flow-main">
+      <StatusBadge :label="statusLabel" :state="statusState" />
+
+      <header class="done-topbar">
       <div>
         <p class="eyebrow">完成</p>
         <h1>这些是你留下的。</h1>
@@ -182,6 +189,7 @@ onMounted(loadPage);
           <code>{{ item.reason }}</code>
         </li>
       </ul>
-    </details>
+      </details>
+    </section>
   </main>
 </template>

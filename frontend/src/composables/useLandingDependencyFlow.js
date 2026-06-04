@@ -14,6 +14,30 @@ import {
 const DOWNLOAD_BUSY_STATUSES = new Set(["pending", "running"]);
 const DEFAULT_DOWNLOAD_WAIT_MS = 60 * 60 * 1000;
 const DEFAULT_DOWNLOAD_POLL_MS = 1500;
+const PYTHON_PACKAGE_COMMANDS = {
+  "python:cv2": "uv pip install --python .venv/bin/python 'opencv-contrib-python>=4.9'",
+  "python:huggingface_hub": "uv pip install --python .venv/bin/python 'huggingface-hub>=0.23'",
+  "python:imagehash": "uv pip install --python .venv/bin/python 'imagehash>=4.3'",
+  "python:inkmoment.fast_quality": ".venv/bin/python -m pip install -e .",
+  "python:inkmoment.fast_clustering": ".venv/bin/python -m pip install -e .",
+  "python:insightface": "uv pip install --python .venv/bin/python 'insightface>=0.7' 'onnxruntime>=1.16'",
+  "python:onnxruntime": "uv pip install --python .venv/bin/python 'onnxruntime>=1.16'",
+  "python:openai": "uv pip install --python .venv/bin/python 'openai>=1.40'",
+  "python:pyiqa": "uv pip install --python .venv/bin/python 'pyiqa>=0.1.10' 'timm>=0.9'",
+  "python:timm": "uv pip install --python .venv/bin/python 'pyiqa>=0.1.10' 'timm>=0.9'",
+  "python:torch": "uv pip install --python .venv/bin/python 'torch>=2.2' 'torchvision>=0.17'",
+  "python:torchvision": "uv pip install --python .venv/bin/python 'torch>=2.2' 'torchvision>=0.17'",
+  "python:transformers": "uv pip install --python .venv/bin/python 'transformers>=4.40' 'huggingface-hub>=0.23'",
+};
+const MODE_PACKAGE_COMMANDS = {
+  expert: "uv pip install --python .venv/bin/python 'torch>=2.2' 'torchvision>=0.17' 'transformers>=4.40' 'insightface>=0.7' 'onnxruntime>=1.16' 'pyiqa>=0.1.10' 'timm>=0.9'",
+  tycoon: "uv pip install --python .venv/bin/python 'torch>=2.2' 'torchvision>=0.17' 'transformers>=4.40' 'insightface>=0.7' 'onnxruntime>=1.16' 'openai>=1.40'",
+  fast: "uv pip install --python .venv/bin/python 'opencv-contrib-python>=4.9' 'imagehash>=4.3'",
+};
+const MODEL_DOWNLOAD_COMMANDS = {
+  "model:facebook/dinov2-small": ".venv/bin/python scripts/download_models.py --model facebook/dinov2-small",
+};
+const OPENCV_REPAIR_COMMAND = ".venv/bin/python -m pip uninstall -y opencv-python opencv-python-headless && uv pip install --python .venv/bin/python --force-reinstall --no-deps 'opencv-contrib-python>=4.9'";
 
 export function useLandingDependencyFlow({
   buildStartPayload,
@@ -46,31 +70,41 @@ export function useLandingDependencyFlow({
   const dependencyManualCount = computed(() => (
     dependencyReport.value?.missing || []
   ).filter((item) => !item.downloadable).length);
+  const dependencyActionableCount = computed(() => (
+    dependencyReport.value?.missing || []
+  ).filter((item) => item.downloadable || item.repairable).length);
+  const dependencyManualCommands = computed(() => buildManualCommands(dependencyReport.value));
   const canDownloadDependencies = computed(() => {
     if (!dependencyReport.value) return false;
-    return dependencyDownloadableCount.value > 0;
+    return dependencyActionableCount.value > 0;
   });
   const dependencyPrimaryActionHint = computed(() => {
     if (!dependencyReport.value) return "先检查当前模式需要的运行资源。";
     if (dependencyReport.value.ok) return "当前模式可以直接开始。";
-    if (dependencyDownloadableCount.value > 0 && dependencyManualCount.value > 0) {
-      return "可以先下载模型资源，剩余 Python 依赖需要重新安装或重新打包。";
+    if (dependencyActionableCount.value > 0 && dependencyManualCount.value > dependencyActionableCount.value) {
+      return "可以先一键处理可修复资源；剩余项按推荐命令处理后重新检查。";
     }
-    if (dependencyDownloadableCount.value > 0) return "可自动下载缺失模型资源。";
-    return "当前缺失项无法自动下载，需要按提示处理后重新检查。";
+    if (dependencyActionableCount.value > 0) {
+      return "可一键检查并处理当前模式需要的资源；网络受限时可查看推荐命令。";
+    }
+    if (dependencyDownloadableCount.value > 0 && dependencyManualCount.value > 0) {
+      return "可以先下载模型资源；剩余 Python 依赖按推荐命令安装后重新检查。";
+    }
+    if (dependencyDownloadableCount.value > 0) return "可自动下载缺失模型资源；网络受限时也可以按推荐命令手动下载。";
+    return "当前缺失项无法自动下载，需要按推荐命令处理后重新检查。";
   });
   const downloadStatusText = computed(() => {
     const status = dependencyDownloadStatus.value?.status || "";
     if (status === "pending") return "排队中";
-    if (status === "running") return "下载中";
-    if (status === "done") return "下载完成";
-    if (status === "error") return "下载失败";
-    return "下载中";
+    if (status === "running") return "处理中";
+    if (status === "done") return "处理完成";
+    if (status === "error") return "处理失败";
+    return "处理中";
   });
   const downloadButtonText = computed(() => {
     if (isDownloadingDependencies.value) return downloadStatusText.value;
     if (dependencyDownloadStatus.value?.status === "error") return "重试下载";
-    return pendingStartPayload.value ? "下载并继续" : "下载缺失资源";
+    return pendingStartPayload.value ? "处理并继续" : "检查并处理资源";
   });
   const dependencyReportText = computed(() => {
     const report = dependencyReport.value;
@@ -84,6 +118,13 @@ export function useLandingDependencyFlow({
     ];
     for (const item of report.missing || []) {
       lines.push(`- ${item.label}: ${item.detail}${item.hint ? ` (${item.hint})` : ""}`);
+    }
+    if (dependencyManualCommands.value.length) {
+      lines.push("");
+      lines.push("recommended_commands:");
+      for (const command of dependencyManualCommands.value) {
+        lines.push(`  ${command}`);
+      }
     }
     if (dependencyError.value) {
       lines.push(`error=${dependencyError.value}`);
@@ -122,7 +163,7 @@ export function useLandingDependencyFlow({
     return { state: "blocked", label: "未就绪" };
   });
   const startButtonText = computed(() => {
-    if (isDownloadingDependencies.value) return "下载中";
+    if (isDownloadingDependencies.value) return "处理中";
     if (isCheckingDependencies.value) return "检查中";
     if (isStarting.value) return "启动中";
     return "开始";
@@ -285,32 +326,32 @@ export function useLandingDependencyFlow({
       if (finalStatus?.download_dir) {
         dependencyDownloadDir.value = finalStatus.download_dir;
       }
-      dependencyMessage.value = finalStatus?.message || "下载完成";
+      dependencyMessage.value = finalStatus?.message || "处理完成";
       if (shouldLaunchAfterDownload && !canContinuePendingStartPayload(payload)) {
-        dependencyMessage.value = "下载完成，但启动参数已变化，请重新点击开始以使用最新设置。";
+        dependencyMessage.value = "处理完成，但启动参数已变化，请重新点击开始以使用最新设置。";
         return;
       }
       const report = await runDependencyPreflight(payload, { includeFolder: shouldLaunchAfterDownload });
       if (downloadSeq !== dependencyDownloadSeq || !report) return;
       if (!report.ok) {
         startError.value = shouldLaunchAfterDownload
-          ? "下载完成，但仍有资源未就绪"
+          ? "处理完成，但仍有资源未就绪"
           : "";
-        dependencyMessage.value = "下载完成，但当前模式仍有资源未就绪";
+        dependencyMessage.value = "处理完成，但当前模式仍有资源未就绪";
         return;
       }
       if (shouldLaunchAfterDownload) {
         if (!canContinuePendingStartPayload(payload)) {
-          dependencyMessage.value = "下载完成，但启动参数已变化，请重新点击开始以使用最新设置。";
+          dependencyMessage.value = "处理完成，但启动参数已变化，请重新点击开始以使用最新设置。";
           return;
         }
         await launchJob(payload);
       } else {
-        dependencyMessage.value = "下载完成，当前模式运行资源已就绪";
+        dependencyMessage.value = "处理完成，当前模式运行资源已就绪";
       }
     } catch (error) {
       if (downloadSeq === dependencyDownloadSeq) {
-        dependencyError.value = friendlyDependencyError(error, "下载失败");
+        dependencyError.value = friendlyDependencyError(error, "处理失败");
       }
     } finally {
       if (downloadSeq === dependencyDownloadSeq) {
@@ -324,11 +365,10 @@ export function useLandingDependencyFlow({
     try {
       return await downloadDependencies({
         engine: payload.engine,
-        model_dir: dependencyDownloadDir.value,
       });
     } catch (error) {
       if (error.status === 409 && DOWNLOAD_BUSY_STATUSES.has(error.data?.status)) {
-        dependencyMessage.value = error.data.message || "已有下载任务正在运行，已接入当前任务";
+        dependencyMessage.value = error.data.message || "已有处理任务正在运行，已接入当前任务";
         return error.data;
       }
       throw error;
@@ -342,7 +382,7 @@ export function useLandingDependencyFlow({
       if (downloadSeq !== dependencyDownloadSeq) return null;
       dependencyDownloadStatus.value = status || null;
       if (jobId && status?.id && status.id !== jobId) {
-        throw new Error("下载任务状态不匹配，请重新点击下载");
+        throw new Error("处理任务状态不匹配，请重新点击处理");
       }
       if (status?.message) {
         dependencyMessage.value = status.message;
@@ -351,11 +391,11 @@ export function useLandingDependencyFlow({
         return status;
       }
       if (status?.status === "error") {
-        throw new Error(status.error || status.message || "资源下载失败");
+        throw new Error(status.error || status.message || "资源处理失败");
       }
       await sleep(downloadPollMs);
     }
-    throw new Error("资源下载超时，请检查网络后重试");
+    throw new Error("资源处理超时，请检查网络后重试");
   }
 
   async function copyDependencyReport() {
@@ -409,10 +449,12 @@ export function useLandingDependencyFlow({
     dependencyMissingCount,
     dependencyDownloadableCount,
     dependencyManualCount,
+    dependencyActionableCount,
     canDownloadDependencies,
     dependencyPrimaryActionHint,
     dependencyPanelTitle,
     dependencyReportText,
+    dependencyManualCommands,
     downloadStatusText,
     downloadButtonText,
     resourceState,
@@ -429,6 +471,31 @@ export function useLandingDependencyFlow({
   };
 }
 
+export function buildManualCommands(report) {
+  if (!report?.missing?.length) return [];
+  const missingItems = report.missing || [];
+  const commands = [];
+  const manualItems = missingItems.filter((item) => !item.downloadable);
+  const modelItems = missingItems.filter((item) => item.id?.startsWith("model:"));
+  if (!manualItems.length && !modelItems.length) return [];
+
+  const modeCommand = MODE_PACKAGE_COMMANDS[report.engine];
+  if (manualItems.length && modeCommand) commands.push(modeCommand);
+
+  for (const item of manualItems) {
+    const command = PYTHON_PACKAGE_COMMANDS[item.id];
+    if (command) commands.push(command);
+  }
+  for (const item of modelItems) {
+    const modelId = item.id.replace(/^model:/, "");
+    commands.push(MODEL_DOWNLOAD_COMMANDS[item.id] || `.venv/bin/python scripts/download_models.py --model ${modelId}`);
+  }
+  if (manualItems.some((item) => /cv2|opencv/.test(item.id || ""))) {
+    commands.push(OPENCV_REPAIR_COMMAND);
+  }
+  return [...new Set(commands)];
+}
+
 export function friendlyDependencyError(error, fallback) {
   const code = error?.code || "";
   const message = error?.message || fallback;
@@ -443,7 +510,7 @@ export function friendlyDependencyError(error, fallback) {
     return `${message} 请处理授权状态后再继续。`;
   }
   if (status === 409) {
-    return error?.data?.message || message || "已有资源下载任务正在运行。";
+    return error?.data?.message || message || "已有资源处理任务正在运行。";
   }
   if (/PermissionError|denied|权限|Operation not permitted/i.test(message)) {
     return `${message} 请换一个有写入权限的下载目录。`;

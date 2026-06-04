@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 
 from server.settings import Settings
@@ -11,11 +12,28 @@ MODEL_CACHE_SETTING = "model_cache_dir"
 
 
 def default_model_cache_dir() -> Path:
+    bundled_dir = bundled_resource_cache_dir()
+    if bundled_dir is not None:
+        return bundled_dir
     return default_state_dir() / "models"
+
+
+def bundled_resource_cache_dir() -> Path | None:
+    """Return the install-local model folder for bundled desktop sidecars."""
+    if not getattr(sys, "frozen", False):
+        return None
+    executable = Path(sys.executable).expanduser()
+    if not executable.name:
+        return None
+    return executable.parent / "models"
 
 
 def resolve_model_cache_dir(store: LocalStateStore, requested_dir: str | None = None) -> Path:
     configured = (requested_dir or "").strip()
+    if not configured:
+        bundled_dir = bundled_resource_cache_dir()
+        if bundled_dir is not None:
+            return bundled_dir
     if not configured:
         configured = str(store.get_setting(MODEL_CACHE_SETTING, default="") or "")
     if not configured:

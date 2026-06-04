@@ -11,24 +11,24 @@ const model = defineModel({ type: String, required: true });
 const engines = [
   {
     id: "fast",
-    title: "极速模式",
-    description: "本地 CV · 无模型下载 · 适合先快速整理大量照片",
+    title: "轻量快选",
+    description: "本地基础评分 · 无模型缓存 · 适合快速整理大量照片",
   },
   {
     id: "expert",
-    title: "专家模式",
-    description: "本地模型评分 · 自动下载缓存 · 适合更严格的批量筛选",
+    title: "质感优选",
+    description: "本地多维评分 · 支持资源缓存 · 适合更严格的批量筛选",
   },
   {
     id: "tycoon",
-    title: "土豪模式",
-    description: "视觉大模型判定 · 需要 API Key · 适合少量精修图",
+    title: "云端精评",
+    description: "远程视觉评审 · 需要 API Key · 适合少量精选照片",
   },
 ];
 </script>
 
 <template>
-  <div class="engine-switch" role="radiogroup" aria-label="算法模式">
+  <div class="engine-switch" role="radiogroup" aria-label="筛选方案">
     <button
       v-for="engine in engines"
       :key="engine.id"

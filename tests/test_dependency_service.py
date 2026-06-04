@@ -89,15 +89,45 @@ class DependencyServiceTest(unittest.TestCase):
 
     @patch("server.services.dependency_service._hf_model_cache_status")
     @patch("server.services.dependency_service._module_import_error")
-    def test_manual_dependency_blocks_automatic_download(self, import_error, cache_status):
+    def test_non_repairable_manual_dependency_blocks_automatic_download(self, import_error, cache_status):
         def fake_import(module):
             return "ImportError: missing torch" if module == "torch" else ""
 
         import_error.side_effect = fake_import
         cache_status.return_value = {
             "model": "facebook/dinov2-small",
-            "cached": False,
-            "missing": ["config.json"],
+            "cached": True,
+            "missing": [],
+            "error": None,
+        }
+
+        payload, status = preflight_dependencies_payload(
+            {
+                "engine": "expert",
+                "folder": str(self.photos),
+            },
+            self.store,
+        )
+
+        self.assertEqual(status, 200)
+        self.assertFalse(payload["ok"])
+        self.assertFalse(payload["download_required"])
+        self.assertTrue(payload["manual_required"])
+        self.assertFalse(payload["can_download"])
+
+    @patch("server.services.dependency_service._hf_model_cache_status")
+    @patch("server.services.dependency_service._module_import_error")
+    def test_repairable_manual_dependency_can_use_one_click_handler(self, import_error, cache_status):
+        def fake_import(module):
+            if module == "pyiqa":
+                return "FileNotFoundError: missing pyiqa/models"
+            return ""
+
+        import_error.side_effect = fake_import
+        cache_status.return_value = {
+            "model": "facebook/dinov2-small",
+            "cached": True,
+            "missing": [],
             "error": None,
         }
 
@@ -113,10 +143,14 @@ class DependencyServiceTest(unittest.TestCase):
         self.assertFalse(payload["ok"])
         self.assertTrue(payload["download_required"])
         self.assertTrue(payload["manual_required"])
-        self.assertFalse(payload["can_download"])
+        self.assertTrue(payload["can_download"])
+        pyiqa_item = next(item for item in payload["missing"] if item["id"] == "python:pyiqa")
+        self.assertTrue(pyiqa_item["repairable"])
 
     @patch("server.services.dependency_service._hf_model_cache_status")
-    def test_download_persists_model_dir_when_cache_already_exists(self, cache_status):
+    @patch("server.services.dependency_service.repair_runtime_dependencies")
+    def test_download_persists_model_dir_when_cache_already_exists(self, repair_dependencies, cache_status):
+        repair_dependencies.return_value = {"ok": True, "checked": [], "repaired": [], "skipped": []}
         model_dir = self.root / "chosen-models"
         cache_status.return_value = {
             "model": "facebook/dinov2-small",
@@ -138,6 +172,36 @@ class DependencyServiceTest(unittest.TestCase):
         self.assertEqual(self.store.get_setting(MODEL_CACHE_SETTING), str(model_dir.resolve()))
         self.assertEqual(os.environ["INKMOMENT_MODEL_CACHE_DIR"], str(model_dir.resolve()))
         self.assertEqual(os.environ["HUGGINGFACE_HUB_CACHE"], str(model_dir.resolve() / "huggingface" / "hub"))
+
+    @patch("server.services.dependency_service._hf_model_cache_status")
+    @patch("server.services.dependency_service.repair_runtime_dependencies")
+    def test_download_repairs_manual_resources_without_model_download(self, repair_dependencies, cache_status):
+        repair_dependencies.return_value = {
+            "ok": True,
+            "checked": [{"id": "python:pyiqa", "message": "pyiqa 模块资源已补齐。"}],
+            "repaired": [{"id": "python:pyiqa", "message": "pyiqa 模块资源已补齐。"}],
+            "skipped": [],
+        }
+        cache_status.return_value = {
+            "model": "facebook/dinov2-small",
+            "cached": True,
+            "missing": [],
+            "error": None,
+        }
+
+        payload, status = download_dependencies_payload(
+            {
+                "engine": "expert",
+                "model_dir": str(self.root / "models"),
+            },
+            self.store,
+        )
+
+        self.assertEqual(status, 200)
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["repaired"], [{"id": "python:pyiqa", "message": "pyiqa 模块资源已补齐。"}])
+        self.assertEqual(payload["downloaded"], [])
+        self.assertIn("模块资源已修复", payload["message"])
 
     @patch("server.services.dependency_service.download_dependencies_payload")
     def test_download_manager_runs_download_in_background(self, download_payload):

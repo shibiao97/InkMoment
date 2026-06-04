@@ -7,8 +7,8 @@ import ArenaZoomOverlay from "../components/arena/ArenaZoomOverlay.vue";
 import ErrorPanel from "../components/ErrorPanel.vue";
 import LoadingState from "../components/LoadingState.vue";
 import StatusBadge from "../components/StatusBadge.vue";
+import WorkflowSidebar from "../components/WorkflowSidebar.vue";
 import { formatMeta, useArenaGroup } from "../composables/useArenaGroup";
-import { useTheme } from "../composables/useTheme";
 
 defineProps({
   returningHome: {
@@ -19,7 +19,6 @@ defineProps({
 
 const emit = defineEmits(["back-home", "done"]);
 
-const { theme } = useTheme();
 const {
   status,
   group,
@@ -172,10 +171,18 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <main class="app-shell arena-shell" :style="{ '--accent': theme.accent }">
-    <StatusBadge :label="statusLabel" :state="statusState" />
+  <main class="app-shell studio-shell flow-workbench arena-shell">
+    <WorkflowSidebar
+      active-step="arena"
+      summary-label="人工选片"
+      :summary-value="done ? '已完成' : title"
+      :summary-detail="status?.folder || '等待分组'"
+    />
 
-    <header class="arena-topbar">
+    <section class="studio-main flow-main">
+      <StatusBadge :label="statusLabel" :state="statusState" />
+
+      <header class="arena-topbar">
       <div>
         <p class="eyebrow">人工选片</p>
         <h1>{{ title }}</h1>
@@ -278,6 +285,7 @@ onBeforeUnmount(() => {
         @close="closeZoom"
         @set-scale="setZoom"
       />
-    </Teleport>
+      </Teleport>
+    </section>
   </main>
 </template>

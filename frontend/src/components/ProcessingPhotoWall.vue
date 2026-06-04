@@ -1,6 +1,6 @@
 <script setup>
 import { imageUrl } from "../api/http";
-import { useProcessingPhotoWall } from "../composables/useProcessingPhotoWall";
+import { processingEventImagePath, useProcessingPhotoWall } from "../composables/useProcessingPhotoWall";
 
 const props = defineProps({
   events: {
@@ -29,6 +29,10 @@ const {
   status: () => props.status,
   total: () => props.total,
 });
+
+function cellImagePath(cell) {
+  return processingEventImagePath(cell?.event);
+}
 </script>
 
 <template>
@@ -54,9 +58,9 @@ const {
         ]"
       >
         <img
-          v-if="cell.event?.path"
+          v-if="cellImagePath(cell)"
           class="wall-image-vue"
-          :src="imageUrl(cell.event.path, 260)"
+          :src="imageUrl(cellImagePath(cell), 260)"
           :alt="cell.event.name || '正在分析的照片'"
           loading="lazy"
         >

@@ -4,6 +4,7 @@ import ErrorPanel from "../components/ErrorPanel.vue";
 import NextStepPanel from "../components/NextStepPanel.vue";
 import ProcessingPhotoWall from "../components/ProcessingPhotoWall.vue";
 import StatusBadge from "../components/StatusBadge.vue";
+import WorkflowSidebar from "../components/WorkflowSidebar.vue";
 import { useJobPolling } from "../composables/useJobPolling";
 import { useNextStep } from "../composables/useNextStep";
 
@@ -91,107 +92,120 @@ onMounted(start);
 </script>
 
 <template>
-  <main class="app-shell processing-shell">
-    <StatusBadge :label="statusLabel" :state="statusState" />
-
-    <header class="processing-topbar">
-      <div>
-        <p class="eyebrow">分析中</p>
-        <h1>{{ title }}</h1>
-        <p class="processing-folder">{{ job?.folder || startedPayload?.folder }}</p>
-      </div>
-      <div class="processing-actions">
-        <button class="btn-ghost" type="button" :disabled="returningHome" @click="emit('back-home')">
-          {{ returningHome ? "返回中" : "回首页" }}
-        </button>
-        <button
-          class="btn-ghost"
-          type="button"
-          :disabled="isCancelling || ['done', 'error', 'cancelled'].includes(job?.status)"
-          @click="cancel"
-        >
-          {{ isCancelling ? "中止中" : "中止分析" }}
-        </button>
-      </div>
-    </header>
-
-    <section class="progress-panel">
-      <div class="progress-head">
-        <span>{{ job?.label || progressText }}</span>
-        <span>{{ elapsedText ? `已用 ${elapsedText}` : "" }}</span>
-      </div>
-      <div class="progress-bar" :class="{ indeterminate: !job?.total }">
-        <div class="progress-fill" :style="{ width: job?.total ? `${progressPercent}%` : '36%' }"></div>
-      </div>
-      <div class="progress-counters">
-        <div>
-          <strong>{{ job?.done?.toLocaleString?.() || 0 }}</strong>
-          <span>已过目</span>
-        </div>
-        <div>
-          <strong>{{ job?.total?.toLocaleString?.() || "—" }}</strong>
-          <span>总张数</span>
-        </div>
-        <div>
-          <strong>{{ rejectedCount.toLocaleString() }}</strong>
-          <span>检出失败</span>
-        </div>
-        <div>
-          <strong>{{ skippedCount.toLocaleString() }}</strong>
-          <span>无法读取</span>
-        </div>
-      </div>
-    </section>
-
-    <ErrorPanel :title="processingErrorTitle" :message="processingErrorMessage" />
-
-    <ProcessingPhotoWall :events="events" :status="job?.status || ''" :total="job?.total || 0" />
-
-    <NextStepPanel
-      v-if="job?.status === 'done'"
-      :next-step="nextStep"
-      :status="status"
-      :loading="loadingNextStep"
-      :error="nextStepError"
-      :returning-home="returningHome"
-      @refresh="refreshStatus"
-      @back-home="emit('back-home')"
-      @continue="emit('continue', $event)"
+  <main class="app-shell studio-shell flow-workbench processing-shell">
+    <WorkflowSidebar
+      active-step="processing"
+      summary-label="当前任务"
+      :summary-value="statusLabel"
+      :summary-detail="job?.folder || startedPayload?.folder || '等待照片文件夹'"
     />
 
-    <section class="event-panel">
-      <div class="panel-head">
-        <h2>实时记录</h2>
-        <span>{{ events.length }} 条</span>
-      </div>
-      <div v-if="recentEvents.length" class="event-list">
-        <article
-          v-for="event in recentEvents"
-          :key="event.seq"
-          class="event-row"
-          :class="{ reject: event.reject, fail: !event.ok && !event.reject }"
-        >
-          <span class="event-name">{{ event.name || "—" }}</span>
-          <span class="event-verdict">{{ event.verdict || "—" }}</span>
-          <span class="event-reason">{{ event.reason || event.engine || "" }}</span>
-          <span v-if="event.signals?.length" class="event-signals">
-            <span
-              v-for="signal in event.signals"
-              :key="`${event.seq}-${signal.kind}-${signal.label}`"
-              class="event-signal"
-              :class="`is-${signal.kind}`"
-            >
-              <b>{{ signal.label }}</b>
-              {{ signal.value }}
-            </span>
-          </span>
-        </article>
-      </div>
-      <p v-else class="empty-events">等待后台返回第一条图片记录...</p>
-    </section>
+    <section class="studio-main flow-main">
+      <StatusBadge :label="statusLabel" :state="statusState" />
 
-    <p class="start-note">
-      照片墙会跟随实时事件更新；进入分组阶段后会收拢展示，稍后进入下一步。
-    </p>
+      <header class="processing-topbar">
+        <div>
+          <p class="eyebrow">分析中</p>
+          <h1>{{ title }}</h1>
+          <p class="processing-folder">{{ job?.folder || startedPayload?.folder }}</p>
+        </div>
+        <div class="processing-actions">
+          <button class="btn-ghost" type="button" :disabled="returningHome" @click="emit('back-home')">
+            {{ returningHome ? "返回中" : "回首页" }}
+          </button>
+          <button
+            class="btn-ghost"
+            type="button"
+            :disabled="isCancelling || ['done', 'error', 'cancelled'].includes(job?.status)"
+            @click="cancel"
+          >
+            {{ isCancelling ? "中止中" : "中止分析" }}
+          </button>
+        </div>
+      </header>
+
+      <section class="progress-panel">
+        <div class="progress-head">
+          <span>{{ job?.label || progressText }}</span>
+          <span>{{ elapsedText ? `已用 ${elapsedText}` : "" }}</span>
+        </div>
+        <div class="progress-bar" :class="{ indeterminate: !job?.total }">
+          <div class="progress-fill" :style="{ width: job?.total ? `${progressPercent}%` : '36%' }"></div>
+        </div>
+        <div class="progress-counters">
+          <div>
+            <strong>{{ job?.done?.toLocaleString?.() || 0 }}</strong>
+            <span>已过目</span>
+          </div>
+          <div>
+            <strong>{{ job?.total?.toLocaleString?.() || "—" }}</strong>
+            <span>总张数</span>
+          </div>
+          <div>
+            <strong>{{ rejectedCount.toLocaleString() }}</strong>
+            <span>检出失败</span>
+          </div>
+          <div>
+            <strong>{{ skippedCount.toLocaleString() }}</strong>
+            <span>无法读取</span>
+          </div>
+        </div>
+      </section>
+
+      <ErrorPanel :title="processingErrorTitle" :message="processingErrorMessage" />
+
+      <section class="processing-workspace">
+        <div class="processing-wall-column">
+          <ProcessingPhotoWall :events="events" :status="job?.status || ''" :total="job?.total || 0" />
+
+          <NextStepPanel
+            v-if="job?.status === 'done'"
+            :next-step="nextStep"
+            :status="status"
+            :loading="loadingNextStep"
+            :error="nextStepError"
+            :returning-home="returningHome"
+            @refresh="refreshStatus"
+            @back-home="emit('back-home')"
+            @continue="emit('continue', $event)"
+          />
+        </div>
+
+        <section class="event-panel processing-event-panel">
+          <div class="panel-head">
+            <h2>实时记录</h2>
+            <span>{{ events.length }} 条</span>
+          </div>
+          <div v-if="recentEvents.length" class="event-list">
+            <article
+              v-for="event in recentEvents"
+              :key="event.seq"
+              class="event-row"
+              :class="{ reject: event.reject, fail: !event.ok && !event.reject }"
+            >
+              <span class="event-name">{{ event.name || "—" }}</span>
+              <span class="event-verdict">{{ event.verdict || "—" }}</span>
+              <span class="event-reason">{{ event.reason || event.engine || "" }}</span>
+              <span v-if="event.signals?.length" class="event-signals">
+                <span
+                  v-for="signal in event.signals"
+                  :key="`${event.seq}-${signal.kind}-${signal.label}`"
+                  class="event-signal"
+                  :class="`is-${signal.kind}`"
+                >
+                  <b>{{ signal.label }}</b>
+                  {{ signal.value }}
+                </span>
+              </span>
+            </article>
+          </div>
+          <p v-else class="empty-events">等待后台返回第一条图片记录...</p>
+        </section>
+      </section>
+
+      <p class="start-note">
+        照片墙会跟随实时事件更新；进入分组阶段后会收拢展示，稍后进入下一步。
+      </p>
+    </section>
   </main>
 </template>

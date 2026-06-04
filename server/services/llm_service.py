@@ -21,10 +21,12 @@ ARK_KEY_FILE = CONFIG_DIR / "ark_key"
 LLM_CONFIG_FILE = CONFIG_DIR / "llm_config.json"
 ARK_KEYRING_SERVICE = "InkMoment"
 ARK_KEYRING_ACCOUNT = "ark_api_key"
+_ARK_KEY_SECRET_LOADED = False
 
 
 def get_ark_key_status() -> dict:
     """返回模型服务 Key 和 URL 当前状态。"""
+    ensure_ark_key_loaded()
     key = os.environ.get("ARK_API_KEY", "")
     base_url, base_url_source = effective_llm_base_url()
     payload = {
@@ -117,9 +119,10 @@ def clear_ark_key() -> tuple[dict, int]:
 
 def list_llm_models(force: bool = False) -> tuple[dict, int]:
     """检查当前模型服务中哪些模型实际可用于视觉调用。"""
+    ensure_ark_key_loaded()
     if not os.getenv("ARK_API_KEY"):
         return {
-            "error": "未配置模型服务 API Key（请在土豪模式卡片下方点击设置）",
+            "error": "未配置模型服务 API Key（请在云端精评卡片下方点击设置）",
             "models": [],
         }, 412
     try:
@@ -146,6 +149,7 @@ def list_llm_models(force: bool = False) -> tuple[dict, int]:
 
 def diagnostics_payload() -> dict:
     """本地运行环境诊断：不触发模型服务调用，不产生费用。"""
+    ensure_ark_key_loaded()
     modules = [
         "flask",
         "PIL",
@@ -197,7 +201,7 @@ def get_llm_concurrency() -> tuple[dict, int]:
         return {"error": str(exc), "limit": None}, 500
 
 
-def load_llm_config_from_file() -> None:
+def load_llm_config_from_file(*, include_secret: bool = True) -> None:
     """启动时调；env var 优先，其次本地配置文件。"""
     if not os.environ.get("ARK_BASE_URL"):
         cfg_url = (read_llm_config().get("base_url") or "").strip()
@@ -208,7 +212,16 @@ def load_llm_config_from_file() -> None:
             except ValueError as exc:
                 logger.warning(f"模型服务地址配置无效: {exc}")
 
-    if os.environ.get("ARK_API_KEY"):
+    if not include_secret:
+        return
+    ensure_ark_key_loaded()
+
+
+def ensure_ark_key_loaded() -> None:
+    """Load the persisted LLM API key only on paths that actually need it."""
+    global _ARK_KEY_SECRET_LOADED
+    if _ARK_KEY_SECRET_LOADED or os.environ.get("ARK_API_KEY"):
+        _ARK_KEY_SECRET_LOADED = True
         return
     loaded = load_ark_key_secret()
     if loaded.value:
@@ -218,6 +231,7 @@ def load_llm_config_from_file() -> None:
         logger.info(f"已从 {loaded.source} 载入 ARK_API_KEY")
     elif loaded.error:
         logger.warning(f"读取 ARK key 失败: {loaded.error}")
+    _ARK_KEY_SECRET_LOADED = True
 
 
 def default_llm_base_url() -> str:
@@ -292,6 +306,8 @@ def load_ark_key_secret() -> SecretResult:
 
 
 def save_ark_key_secret(key: str) -> SecretResult:
+    global _ARK_KEY_SECRET_LOADED
+    _ARK_KEY_SECRET_LOADED = True
     return save_secret(
         key,
         service=ARK_KEYRING_SERVICE,

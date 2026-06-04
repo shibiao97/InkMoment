@@ -1,4 +1,4 @@
-"""专家模式视觉栈：DINOv2 + NIMA + MUSIQ + CLIP-IQA+ + InsightFace 人脸。
+"""质感优选视觉栈：DINOv2 + NIMA + MUSIQ + CLIP-IQA+ + InsightFace 人脸。
 
 设计原则：**不静默降级**。任何依赖缺失或模型加载失败都直接抛出异常。
 
@@ -47,7 +47,7 @@ DINO_REQUIRED_FILES = ["config.json", "preprocessor_config.json", "model.safeten
 
 
 class VisionUnavailable(RuntimeError):
-    """专家模式视觉栈某个组件不可用。"""
+    """质感优选视觉栈某个组件不可用。"""
 
 
 def _device():
@@ -123,7 +123,7 @@ def _ensure_dinov2():
             import torch  # noqa
             from transformers import AutoImageProcessor, AutoModel
         except ImportError as e:
-            raise VisionUnavailable(f"DINOv2 依赖缺失：{e}。专家模式需要 `pip install torch transformers`。") from e
+            raise VisionUnavailable(f"DINOv2 依赖缺失：{e}。质感优选需要 `pip install torch transformers`。") from e
         logger.info("vision: 加载 DINOv2-small（首次约 86MB）…")
         hf_cache_dir = os.environ.get("HUGGINGFACE_HUB_CACHE", "").strip() or None
         cache_kwargs = {"cache_dir": hf_cache_dir} if hf_cache_dir else {}
@@ -353,7 +353,7 @@ def extract_faces(pil_img: Image.Image, max_dim: int = 1024) -> List[dict]:
     except AttributeError as e:
         # InsightFace 的检测器在少数图片上会返回 None，然后库内部访问
         # bboxes.shape 抛出 AttributeError。这里按“未检测到人脸”处理，
-        # 避免土豪/专家模式把整张可读图片误记为无法读取。
+        # 避免云端精评/质感优选把整张可读图片误记为无法读取。
         if "NoneType" in str(e) and "shape" in str(e):
             logger.warning("vision: InsightFace 未返回检测框，按无人脸处理")
             return []
@@ -466,24 +466,24 @@ def capabilities() -> dict:
 
 
 def require_expert_capabilities() -> None:
-    """专家模式启动前调一次，缺一即抛 VisionUnavailable。"""
+    """质感优选启动前调一次，缺一即抛 VisionUnavailable。"""
     caps = capabilities()
     missing = [k for k, v in caps.items() if not v]
     if missing:
-        raise VisionUnavailable(f"专家模式缺少依赖：{', '.join(missing)}。请按 requirements.txt 安装完整依赖。")
+        raise VisionUnavailable(f"质感优选缺少依赖：{', '.join(missing)}。请按 requirements.txt 安装完整依赖。")
 
 
 def require_tycoon_capabilities() -> None:
-    """土豪模式：DINOv2 + InsightFace（分组依赖）必备；NIMA/MUSIQ/CLIP 不要。"""
+    """云端精评：DINOv2 + InsightFace（分组依赖）必备；NIMA/MUSIQ/CLIP 不要。"""
     caps = capabilities()
     needed = ["dinov2", "face_id"]
     missing = [k for k in needed if not caps.get(k)]
     if missing:
-        raise VisionUnavailable(f"土豪模式缺少依赖：{', '.join(missing)}。请按 requirements.txt 安装。")
+        raise VisionUnavailable(f"云端精评缺少依赖：{', '.join(missing)}。请按 requirements.txt 安装。")
 
 
 def prewarm_all() -> None:
-    """专家模式预热全部模型；任一失败抛出。"""
+    """质感优选预热全部模型；任一失败抛出。"""
     _ensure_dinov2()
     _ensure_nima()
     _ensure_musiq()
@@ -492,6 +492,6 @@ def prewarm_all() -> None:
 
 
 def prewarm_tycoon() -> None:
-    """土豪模式预热：仅 DINOv2 + InsightFace（分组依赖）。"""
+    """云端精评预热：仅 DINOv2 + InsightFace（分组依赖）。"""
     _ensure_dinov2()
     _ensure_insightface()

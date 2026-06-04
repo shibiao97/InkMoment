@@ -17,17 +17,17 @@ const nearMinutes = defineModel("nearMinutes", { type: [Number, String], require
 
 <template>
   <details class="advanced">
-    <summary>更多选项</summary>
+    <summary>更多选项 · 默认复制</summary>
     <div class="advanced-body">
       <section class="option-section">
         <div class="option-label">归档方式</div>
         <label class="radio-row">
-          <input v-model="mode" type="radio" value="move">
-          <span><strong>移动</strong> · 原片直接归入 winners/ losers/</span>
-        </label>
-        <label class="radio-row">
           <input v-model="mode" type="radio" value="copy">
           <span><strong>复制</strong> · 原片保留，winners/ 为副本</span>
+        </label>
+        <label class="radio-row">
+          <input v-model="mode" type="radio" value="move">
+          <span><strong>移动</strong> · 原片直接归入 winners/ losers/</span>
         </label>
       </section>
 
@@ -38,7 +38,7 @@ const nearMinutes = defineModel("nearMinutes", { type: [Number, String], require
         </label>
         <label class="check-row" :class="{ 'is-disabled': faceAwareDisabled }">
           <input v-model="faceAware" type="checkbox" :disabled="faceAwareDisabled">
-          <span>人脸感知 · 极速模式下自动关闭</span>
+          <span>人脸感知 · 轻量快选下自动关闭</span>
         </label>
       </section>
 

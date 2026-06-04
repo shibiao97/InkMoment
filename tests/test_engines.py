@@ -24,7 +24,7 @@ class EnginesTest(unittest.TestCase):
         self.assertEqual(engine_names(), ("fast", "expert", "tycoon"))
         self.assertEqual(normalize_engine(None), DEFAULT_ENGINE)
         self.assertEqual(normalize_engine("unknown"), "fast")
-        self.assertEqual(get_engine("expert").label, "专家模式")
+        self.assertEqual(get_engine("expert").label, "质感优选")
         self.assertFalse(engine_requires_llm_model("fast"))
         self.assertTrue(engine_requires_llm_model("tycoon"))
         self.assertTrue(get_engine("expert").face_aware_enabled(True, True))

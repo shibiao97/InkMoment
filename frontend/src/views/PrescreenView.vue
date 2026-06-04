@@ -4,8 +4,8 @@ import { imageUrl } from "../api/http";
 import ErrorPanel from "../components/ErrorPanel.vue";
 import LoadingState from "../components/LoadingState.vue";
 import StatusBadge from "../components/StatusBadge.vue";
+import WorkflowSidebar from "../components/WorkflowSidebar.vue";
 import { usePrescreenReview } from "../composables/usePrescreenReview";
-import { useTheme } from "../composables/useTheme";
 
 defineProps({
   returningHome: {
@@ -16,7 +16,6 @@ defineProps({
 
 const emit = defineEmits(["back-home", "continue-preview"]);
 
-const { theme } = useTheme();
 const {
   activeReason,
   filteredItems,
@@ -76,10 +75,18 @@ onMounted(load);
 </script>
 
 <template>
-  <main class="app-shell prescreen-shell" :style="{ '--accent': theme.accent }">
-    <StatusBadge :label="statusLabel" :state="statusState" />
+  <main class="app-shell studio-shell flow-workbench prescreen-shell">
+    <WorkflowSidebar
+      active-step="prescreen"
+      summary-label="待复核"
+      :summary-value="`${stats.pending.toLocaleString()} 张`"
+      :summary-detail="`${stats.restored.toLocaleString()} 张已恢复`"
+    />
 
-    <header class="prescreen-topbar">
+    <section class="studio-main flow-main">
+      <StatusBadge :label="statusLabel" :state="statusState" />
+
+      <header class="prescreen-topbar">
       <div>
         <p class="eyebrow">初筛复核</p>
         <h1>先把明显误伤的照片捞回来</h1>
@@ -209,6 +216,7 @@ onMounted(load);
           </button>
         </div>
       </article>
+      </section>
     </section>
   </main>
 </template>

@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   classifyProcessingEventReason,
+  processingEventImagePath,
   processingWallCellState,
   useProcessingPhotoWall,
 } from "./useProcessingPhotoWall";
@@ -42,7 +43,7 @@ describe("useProcessingPhotoWall", () => {
     expect(wall.cells.value.some((cell) => cell.event?.seq === 2)).toBe(true);
   });
 
-  it("holds queued events while the backend is grouping and drains afterwards", async () => {
+  it("keeps echoing queued events while the backend is grouping", async () => {
     const events = ref([{ seq: 1, ok: true, name: "a.jpg" }]);
     const status = ref("grouping");
     const wall = useProcessingPhotoWall({
@@ -53,13 +54,12 @@ describe("useProcessingPhotoWall", () => {
     });
     await nextTick();
 
-    vi.advanceTimersByTime(1000);
-    expect(wall.filledCount.value).toBe(0);
+    vi.advanceTimersByTime(60);
+    expect(wall.filledCount.value).toBe(1);
     expect(wall.collecting.value).toBe(true);
 
     status.value = "done";
     await nextTick();
-    vi.advanceTimersByTime(200);
 
     expect(wall.collecting.value).toBe(false);
     expect(wall.filledCount.value).toBe(1);
@@ -123,5 +123,14 @@ describe("useProcessingPhotoWall", () => {
       reason: "decode error",
     });
     expect(processingWallCellState({ reject: true, reason: "照片模糊" }).label).toBe("BLUR");
+  });
+
+  it("resolves compatible image path fields from backend events", () => {
+    expect(processingEventImagePath({ path: "/photos/a.jpg" })).toBe("/photos/a.jpg");
+    expect(processingEventImagePath({ image_path: "/photos/b.jpg" })).toBe("/photos/b.jpg");
+    expect(processingEventImagePath({ original_path: "/photos/c.jpg" })).toBe("/photos/c.jpg");
+    expect(processingEventImagePath({ thumbnail_path: "/photos/d.jpg" })).toBe("/photos/d.jpg");
+    expect(processingEventImagePath({ thumb_path: "/photos/e.jpg" })).toBe("/photos/e.jpg");
+    expect(processingEventImagePath(null)).toBe("");
   });
 });

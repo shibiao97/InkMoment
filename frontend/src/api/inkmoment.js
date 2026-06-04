@@ -9,9 +9,9 @@ export function getHealth() {
   return fetchJSON("/api/health");
 }
 
-export function getAuthStatus(force = false) {
+export function getAuthStatus(force = false, options = {}) {
   const params = force ? "?force=1" : "";
-  return fetchJSON(`/api/auth/status${params}`);
+  return fetchJSON(`/api/auth/status${params}`, options);
 }
 
 export function loginAuth(payload) {

@@ -24,7 +24,7 @@ TYCOON_DEPENDENCY_MODULES = (
 @dataclass(frozen=True)
 class TycoonEngine:
     name: str = "tycoon"
-    label: str = "土豪模式"
+    label: str = "云端精评"
     requires_llm_model: bool = True
     requires_dino_model: bool = True
     requires_opencv_orb: bool = False

@@ -12,6 +12,7 @@ import argparse
 import json
 import logging
 import os
+import sys
 import threading
 import webbrowser
 from typing import Optional
@@ -23,31 +24,15 @@ from inkmoment.grouper import ImageInfo
 from server.domain.models import SessionState
 from server.settings import Settings, apply_runtime_environment
 from server.services.llm_service import load_llm_config_from_file
-from server.services.blueprint_registry_service import (
-    BlueprintRegistryDeps,
-    register_app_blueprints,
-)
-from server.services.job_orchestration_service import (
-    JobOrchestrationDeps,
-    start_job_payload,
-)
+from server.services.blueprint_registry_service import BlueprintRegistryDeps, register_app_blueprints
+from server.services.job_orchestration_service import JobOrchestrationDeps, start_job_payload
 from server.services.selection_service import serialize_group
-from server.services.session_builder_service import (
-    build_session_from_groups as _build_session_from_groups,
-)
-from server.services.session_apply_service import (
-    apply_pending_groups,
-)
-from server.services.session_state_service import (
-    load_state as load_session_state,
-    save_state,
-)
+from server.services.session_builder_service import build_session_from_groups as _build_session_from_groups
+from server.services.session_apply_service import apply_pending_groups
+from server.services.session_state_service import load_state as load_session_state, save_state
 from server.services.auth_client_service import AuthRuntime, auth_summary, ensure_recent_authorization
 from server.services.job_event_service import emit_job_image_event
-from server.services.job_log_service import (
-    close_runtime_job_log,
-    open_runtime_job_log,
-)
+from server.services.job_log_service import close_runtime_job_log, open_runtime_job_log
 from server.services.logging_service import configure_app_logger
 from server.services.runtime_facade_service import (
     cancel_requested,
@@ -97,8 +82,8 @@ def load_state(folder):
     return load_session_state(folder, logger)
 
 
-# 启动期：从文件载入模型服务配置（env var 优先）
-load_llm_config_from_file()
+# 启动期只载入非敏感模型服务配置；Keychain 读取按需懒加载，避免阻塞 sidecar ready。
+load_llm_config_from_file(include_secret=False)
 
 
 def setup_logger(folder: Optional[str]) -> None:
@@ -251,12 +236,19 @@ def main():
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=5057)
     parser.add_argument("--no-browser", action="store_true")
-    parser.add_argument(
-        "--json-ready",
-        action="store_true",
-        help="Print one JSON line with host, port, url, and health_url after binding.",
-    )
+    parser.add_argument("--repair-dependencies", action="store_true", help="检查并修复当前模式需要的内置模块资源。")
+    parser.add_argument("--engine", default="expert", help="--repair-dependencies 使用的模式")
+    parser.add_argument("--model-cache-dir", default="", help="--repair-dependencies 使用的模型缓存目录")
+    parser.add_argument("--json-ready", action="store_true", help="Print one JSON line after binding.")
     args = parser.parse_args()
+
+    if args.repair_dependencies:
+        from server.services.dependencies.repair import main as repair_main
+
+        repair_args = ["--engine", args.engine]
+        if args.model_cache_dir:
+            repair_args.extend(["--cache-dir", args.model_cache_dir])
+        return repair_main(repair_args)
 
     setup_logger(None)
     server = make_server(args.host, args.port, app, threaded=True)
@@ -295,4 +287,4 @@ if __name__ == "__main__":
     import multiprocessing
 
     multiprocessing.freeze_support()
-    main()
+    sys.exit(main())

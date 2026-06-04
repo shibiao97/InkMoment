@@ -54,9 +54,10 @@ const selectedModel = defineModel("selectedModel", { type: String, required: tru
     <div class="llm-head">
       <div>
         <div class="option-label">模型服务</div>
-        <h2>土豪模式配置</h2>
+        <h2>云端精评配置</h2>
       </div>
       <button class="btn-ghost" type="button" :disabled="loading" @click="emit('refresh')">
+        <span v-if="loading" class="btn-spinner" aria-hidden="true"></span>
         {{ loading ? "检查中" : "刷新状态" }}
       </button>
     </div>
@@ -100,9 +101,11 @@ const selectedModel = defineModel("selectedModel", { type: String, required: tru
 
     <div class="llm-actions">
       <button class="btn-primary" type="button" :disabled="saving || !apiKey.trim()" @click="emit('save')">
+        <span v-if="saving" class="btn-spinner" aria-hidden="true"></span>
         {{ saving ? "保存中" : "保存并验证" }}
       </button>
       <button class="btn-ghost" type="button" :disabled="checkingModels || !configured" @click="emit('refresh-models')">
+        <span v-if="checkingModels" class="btn-spinner" aria-hidden="true"></span>
         {{ checkingModels ? "刷新中" : "刷新模型" }}
       </button>
       <button class="btn-ghost" type="button" :disabled="saving || !configured" @click="emit('clear')">
@@ -126,6 +129,13 @@ const selectedModel = defineModel("selectedModel", { type: String, required: tru
     <p v-if="diagnostics?.llm" class="llm-note">
       诊断：{{ diagnostics.llm.configured ? "已读取到 Key" : "未读取到 Key" }}
     </p>
+    <div v-if="loading || checkingModels || saving" class="inline-wait" role="status" aria-live="polite">
+      <span class="wait-spinner" aria-hidden="true"></span>
+      <div>
+        <strong>{{ saving ? "正在保存并验证" : checkingModels ? "正在刷新可用模型" : "正在检查模型服务" }}</strong>
+        <small>请稍等，完成后会自动更新状态。</small>
+      </div>
+    </div>
     <p v-if="message" class="start-note">{{ message }}</p>
     <p v-if="error" class="form-error">{{ error }}</p>
   </section>

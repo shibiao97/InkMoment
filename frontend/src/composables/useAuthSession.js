@@ -13,6 +13,7 @@ const TRANSIENT_AUTH_ERROR_CODES = new Set([
   "",
   "auth_check_failed",
   "auth_server_unavailable",
+  "request_timeout",
 ]);
 
 export function useAuthSession() {
@@ -62,12 +63,12 @@ export function useAuthSession() {
     return "授权有效";
   });
 
-  async function refresh(force = false) {
+  async function refresh(force = false, options = {}) {
     loading.value = true;
     error.value = "";
     lastErrorCode.value = "";
     try {
-      status.value = await getAuthStatus(force);
+      status.value = await getAuthStatus(force, options);
       return status.value;
     } catch (err) {
       lastErrorCode.value = err.code || "";
@@ -278,7 +279,7 @@ function friendlyAuthError(err, fallback) {
   if (code === "auth_server_not_configured") {
     return "授权服务不可用，请联系管理员处理。";
   }
-  if (code === "auth_server_unavailable" || code === "auth_check_failed") {
+  if (code === "auth_server_unavailable" || code === "auth_check_failed" || code === "request_timeout") {
     return "暂时无法连接授权服务，当前页面不会因此退出登录。请稍后重试或打开日志查看网络错误。";
   }
   return err?.message || fallback;
