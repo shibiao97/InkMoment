@@ -239,8 +239,16 @@ def main():
     parser.add_argument("--repair-dependencies", action="store_true", help="检查并修复当前模式需要的内置模块资源。")
     parser.add_argument("--engine", default="expert", help="--repair-dependencies 使用的模式")
     parser.add_argument("--model-cache-dir", default="", help="--repair-dependencies 使用的模型缓存目录")
+    parser.add_argument("--dependency-worker", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--payload", default="", help=argparse.SUPPRESS)
+    parser.add_argument("--events", default="", help=argparse.SUPPRESS)
     parser.add_argument("--json-ready", action="store_true", help="Print one JSON line after binding.")
     args = parser.parse_args()
+
+    if args.dependency_worker:
+        from server.services.dependencies.process_worker import main as worker_main
+
+        return worker_main(["--payload", args.payload, "--events", args.events])
 
     if args.repair_dependencies:
         from server.services.dependencies.repair import main as repair_main

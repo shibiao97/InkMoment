@@ -2,6 +2,7 @@
 
 from server.services.dependencies import (
     DEFAULT_ENDPOINTS,
+    DEFAULT_DOWNLOAD_CONCURRENCY,
     DINO_MODEL_ID,
     DINO_REQUIRED_FILES,
     EXPERT_RUNTIME_READY_SETTING,
@@ -32,6 +33,7 @@ from server.services.dependencies import (
 
 __all__ = [
     "DEFAULT_ENDPOINTS",
+    "DEFAULT_DOWNLOAD_CONCURRENCY",
     "DINO_MODEL_ID",
     "DINO_REQUIRED_FILES",
     "DependencyDownloadManager",

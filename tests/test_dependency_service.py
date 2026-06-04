@@ -1,6 +1,5 @@
 import os
 import tempfile
-import threading
 import time
 import unittest
 from pathlib import Path
@@ -9,6 +8,7 @@ from unittest.mock import patch
 from server.services.dependency_service import (
     DependencyDownloadManager,
     EXPERT_RUNTIME_READY_SETTING,
+    DEFAULT_DOWNLOAD_CONCURRENCY,
     MODEL_CACHE_SETTING,
     download_dependencies_payload,
     preflight_dependencies_payload,
@@ -234,22 +234,30 @@ class DependencyServiceTest(unittest.TestCase):
         self.assertEqual(payload["downloaded"], [])
         self.assertIn("模块资源已修复", payload["message"])
 
-    @patch("server.services.dependency_service.download_dependencies_payload")
-    def test_download_manager_runs_download_in_background(self, download_payload):
-        download_payload.return_value = (
-            {
-                "ok": True,
-                "message": "done",
-                "download_dir": str(self.root / "models"),
-                "downloaded": [{"model": "facebook/dinov2-small"}],
-            },
-            200,
-        )
-        manager = DependencyDownloadManager(lambda: self.store)
+    @patch("server.services.dependencies.manager._hf_model_cache_status")
+    def test_download_manager_runs_download_in_background_processes(self, cache_status):
+        cache_status.return_value = {
+            "model": "facebook/dinov2-small",
+            "cached": True,
+            "missing": [],
+            "error": None,
+        }
+        runner_factory = FakeRunnerFactory({
+            "repair": [
+                {"type": "progress", "progress": 40, "message": "repairing"},
+                {"type": "result", "result": {"repaired": [], "downloaded": [], "skipped": []}},
+            ],
+            "runtime:expert:dinov2": [{"type": "result", "result": {"downloaded": []}}],
+            "runtime:expert:nima": [{"type": "result", "result": {"downloaded": []}}],
+            "runtime:expert:pyiqa": [{"type": "result", "result": {"downloaded": []}}],
+            "runtime:expert:insightface": [{"type": "result", "result": {"downloaded": []}}],
+        })
+        manager = DependencyDownloadManager(lambda: self.store, runner_factory=runner_factory)
 
-        payload, status = manager.start({"engine": "expert"})
+        payload, status = manager.start({"engine": "expert", "model_dir": str(self.root / "models")})
 
         self.assertEqual(status, 202)
+        self.assertEqual(payload["concurrency"], DEFAULT_DOWNLOAD_CONCURRENCY)
         self.assertIn(payload["status"], {"pending", "running", "done"})
         deadline = time.time() + 2
         final = {}
@@ -259,43 +267,133 @@ class DependencyServiceTest(unittest.TestCase):
                 break
             time.sleep(0.02)
         self.assertEqual(final["status"], "done")
-        self.assertEqual(final["message"], "done")
-        self.assertEqual(final["downloaded"], [{"model": "facebook/dinov2-small"}])
+        self.assertIn({"model": "runtime:expert-models", "path": str((self.root / "models").resolve())}, final["downloaded"])
+        self.assertGreaterEqual(runner_factory.max_active, 2)
 
-    @patch("server.services.dependency_service.download_dependencies_payload")
-    def test_download_manager_can_cancel_running_download(self, download_payload):
-        started = threading.Event()
-        release = threading.Event()
+    @patch("server.services.dependencies.manager._hf_model_cache_status")
+    def test_download_manager_can_force_cancel_running_processes(self, cache_status):
+        cache_status.return_value = {
+            "model": "facebook/dinov2-small",
+            "cached": True,
+            "missing": [],
+            "error": None,
+        }
+        runner_factory = FakeRunnerFactory({
+            "repair": [{"type": "result", "result": {"repaired": [], "downloaded": [], "skipped": []}}],
+            "runtime:expert:dinov2": FakeRunnerFactory.BLOCK,
+            "runtime:expert:nima": FakeRunnerFactory.BLOCK,
+            "runtime:expert:pyiqa": FakeRunnerFactory.BLOCK,
+            "runtime:expert:insightface": FakeRunnerFactory.BLOCK,
+        })
+        manager = DependencyDownloadManager(lambda: self.store, runner_factory=runner_factory)
 
-        def fake_download(_data, _store, *, progress=None, cancel_event=None):
-            started.set()
-            while not cancel_event.is_set():
-                time.sleep(0.01)
-            release.set()
-            raise RuntimeError("用户已停止资源下载")
-
-        download_payload.side_effect = fake_download
-        manager = DependencyDownloadManager(lambda: self.store)
-
-        payload, status = manager.start({"engine": "expert"})
+        payload, status = manager.start({"engine": "expert", "model_dir": str(self.root / "models")})
         self.assertEqual(status, 202)
-        self.assertTrue(started.wait(1))
+        self.assertTrue(runner_factory.wait_for_active_count(2, timeout=1))
 
         cancel_payload, cancel_status = manager.cancel()
         self.assertEqual(cancel_status, 202)
-        self.assertEqual(cancel_payload["status"], "cancelling")
+        self.assertEqual(cancel_payload["status"], "cancelled")
+        self.assertGreaterEqual(runner_factory.terminated_count, 2)
+        final, _status = manager.status()
+        self.assertEqual(final["status"], "cancelled")
+        self.assertEqual(final["message"], "已停止资源下载")
 
+    @patch("server.services.dependencies.manager._hf_model_cache_status")
+    def test_download_manager_does_not_mark_runtime_ready_without_runtime_tasks(self, cache_status):
+        model_dir = self.root / "models"
+        self.store.set_setting(EXPERT_RUNTIME_READY_SETTING, {"ready": True, "cache_dir": str(model_dir.resolve())})
+        cache_status.return_value = {
+            "model": "facebook/dinov2-small",
+            "cached": True,
+            "missing": [],
+            "error": None,
+        }
+        runner_factory = FakeRunnerFactory({
+            "repair": [{"type": "result", "result": {"repaired": [], "downloaded": [], "skipped": []}}],
+        })
+        manager = DependencyDownloadManager(lambda: self.store, runner_factory=runner_factory)
+
+        _payload, status = manager.start({"engine": "expert", "model_dir": str(model_dir)})
+        self.assertEqual(status, 202)
         deadline = time.time() + 2
         final = {}
         while time.time() < deadline:
             final, _status = manager.status()
-            if final.get("status") == "cancelled":
+            if final.get("status") == "done":
                 break
             time.sleep(0.02)
 
-        self.assertTrue(release.is_set())
-        self.assertEqual(final["status"], "cancelled")
-        self.assertEqual(final["message"], "已停止资源下载")
+        self.assertEqual(final["status"], "done")
+        self.assertEqual(final["downloaded"], [])
+        self.assertEqual(runner_factory.max_active, 1)
+
+
+class FakeRunnerFactory:
+    BLOCK = object()
+
+    def __init__(self, event_map):
+        self.event_map = event_map
+        self.active = 0
+        self.max_active = 0
+        self.terminated_count = 0
+
+    def __call__(self, task_id, payload, work_dir, **_kwargs):
+        return FakeRunner(self, task_id, self.event_map.get(task_id, []))
+
+    def wait_for_active_count(self, count, timeout=1):
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            if self.active >= count:
+                return True
+            time.sleep(0.01)
+        return False
+
+
+class FakeRunner:
+    def __init__(self, factory, task_id, events):
+        self.factory = factory
+        self.task_id = task_id
+        self.events = events
+        self.process = object()
+        self.started = False
+        self.closed = False
+        self.terminated = False
+
+    def start(self):
+        self.started = True
+        self.factory.active += 1
+        self.factory.max_active = max(self.factory.max_active, self.factory.active)
+
+    def read_events(self):
+        if self.events is FakeRunnerFactory.BLOCK:
+            return []
+        events = list(self.events)
+        self.events = []
+        return events
+
+    def poll(self):
+        if self.terminated:
+            return -15
+        if self.events is FakeRunnerFactory.BLOCK:
+            return None
+        return 0 if not self.events else None
+
+    def terminate(self):
+        if not self.terminated and not self.closed:
+            self.terminated = True
+            self.factory.terminated_count += 1
+            self.factory.active = max(0, self.factory.active - 1)
+
+    def close(self):
+        if self.closed:
+            return
+        self.closed = True
+        if not self.terminated:
+            self.factory.active = max(0, self.factory.active - 1)
+
+    def stderr_tail(self, max_chars=4000):
+        return ""
 
 
 if __name__ == "__main__":

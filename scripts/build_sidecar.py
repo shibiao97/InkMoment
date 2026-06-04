@@ -103,6 +103,8 @@ def main() -> int:
         "server.services.auth_client_service",
         "server.services.capability_service",
         "server.services.dependency_service",
+        "server.services.dependencies.process_runner",
+        "server.services.dependencies.process_worker",
         "server.services.folder_service",
         "server.services.grouping_service",
         "server.services.health_service",

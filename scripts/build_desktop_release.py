@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the InkMoment desktop installer for the current platform.
+"""Build the 影刻 desktop installer for the current platform.
 
 This script keeps the release path explicit:
 1. build the PyInstaller onedir Python sidecar into Tauri resources;
@@ -151,7 +151,7 @@ def build_tauri(args: argparse.Namespace, bundle: str) -> None:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Build InkMoment desktop installer.")
+    parser = argparse.ArgumentParser(description="Build 影刻 desktop installer.")
     parser.add_argument(
         "--bundle",
         default="auto",

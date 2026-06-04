@@ -54,7 +54,7 @@ def verify_artifact(path: Path, bundle: str, *, min_bytes: int, skip_native_chec
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Verify InkMoment desktop installer artifacts.")
+    parser = argparse.ArgumentParser(description="Verify 影刻 desktop installer artifacts.")
     parser.add_argument(
         "--bundle",
         default="auto",

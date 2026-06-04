@@ -116,10 +116,16 @@ export function useLandingDependencyFlow({
   });
   const dependencyBusyOverlay = computed(() => {
     if (!isDownloadingDependencies.value) return null;
+    const concurrency = Number(dependencyDownloadStatus.value?.concurrency || 0);
+    const activeWorkers = Number(dependencyDownloadStatus.value?.active_workers || 0);
+    const workerText = concurrency > 1
+      ? `最多 ${concurrency} 个下载进程${activeWorkers > 0 ? `，当前 ${activeWorkers} 个` : ""}`
+      : "";
+    const message = dependencyDownloadStatus.value?.message || dependencyMessage.value || "正在检查并处理资源";
     return {
       title: pendingStartPayload.value ? "正在处理运行资源并准备开始" : "正在处理运行资源",
       status: downloadStatusText.value,
-      message: dependencyDownloadStatus.value?.message || dependencyMessage.value || "正在检查并处理资源",
+      message: workerText ? `${message}（${workerText}）` : message,
       progress: dependencyDownloadProgress.value,
       cancelable: !isCancellingDownload.value,
       cancelText: "停止下载",
@@ -391,6 +397,7 @@ export function useLandingDependencyFlow({
     try {
       return await downloadDependencies({
         engine: payload.engine,
+        model_dir: dependencyDownloadDir.value,
       });
     } catch (error) {
       if (error.status === 409 && DOWNLOAD_BUSY_STATUSES.has(error.data?.status)) {

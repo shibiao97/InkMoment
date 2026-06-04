@@ -208,6 +208,7 @@ describe("useLandingDependencyFlow", () => {
       message: "模块资源已修复完成。",
     });
     const { flow } = createFlow();
+    flow.dependencyDownloadDir.value = "/models";
 
     await flow.handleDependencyCheckOnly();
 
@@ -217,7 +218,7 @@ describe("useLandingDependencyFlow", () => {
 
     await flow.handleDependencyDownload();
 
-    expect(downloadDependencies).toHaveBeenCalledWith({ engine: "expert" });
+    expect(downloadDependencies).toHaveBeenCalledWith({ engine: "expert", model_dir: "/models" });
     expect(flow.dependencyMessage.value).toBe("处理完成，当前模式运行资源已就绪");
   });
 
@@ -227,6 +228,7 @@ describe("useLandingDependencyFlow", () => {
       id: "download-1",
       status: "pending",
       message: "准备下载资源",
+      concurrency: 2,
     });
     getDependencyDownloadStatus
       .mockImplementationOnce(() => new Promise((resolve) => {
@@ -236,6 +238,7 @@ describe("useLandingDependencyFlow", () => {
         id: "download-1",
         status: "done",
         message: "处理完成",
+        concurrency: 2,
       });
     preflightDependencies.mockResolvedValueOnce({
       ok: true,
@@ -252,7 +255,7 @@ describe("useLandingDependencyFlow", () => {
     expect(flow.dependencyBusyOverlay.value).toMatchObject({
       title: "正在处理运行资源",
       status: "排队中",
-      message: "准备下载资源",
+      message: "准备下载资源（最多 2 个下载进程）",
       cancelable: true,
       cancelText: "停止下载",
     });
@@ -263,11 +266,14 @@ describe("useLandingDependencyFlow", () => {
       id: "download-1",
       status: "running",
       message: "正在下载缺失资源",
+      concurrency: 2,
+      active_workers: 2,
     });
     await Promise.resolve();
     await Promise.resolve();
 
     expect(flow.dependencyBusyOverlay.value.status).toBe("处理中");
+    expect(flow.dependencyBusyOverlay.value.message).toBe("正在下载缺失资源（最多 2 个下载进程，当前 2 个）");
     expect(flow.dependencyBusyOverlay.value.progress).toBeGreaterThanOrEqual(45);
 
     await handling;
