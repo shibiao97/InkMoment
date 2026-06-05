@@ -12,13 +12,13 @@ import os
 import shutil
 import subprocess
 import sys
-import importlib.util
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
 BIN_DIR = ROOT / "src-tauri" / "binaries"
 SIDECAR_NAME = "inkmoment-sidecar"
+PYIQA_RUNTIME_HOOK = ROOT / "scripts" / "pyinstaller_hooks" / "rthook_pyiqa_runtime.py"
 PYINSTALLER_COLLECT_DATA = [
     # pyiqa looks up packaged metric definitions from pyiqa/models at runtime.
     # PyInstaller imports the Python module but does not collect that directory
@@ -28,6 +28,27 @@ PYINSTALLER_COLLECT_DATA = [
 PYINSTALLER_COLLECT_SUBMODULES = [
     # pyiqa.create_metric dynamically resolves metric implementations.
     "pyiqa",
+]
+PYINSTALLER_EXCLUDE_MODULES = [
+    # Desktop runtime only performs inference. Exclude training, dataset, and
+    # analytics stacks that PyInstaller discovers through optional hooks.
+    "datasets",
+    "pyarrow",
+    "pandas",
+    "matplotlib",
+    "numba",
+    "llvmlite",
+    "IPython",
+    "jupyter",
+    "notebook",
+    "pytest",
+    "tensorboard",
+    "torch.utils.tensorboard",
+    "transformers.trainer",
+    "transformers.trainer_seq2seq",
+    "transformers.training_args",
+    "transformers.training_args_seq2seq",
+    "transformers.testing_utils",
 ]
 
 
@@ -56,14 +77,45 @@ def ensure_pyinstaller(python: str) -> None:
         ) from exc
 
 
-def add_pyinstaller_collection_args(cmd: list[str]) -> None:
+def resolve_package_root(python: str, module: str) -> Path | None:
+    script = (
+        "import importlib.util, pathlib, sys\n"
+        "spec = importlib.util.find_spec(sys.argv[1])\n"
+        "if spec and spec.origin:\n"
+        "    print(pathlib.Path(spec.origin).parent)\n"
+    )
+    try:
+        completed = subprocess.run(
+            [python, "-c", script, module],
+            check=True,
+            cwd=ROOT,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return None
+
+    output = completed.stdout.strip().splitlines()
+    if not output:
+        return None
+    package_root = Path(output[-1])
+    return package_root if package_root.exists() else None
+
+
+def add_pyinstaller_collection_args(cmd: list[str], *, python: str | None = None) -> None:
+    cmd.extend(["--runtime-hook", str(PYIQA_RUNTIME_HOOK)])
     for module in PYINSTALLER_COLLECT_DATA:
         cmd.extend(["--collect-data", module])
     for module in PYINSTALLER_COLLECT_SUBMODULES:
         cmd.extend(["--collect-submodules", module])
-    pyiqa_spec = importlib.util.find_spec("pyiqa")
-    if pyiqa_spec and pyiqa_spec.origin:
-        pyiqa_root = Path(pyiqa_spec.origin).parent
+    for module in PYINSTALLER_EXCLUDE_MODULES:
+        cmd.extend(["--exclude-module", module])
+    if python:
+        pyiqa_root = resolve_package_root(python, "pyiqa")
+    else:
+        pyiqa_root = None
+    if pyiqa_root:
         cmd.extend(["--add-data", f"{pyiqa_root}{os.pathsep}pyiqa"])
 
 
@@ -140,7 +192,7 @@ def main() -> int:
         "--specpath",
         str(spec_dir),
     ]
-    add_pyinstaller_collection_args(cmd)
+    add_pyinstaller_collection_args(cmd, python=python)
     for module in hidden_imports:
         cmd.extend(["--hidden-import", module])
     cmd.append(str(ROOT / "app.py"))

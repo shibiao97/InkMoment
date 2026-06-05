@@ -124,11 +124,78 @@ class DesktopReleaseBuildTest(unittest.TestCase):
     def test_sidecar_collects_pyiqa_runtime_package_data(self):
         cmd = ["python", "-m", "PyInstaller"]
 
-        build_sidecar.add_pyinstaller_collection_args(cmd)
+        with patch.object(build_sidecar, "resolve_package_root", return_value=Path("/tmp/pyiqa")):
+            build_sidecar.add_pyinstaller_collection_args(cmd, python="python")
 
         self.assertIn("--collect-data", cmd)
         self.assertIn("pyiqa", cmd)
         self.assertIn("--collect-submodules", cmd)
+        self.assertIn("--add-data", cmd)
+        self.assertIn(f"/tmp/pyiqa{build_sidecar.os.pathsep}pyiqa", cmd)
+        self.assertIn("--runtime-hook", cmd)
+        self.assertIn(str(build_sidecar.PYIQA_RUNTIME_HOOK), cmd)
+
+    def test_sidecar_excludes_non_runtime_packaging_modules(self):
+        cmd = ["python", "-m", "PyInstaller"]
+
+        build_sidecar.add_pyinstaller_collection_args(cmd)
+
+        excluded = {
+            cmd[index + 1]
+            for index, value in enumerate(cmd)
+            if value == "--exclude-module" and index + 1 < len(cmd)
+        }
+        self.assertIn("datasets", excluded)
+        self.assertIn("pyarrow", excluded)
+        self.assertIn("pandas", excluded)
+        self.assertIn("matplotlib", excluded)
+        self.assertNotIn("torch.distributed", excluded)
+        self.assertNotIn("torch.testing", excluded)
+        self.assertIn("transformers.trainer", excluded)
+
+    def test_resolve_package_root_uses_requested_python(self):
+        with tempfile.TemporaryDirectory() as folder:
+            package_root = Path(folder) / "pyiqa"
+            package_root.mkdir()
+            calls = []
+
+            def fake_run(cmd, **kwargs):
+                calls.append((cmd, kwargs))
+                return SimpleNamespace(stdout=str(package_root) + "\n")
+
+            with patch.object(build_sidecar.subprocess, "run", side_effect=fake_run):
+                self.assertEqual(build_sidecar.resolve_package_root("/opt/python", "pyiqa"), package_root)
+
+        cmd, kwargs = calls[0]
+        self.assertEqual(cmd[:2], ["/opt/python", "-c"])
+        self.assertEqual(cmd[-1], "pyiqa")
+        self.assertTrue(kwargs["check"])
+        self.assertEqual(kwargs["cwd"], build_sidecar.ROOT)
+
+    def test_build_sidecar_resolves_package_data_with_packaging_python(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            bin_dir = root / "src-tauri" / "binaries"
+            calls = []
+
+            def fake_collection_args(cmd, *, python=None):
+                calls.append(("collection", python))
+                cmd.extend(["--add-data", f"{root / 'pyiqa'}{build_sidecar.os.pathsep}pyiqa"])
+
+            def fake_pyinstaller_run(_cmd):
+                dist_dir = root / "dist" / "inkmoment-sidecar"
+                dist_dir.mkdir(parents=True)
+                (dist_dir / "inkmoment-sidecar").write_bytes(b"sidecar")
+
+            with patch.object(build_sidecar, "ROOT", root):
+                with patch.object(build_sidecar, "BIN_DIR", bin_dir):
+                    with patch.object(build_sidecar, "python_executable", return_value="/venv/bin/python"):
+                        with patch.object(build_sidecar, "ensure_pyinstaller"):
+                            with patch.object(build_sidecar, "add_pyinstaller_collection_args", side_effect=fake_collection_args):
+                                with patch.object(build_sidecar, "run", side_effect=fake_pyinstaller_run):
+                                    self.assertEqual(build_sidecar.main(), 0)
+
+            self.assertIn(("collection", "/venv/bin/python"), calls)
 
     def test_build_sidecar_preserves_pyinstaller_symlinks(self):
         with tempfile.TemporaryDirectory() as folder:
