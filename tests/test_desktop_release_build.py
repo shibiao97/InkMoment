@@ -130,6 +130,94 @@ class DesktopReleaseBuildTest(unittest.TestCase):
         self.assertIn("pyiqa", cmd)
         self.assertIn("--collect-submodules", cmd)
 
+    def test_build_sidecar_preserves_pyinstaller_symlinks(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            bin_dir = root / "src-tauri" / "binaries"
+
+            def fake_pyinstaller_run(_cmd):
+                dist_dir = root / "dist" / "inkmoment-sidecar"
+                torch_lib = dist_dir / "_internal" / "torch" / "lib"
+                torch_lib.mkdir(parents=True)
+                (dist_dir / "inkmoment-sidecar").write_bytes(b"sidecar")
+                (torch_lib / "libtorch_cpu.dylib").write_bytes(b"torch")
+                (dist_dir / "_internal" / "libtorch_cpu.dylib").symlink_to("torch/lib/libtorch_cpu.dylib")
+
+            with patch.object(build_sidecar, "ROOT", root):
+                with patch.object(build_sidecar, "BIN_DIR", bin_dir):
+                    with patch.object(build_sidecar, "python_executable", return_value="python"):
+                        with patch.object(build_sidecar, "ensure_pyinstaller"):
+                            with patch.object(build_sidecar, "run", side_effect=fake_pyinstaller_run):
+                                self.assertEqual(build_sidecar.main(), 0)
+
+            copied_link = bin_dir / "inkmoment-sidecar" / "_internal" / "libtorch_cpu.dylib"
+            self.assertTrue(copied_link.is_symlink())
+            self.assertEqual(copied_link.readlink(), Path("torch/lib/libtorch_cpu.dylib"))
+
+    def test_restore_macos_app_sidecar_symlinks_replaces_expanded_resource(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            source_sidecar = root / "src-tauri" / "binaries" / "inkmoment-sidecar"
+            source_torch_lib = source_sidecar / "_internal" / "torch" / "lib"
+            source_torch_lib.mkdir(parents=True)
+            (source_sidecar / "inkmoment-sidecar").write_bytes(b"sidecar")
+            (source_torch_lib / "libtorch_cpu.dylib").write_bytes(b"torch")
+            (source_sidecar / "_internal" / "libtorch_cpu.dylib").symlink_to("torch/lib/libtorch_cpu.dylib")
+
+            app_sidecar = (
+                root
+                / "src-tauri"
+                / "target"
+                / "release"
+                / "bundle"
+                / "macos"
+                / "影刻.app"
+                / "Contents"
+                / "Resources"
+                / "binaries"
+                / "inkmoment-sidecar"
+            )
+            app_sidecar.mkdir(parents=True)
+            (app_sidecar / "inkmoment-sidecar").write_bytes(b"old")
+            (app_sidecar / "_internal").mkdir()
+            (app_sidecar / "_internal" / "libtorch_cpu.dylib").write_bytes(b"expanded")
+
+            with patch.object(build_desktop_release, "SIDECAR_RESOURCE_DIR", source_sidecar):
+                build_desktop_release.restore_macos_app_sidecar_symlinks(
+                    root / "src-tauri" / "target" / "release" / "bundle" / "macos" / "影刻.app"
+                )
+
+            copied_link = app_sidecar / "_internal" / "libtorch_cpu.dylib"
+            self.assertTrue(copied_link.is_symlink())
+            self.assertEqual(copied_link.readlink(), Path("torch/lib/libtorch_cpu.dylib"))
+            self.assertEqual((app_sidecar / "inkmoment-sidecar").read_bytes(), b"sidecar")
+
+    def test_build_macos_dmg_restores_sidecar_before_codesigning(self):
+        args = SimpleNamespace(debug=False, target=None)
+        app_bundle = Path("/tmp/影刻.app")
+        calls = []
+
+        with patch.object(build_desktop_release, "build_tauri", side_effect=lambda _args, bundle: calls.append(bundle)):
+            with patch.object(build_desktop_release, "current_macos_app", return_value=app_bundle):
+                with patch.object(
+                    build_desktop_release,
+                    "restore_macos_app_sidecar_symlinks",
+                    side_effect=lambda _app: calls.append("restore"),
+                ):
+                    with patch.object(
+                        build_desktop_release,
+                        "ad_hoc_codesign_macos_app",
+                        side_effect=lambda _app: calls.append("codesign"),
+                    ):
+                        with patch.object(
+                            build_desktop_release,
+                            "build_macos_dmg_from_app",
+                            side_effect=lambda _app, _args: calls.append("dmg"),
+                        ):
+                            build_desktop_release.build_macos_dmg(args)
+
+        self.assertEqual(calls, ["app", "restore", "codesign", "dmg"])
+
     def test_verify_artifact_accepts_valid_nsis_exe_header(self):
         with tempfile.TemporaryDirectory() as folder:
             exe = Path(folder) / "InkMoment.exe"

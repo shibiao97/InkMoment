@@ -151,7 +151,7 @@ def main() -> int:
     if not built_executable.exists():
         raise SystemExit(f"PyInstaller did not produce {built_executable}")
     shutil.rmtree(sidecar_resource_dir, ignore_errors=True)
-    shutil.copytree(built_dir, sidecar_resource_dir)
+    shutil.copytree(built_dir, sidecar_resource_dir, symlinks=True)
 
     for stale_binary in BIN_DIR.glob(f"{SIDECAR_NAME}-*"):
         if stale_binary.is_file():
