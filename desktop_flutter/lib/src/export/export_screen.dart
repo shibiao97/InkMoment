@@ -53,6 +53,7 @@ class _ExportScreenState extends State<ExportScreen> {
     try {
       await widget.api.startExport(_payload());
       await _pollStatus();
+      if (!mounted) return;
       _timer?.cancel();
       _timer = Timer.periodic(const Duration(seconds: 1), (_) => _pollStatus());
     } catch (error) {
@@ -92,11 +93,12 @@ class _ExportScreenState extends State<ExportScreen> {
   }
 
   void _handleError(Object error) {
+    if (!mounted) return;
     if (InkMomentApi.isAuthorizationFailure(error)) {
       widget.onAuthInvalid(error);
       return;
     }
-    if (mounted) setState(() => _error = error.toString());
+    setState(() => _error = error.toString());
   }
 
   Map<String, dynamic> _payload() => {

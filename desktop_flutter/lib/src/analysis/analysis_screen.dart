@@ -50,11 +50,12 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
         widget.onReview();
       }
     } catch (error) {
+      if (!mounted) return;
       if (InkMomentApi.isAuthorizationFailure(error)) {
         widget.onAuthInvalid(error);
         return;
       }
-      if (mounted) setState(() => _error = error.toString());
+      setState(() => _error = error.toString());
     }
   }
 
@@ -62,11 +63,12 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     try {
       await widget.api.cancelJob();
     } catch (error) {
+      if (!mounted) return;
       if (InkMomentApi.isAuthorizationFailure(error)) {
         widget.onAuthInvalid(error);
         return;
       }
-      if (mounted) setState(() => _error = error.toString());
+      setState(() => _error = error.toString());
     }
   }
 

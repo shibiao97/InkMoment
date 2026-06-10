@@ -33,11 +33,11 @@ class _ArenaScreenState extends State<ArenaScreen> {
   Future<void> _load() async {
     try {
       final payload = await widget.api.getGroup();
+      if (!mounted) return;
       if (payload['done'] == true) {
         widget.onExport();
         return;
       }
-      if (!mounted) return;
       setState(() => _group = asStringMap(payload['group']));
     } catch (error) {
       _handleError(error);
@@ -47,9 +47,10 @@ class _ArenaScreenState extends State<ArenaScreen> {
   Future<void> _choose(String loser) async {
     try {
       final payload = await widget.api.choose(loser);
+      if (!mounted) return;
       if (payload['done'] == true) {
         widget.onExport();
-      } else if (mounted) {
+      } else {
         setState(() => _group = asStringMap(payload['group']));
       }
     } catch (error) {
@@ -67,11 +68,12 @@ class _ArenaScreenState extends State<ArenaScreen> {
   }
 
   void _handleError(Object error) {
+    if (!mounted) return;
     if (InkMomentApi.isAuthorizationFailure(error)) {
       widget.onAuthInvalid(error);
       return;
     }
-    if (mounted) setState(() => _error = error.toString());
+    setState(() => _error = error.toString());
   }
 
   @override

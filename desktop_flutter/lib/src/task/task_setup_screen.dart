@@ -30,6 +30,7 @@ class _TaskSetupScreenState extends State<TaskSetupScreen> {
   Future<void> _pickFolder() async {
     final path = await getDirectoryPath(confirmButtonText: Zh.chooseFolder);
     if (path == null) return;
+    if (!mounted) return;
     setState(() {
       _folder = path;
       _busy = true;
@@ -40,11 +41,12 @@ class _TaskSetupScreenState extends State<TaskSetupScreen> {
       if (!mounted) return;
       setState(() => _peek = peek);
     } catch (error) {
+      if (!mounted) return;
       if (InkMomentApi.isAuthorizationFailure(error)) {
         widget.onAuthInvalid(error);
         return;
       }
-      _error = error.toString();
+      setState(() => _error = error.toString());
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -62,8 +64,10 @@ class _TaskSetupScreenState extends State<TaskSetupScreen> {
         'engine': _engine,
         'prescreen_enabled': true,
       });
+      if (!mounted) return;
       widget.onStarted({...payload, 'folder': _folder});
     } catch (error) {
+      if (!mounted) return;
       if (InkMomentApi.isAuthorizationFailure(error)) {
         widget.onAuthInvalid(error);
         return;

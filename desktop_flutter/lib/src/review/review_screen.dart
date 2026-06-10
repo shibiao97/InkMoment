@@ -41,24 +41,27 @@ class _ReviewScreenState extends State<ReviewScreen> {
         _groups = asList(preview['groups']);
       });
     } catch (error) {
+      if (!mounted) return;
       if (InkMomentApi.isAuthorizationFailure(error)) {
         widget.onAuthInvalid(error);
         return;
       }
-      if (mounted) setState(() => _error = error.toString());
+      setState(() => _error = error.toString());
     }
   }
 
   Future<void> _confirm() async {
     try {
       await widget.api.confirmPrescreen();
+      if (!mounted) return;
       widget.onSelect();
     } catch (error) {
+      if (!mounted) return;
       if (InkMomentApi.isAuthorizationFailure(error)) {
         widget.onAuthInvalid(error);
         return;
       }
-      if (mounted) setState(() => _error = error.toString());
+      setState(() => _error = error.toString());
     }
   }
 

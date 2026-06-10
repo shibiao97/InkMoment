@@ -43,6 +43,7 @@ class _WorkflowShellState extends State<WorkflowShell> {
   }
 
   void _handleWorkflowError(Object error) {
+    if (!mounted) return;
     if (InkMomentApi.isAuthorizationFailure(error)) {
       widget.onAuthInvalid(error);
       return;
@@ -53,6 +54,7 @@ class _WorkflowShellState extends State<WorkflowShell> {
   Future<void> _refreshAuth() async {
     try {
       final auth = await widget.api.authStatus(force: true);
+      if (!mounted) return;
       widget.onAuthChanged(auth);
       setState(() => _message = '授权状态已刷新');
     } catch (error) {
@@ -63,6 +65,7 @@ class _WorkflowShellState extends State<WorkflowShell> {
   Future<void> _logout() async {
     try {
       await widget.api.logout();
+      if (!mounted) return;
       widget.onAuthChanged(const {'authorized': false, 'authenticated': false, 'reason': 'unauthenticated'});
     } catch (error) {
       _handleWorkflowError(error);

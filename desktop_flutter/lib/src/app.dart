@@ -48,6 +48,7 @@ class _InkMomentDesktopAppState extends State<InkMomentDesktopApp> {
     final api = InkMomentApi(status.apiBaseUrl);
     try {
       final auth = await api.authStatus(force: true);
+      if (!mounted) return;
       setState(() {
         _api = api;
         _auth = auth;
@@ -55,6 +56,7 @@ class _InkMomentDesktopAppState extends State<InkMomentDesktopApp> {
         _error = '';
       });
     } catch (error) {
+      if (!mounted) return;
       setState(() {
         _api = api;
         _auth = {'authorized': false, 'authenticated': false, 'reason': 'auth_check_failed'};

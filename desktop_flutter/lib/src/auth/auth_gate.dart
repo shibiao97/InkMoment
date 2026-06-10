@@ -40,6 +40,7 @@ class _AuthGateState extends State<AuthGate> {
     });
     try {
       final auth = await action();
+      if (!mounted) return;
       widget.onAuthorized(auth);
       if (auth['authorized'] == true) {
         return;
@@ -47,7 +48,7 @@ class _AuthGateState extends State<AuthGate> {
         setState(() => _message = _reasonText(auth['reason']));
       }
     } catch (error) {
-      setState(() => _message = error.toString());
+      if (mounted) setState(() => _message = error.toString());
     } finally {
       if (mounted) setState(() => _loading = false);
     }
