@@ -38,6 +38,7 @@ python3 -m venv .venv
 
 验证脚本会依次执行：
 
+- `scripts/check_sidecar_ready.py`
 - `flutter --version`
 - `flutter create --platforms=linux .`
 - `flutter pub get`
@@ -69,6 +70,12 @@ sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev libstdc+
 export PUB_HOSTED_URL=https://pub.flutter-io.cn
 export FLUTTER_STORAGE_BASE_URL=https://storage.flutter-io.cn
 .venv/bin/python scripts/check_flutter_desktop.py --platform linux --build
+```
+
+- 只想先看 Flutter 编译，不验证 Python sidecar：
+
+```bash
+.venv/bin/python scripts/check_flutter_desktop.py --platform linux --build --skip-sidecar-check
 ```
 
 ## 4. 下一阶段验收

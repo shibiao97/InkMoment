@@ -33,17 +33,24 @@ def main() -> int:
         action="store_true",
         help="Skip flutter create when platform runner files already exist.",
     )
+    parser.add_argument(
+        "--skip-sidecar-check",
+        action="store_true",
+        help="Skip Python sidecar ready/health verification before Flutter checks.",
+    )
     args = parser.parse_args()
 
-    flutter = shutil.which("flutter")
-    if flutter is None:
-        print("flutter 命令不存在：请先在构建机安装 Flutter SDK。", file=sys.stderr)
-        return 127
     if not FLUTTER_DIR.exists():
         print(f"找不到 Flutter 目录：{FLUTTER_DIR}", file=sys.stderr)
         return 2
 
     env = os.environ.copy()
+    if not args.skip_sidecar_check:
+        run([sys.executable, "scripts/check_sidecar_ready.py"], env=env)
+    flutter = shutil.which("flutter")
+    if flutter is None:
+        print("flutter 命令不存在：请先在构建机安装 Flutter SDK。", file=sys.stderr)
+        return 127
     run([flutter, "--version"], env=env)
     if not args.skip_create:
         run([flutter, "create", f"--platforms={args.platform}", "."], cwd=FLUTTER_DIR, env=env)
