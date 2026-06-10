@@ -52,6 +52,17 @@ class SecurityServiceTest(unittest.TestCase):
         self.assertEqual(response.headers["Access-Control-Allow-Origin"], "http://localhost")
         self.assertEqual(response.headers["Access-Control-Allow-Headers"], "Content-Type, X-Token")
 
+    def test_native_desktop_client_origin_matching_api_host_can_post(self):
+        client = self._security_app().test_client()
+
+        response = client.post(
+            "/api/write",
+            headers={"Host": "127.0.0.1:5057", "Origin": "http://127.0.0.1:5057"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["Access-Control-Allow-Origin"], "http://127.0.0.1:5057")
+
     def test_rejects_bad_origin_and_referer(self):
         client = self._security_app().test_client()
 

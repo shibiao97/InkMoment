@@ -29,6 +29,8 @@ class InkMomentApi {
   Future<Map<String, dynamic>> _send(String method, String path, [Map<String, dynamic>? body]) async {
     final request = await _client.openUrl(method, Uri.parse('$baseUrl$path'));
     request.headers.contentType = ContentType.json;
+    request.headers.set(HttpHeaders.acceptHeader, 'application/json');
+    request.headers.set('Origin', baseUrl);
     if (body != null) request.write(jsonEncode(body));
     final response = await request.close();
     final text = await utf8.decodeStream(response);
