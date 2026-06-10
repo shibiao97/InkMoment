@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../api/inkmoment_api.dart';
+import '../api/json_utils.dart';
 import '../l10n/strings.dart';
 
 class ReviewScreen extends StatefulWidget {
@@ -36,8 +37,8 @@ class _ReviewScreenState extends State<ReviewScreen> {
       final preview = await widget.api.getPreviewGroups();
       if (!mounted) return;
       setState(() {
-        _items = rejected['items'] as List? ?? const [];
-        _groups = preview['groups'] as List? ?? const [];
+        _items = asList(rejected['items']);
+        _groups = asList(preview['groups']);
       });
     } catch (error) {
       if (InkMomentApi.isAuthorizationFailure(error)) {
@@ -93,8 +94,8 @@ class _ReviewScreenState extends State<ReviewScreen> {
           itemCount: _items.length,
           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 3, crossAxisSpacing: 8, mainAxisSpacing: 8),
           itemBuilder: (_, index) {
-            final item = _items[index] as Map;
-            final signals = item['signals'] as Map?;
+            final item = asStringMap(_items[index]) ?? emptyStringMap;
+            final signals = asStringMap(item['signals']);
             final url = widget.api.imageUrl(item['path'] ?? item['original']);
             return _PhotoTile(
               imageUrl: url,
@@ -118,8 +119,8 @@ class _ReviewScreenState extends State<ReviewScreen> {
           itemCount: _groups.length,
           separatorBuilder: (_, __) => const SizedBox(height: 8),
           itemBuilder: (_, index) {
-            final group = _groups[index] as Map;
-            final signals = group['signals'] is Map ? (group['signals'] as Map)['best'] as Map? : null;
+            final group = asStringMap(_groups[index]) ?? emptyStringMap;
+            final signals = asStringMap(asStringMap(group['signals'])?['best']);
             return Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(color: const Color(0xFF1A211D), borderRadius: BorderRadius.circular(6)),

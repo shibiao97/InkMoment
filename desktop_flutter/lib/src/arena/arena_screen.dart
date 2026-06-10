@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../api/inkmoment_api.dart';
+import '../api/json_utils.dart';
 import '../l10n/strings.dart';
 
 class ArenaScreen extends StatefulWidget {
@@ -37,7 +38,7 @@ class _ArenaScreenState extends State<ArenaScreen> {
         return;
       }
       if (!mounted) return;
-      setState(() => _group = payload['group'] as Map<String, dynamic>?);
+      setState(() => _group = asStringMap(payload['group']));
     } catch (error) {
       _handleError(error);
     }
@@ -49,7 +50,7 @@ class _ArenaScreenState extends State<ArenaScreen> {
       if (payload['done'] == true) {
         widget.onExport();
       } else if (mounted) {
-        setState(() => _group = payload['group'] as Map<String, dynamic>?);
+        setState(() => _group = asStringMap(payload['group']));
       }
     } catch (error) {
       _handleError(error);
@@ -101,7 +102,7 @@ class _ArenaScreenState extends State<ArenaScreen> {
   }
 
   Widget _photoPane(String title, Object? path, Object? signals) {
-    final signalMap = signals is Map ? signals : const {};
+    final signalMap = asStringMap(signals) ?? emptyStringMap;
     final url = widget.api.imageUrl(path);
     return Container(
       padding: const EdgeInsets.all(14),

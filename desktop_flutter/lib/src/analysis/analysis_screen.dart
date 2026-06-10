@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../api/inkmoment_api.dart';
+import '../api/json_utils.dart';
 import '../l10n/strings.dart';
 
 class AnalysisScreen extends StatefulWidget {
@@ -23,7 +24,7 @@ class AnalysisScreen extends StatefulWidget {
 
 class _AnalysisScreenState extends State<AnalysisScreen> {
   Timer? _timer;
-  Map<String, dynamic> _job = const {};
+  Map<String, dynamic> _job = emptyStringMap;
   String _error = '';
 
   @override

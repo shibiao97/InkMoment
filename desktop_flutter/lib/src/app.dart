@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'api/inkmoment_api.dart';
+import 'api/json_utils.dart';
 import 'auth/auth_gate.dart';
 import 'l10n/strings.dart';
 import 'runtime/sidecar_controller.dart';
@@ -101,11 +102,11 @@ class _InkMomentDesktopAppState extends State<InkMomentDesktopApp> {
       return _BootScreen(message: _message, error: _error);
     }
     if (!_authorized) {
-      return AuthGate(api: api, auth: _auth ?? const {}, error: _error, onAuthorized: _setAuth);
+      return AuthGate(api: api, auth: _auth ?? emptyStringMap, error: _error, onAuthorized: _setAuth);
     }
     return WorkflowShell(
       api: api,
-      auth: _auth ?? const {},
+      auth: _auth ?? emptyStringMap,
       runtime: _runtime,
       onAuthInvalid: _markUnauthorized,
       onAuthChanged: _setAuth,

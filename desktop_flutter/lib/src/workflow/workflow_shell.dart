@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../api/inkmoment_api.dart';
+import '../api/json_utils.dart';
 import '../analysis/analysis_screen.dart';
 import '../arena/arena_screen.dart';
 import '../export/export_screen.dart';
@@ -213,7 +214,7 @@ class _RightInspector extends StatelessWidget {
         const Text('上下文检查器', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
         const SizedBox(height: 16),
         _line('当前步骤', step.label),
-        _line('授权账号', (auth['account'] as Map?)?['email']?.toString() ?? '已授权'),
+        _line('授权账号', asStringMap(auth['account'])?['email']?.toString() ?? '已授权'),
         _line('操作提示', '按当前步骤完成必要操作后继续'),
         if (message.isNotEmpty) _line('状态', message),
         const Spacer(),
