@@ -28,6 +28,11 @@ def main() -> int:
         action="store_true",
         help="Run flutter build for the selected platform after tests pass.",
     )
+    parser.add_argument(
+        "--skip-create",
+        action="store_true",
+        help="Skip flutter create when platform runner files already exist.",
+    )
     args = parser.parse_args()
 
     flutter = shutil.which("flutter")
@@ -40,7 +45,8 @@ def main() -> int:
 
     env = os.environ.copy()
     run([flutter, "--version"], env=env)
-    run([flutter, "create", f"--platforms={args.platform}", "."], cwd=FLUTTER_DIR, env=env)
+    if not args.skip_create:
+        run([flutter, "create", f"--platforms={args.platform}", "."], cwd=FLUTTER_DIR, env=env)
     run([flutter, "pub", "get"], cwd=FLUTTER_DIR, env=env)
     run([flutter, "analyze"], cwd=FLUTTER_DIR, env=env)
     run([flutter, "test"], cwd=FLUTTER_DIR, env=env)

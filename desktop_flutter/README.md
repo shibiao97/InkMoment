@@ -26,11 +26,13 @@ INKMOMENT_FLUTTER_API_BASE=http://127.0.0.1:5057 flutter run -d macos
 ## 京东云构建验证
 
 本机只提交源码时，建议在京东云使用干净构建机验证 Flutter。Linux 构建机可先做
-源码分析、测试和 Linux release 构建：
+源码分析、测试和 Linux release 构建；详细说明见
+[`docs/FLUTTER_JDCLOUD_BUILD.md`](../docs/FLUTTER_JDCLOUD_BUILD.md)。
 
 ```bash
 git clone <repo> InkMoment
 cd InkMoment
+bash scripts/setup_jdcloud_flutter_linux.sh
 python3 -m venv .venv
 .venv/bin/python -m pip install -r requirements.txt -r requirements-desktop.txt
 .venv/bin/python scripts/check_flutter_desktop.py --platform linux --build
