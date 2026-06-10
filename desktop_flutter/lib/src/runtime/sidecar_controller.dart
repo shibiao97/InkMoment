@@ -50,7 +50,7 @@ class SidecarController {
     try {
       _process = await Process.start(
         python,
-        [appPath.path, '--port', '0', '--no-browser', '--json-ready'],
+        [appPath.path, '--host', '127.0.0.1', '--port', '0', '--no-browser', '--json-ready'],
         workingDirectory: appPath.parent.path,
         environment: _sidecarEnvironment(),
       );
@@ -64,22 +64,19 @@ class SidecarController {
     _process!.stdout.transform(utf8.decoder).transform(const LineSplitter()).listen((line) async {
       _appendLog(line);
       if (ready.isCompleted) return;
-      try {
-        final payload = jsonDecode(line) as Map<String, dynamic>;
-        if (payload['event'] == 'ready' && payload['port'] != null) {
-          apiBaseUrl = 'http://127.0.0.1:${payload['port']}';
-          final healthy = await _waitForHealth(apiBaseUrl);
-          if (ready.isCompleted) return;
-          ready.complete(RuntimeStatus(
-            ready: healthy,
-            message: healthy ? '后端就绪' : '后端健康检查失败',
-            apiBaseUrl: apiBaseUrl,
-            pid: payload['pid'] is int ? payload['pid'] as int : null,
-            error: healthy ? '' : '无法访问 /api/health',
-          ));
-        }
-      } catch (_) {
-        // Non-JSON log line.
+      final payload = _decodeReadyPayload(line);
+      if (payload == null) return;
+      if (payload['event'] == 'ready' && payload['port'] != null) {
+        apiBaseUrl = 'http://127.0.0.1:${payload['port']}';
+        final healthy = await _waitForHealth(apiBaseUrl);
+        if (ready.isCompleted) return;
+        ready.complete(RuntimeStatus(
+          ready: healthy,
+          message: healthy ? '后端就绪' : '后端健康检查失败',
+          apiBaseUrl: apiBaseUrl,
+          pid: payload['pid'] is int ? payload['pid'] as int : null,
+          error: healthy ? '' : '无法访问 /api/health',
+        ));
       }
     });
 
@@ -103,6 +100,15 @@ class SidecarController {
     if (logs.length > 300) logs.removeAt(0);
   }
 
+  Map<String, dynamic>? _decodeReadyPayload(String line) {
+    try {
+      final payload = jsonDecode(line);
+      return payload is Map<String, dynamic> ? payload : null;
+    } on FormatException {
+      return null;
+    }
+  }
+
   Future<bool> _waitForHealth(String baseUrl) async {
     final client = HttpClient();
     final deadline = DateTime.now().add(const Duration(seconds: 20));
@@ -113,7 +119,8 @@ class SidecarController {
           final response = await request.close();
           await response.drain();
           if (response.statusCode >= 200 && response.statusCode < 300) return true;
-        } catch (_) {
+        } catch (error) {
+          _appendLog('健康检查等待中：$error');
         }
         await Future<void>.delayed(const Duration(milliseconds: 350));
       }
