@@ -3,6 +3,7 @@ import unittest
 
 from server.routes.auth import AuthDeps, create_auth_blueprint
 from server.routes.dependencies import DependenciesDeps, create_dependencies_blueprint
+from server.routes.export import ExportDeps, create_export_blueprint
 from server.routes.folder import FolderDeps, create_folder_blueprint
 from server.routes.grouping import GroupingDeps, create_grouping_blueprint
 from server.routes.image import ImageDeps, create_image_blueprint
@@ -22,6 +23,7 @@ class BlueprintDepsContractTest(unittest.TestCase):
         factories = [
             (create_auth_blueprint, AuthDeps),
             (create_dependencies_blueprint, DependenciesDeps),
+            (create_export_blueprint, ExportDeps),
             (create_folder_blueprint, FolderDeps),
             (create_grouping_blueprint, GroupingDeps),
             (create_image_blueprint, ImageDeps),

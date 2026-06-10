@@ -1,0 +1,34 @@
+class Zh {
+  static const appName = 'InkMoment';
+  static const booting = '正在启动桌面运行环境';
+  static const loginTitle = '登录并确认授权';
+  static const login = '登录';
+  static const register = '注册';
+  static const email = '账号邮箱';
+  static const password = '密码';
+  static const displayName = '显示名';
+  static const cdk = 'CDK 激活码';
+  static const redeem = '兑换并开通';
+  static const refreshAuth = '刷新授权';
+  static const logout = '退出登录';
+  static const mode = '模式';
+  static const folder = '文件夹';
+  static const analyze = '分析';
+  static const review = '复核';
+  static const select = '选片';
+  static const export = '导出';
+  static const chooseFolder = '选择照片文件夹';
+  static const startAnalyze = '开始分析';
+  static const cancelAnalyze = '取消分析';
+  static const restore = '恢复';
+  static const confirmReview = '确认复核';
+  static const leftWins = '左图胜出';
+  static const rightWins = '右图胜出';
+  static const keepBoth = '都保留';
+  static const skipGroup = '跳过本组';
+  static const undo = '撤销';
+  static const startExport = '开始批量导出';
+  static const openOutput = '打开输出目录';
+  static const newTask = '新建任务';
+  static const noData = '暂无数据';
+}

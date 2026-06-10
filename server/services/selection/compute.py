@@ -1,5 +1,7 @@
 from pathlib import Path
 
+from server.services.image_signal_service import serialize_image_signals
+
 
 def advance(group, loser_side: str) -> None:
     if group.finished:
@@ -63,7 +65,7 @@ def serialize_image_meta(session, path: str | None) -> dict | None:
     return session.meta.get(path)
 
 
-def members_for_group(group) -> list[dict]:
+def members_for_group(session, group) -> list[dict]:
     """组内每张图的状态。"""
     out = []
     loser_set = set(group.losers)
@@ -84,7 +86,14 @@ def members_for_group(group) -> list[dict]:
             status = "winner"
         else:
             status = "pending"
-        out.append({"path": path, "name": Path(path).name, "status": status})
+        out.append(
+            {
+                "path": path,
+                "name": Path(path).name,
+                "status": status,
+                "signals": serialize_image_signals(session, path),
+            }
+        )
     return out
 
 
@@ -136,7 +145,9 @@ def serialize_group(session, group, index: int) -> dict:
         "right": group.right,
         "left_meta": serialize_image_meta(session, group.left),
         "right_meta": serialize_image_meta(session, group.right),
-        "members": members_for_group(group),
+        "left_signals": serialize_image_signals(session, group.left),
+        "right_signals": serialize_image_signals(session, group.right),
+        "members": members_for_group(session, group),
         "next_preload": group.pending[0] if group.pending else None,
         "pending_count": len(group.pending),
         "loser_count": len(group.losers),

@@ -2,6 +2,8 @@ import shutil
 from pathlib import Path
 from typing import Callable, Optional
 
+from server.services.image_signal_service import serialize_image_signals
+
 
 def serialize_winners(session, winners_dir_factory: Callable[[str], Path]) -> dict:
     if session is None:
@@ -52,6 +54,7 @@ def serialize_auto_rejected(session, losers_dir_factory: Callable[[str], Path]) 
                     "reason": session.prescreen_reject_reasons.get(original, "智能初筛"),
                     "restored": original in session.prescreen_restored,
                     "datetime": (session.meta.get(original) or {}).get("datetime"),
+                    "signals": serialize_image_signals(session, original),
                 }
             )
         return {"items": items}
@@ -70,6 +73,7 @@ def serialize_auto_rejected(session, losers_dir_factory: Callable[[str], Path]) 
                     "reason": group.auto_reject_reasons.get(original, "智能初筛"),
                     "restored": original in group.manual_restored,
                     "datetime": (session.meta.get(original) or {}).get("datetime"),
+                    "signals": serialize_image_signals(session, original),
                 }
             )
     return {"items": items}

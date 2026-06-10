@@ -15,6 +15,7 @@ from inkmoment.grouper import (
 from server.domain.models import GroupState, SessionState
 from server.routes.auth import AuthDeps, create_auth_blueprint
 from server.routes.dependencies import DependenciesDeps, create_dependencies_blueprint
+from server.routes.export import ExportDeps, create_export_blueprint
 from server.routes.folder import FolderDeps, create_folder_blueprint
 from server.routes.grouping import GroupingDeps, create_grouping_blueprint
 from server.routes.image import ImageDeps, create_image_blueprint
@@ -38,6 +39,13 @@ from server.services.auth_client_service import (
     unbind_device as auth_unbind_device,
 )
 from server.services.dependency_service import preflight_dependencies_payload
+from server.services.export_service import (
+    export_cancel_payload,
+    export_open_out_dir_payload,
+    export_preview_payload,
+    export_start_payload,
+    export_status_payload,
+)
 from server.services.grouping_service import create_confirm_prescreen_handler
 from server.services.job_file_service import pic_dir, record_skipped_items, skipped_log_path
 from server.services.llm_service import (
@@ -264,6 +272,24 @@ def register_app_blueprints(flask_app: Flask, deps: BlueprintRegistryDeps) -> No
                 get_watermark_status=lambda: watermark_status_payload(runtime.watermark_job),
                 cancel_watermark=lambda: watermark_cancel_payload(runtime.watermark_job),
                 open_watermark_out_dir=lambda: watermark_open_out_dir_payload(runtime.watermark_job),
+            )
+        )
+    )
+    flask_app.register_blueprint(
+        create_export_blueprint(
+            ExportDeps(
+                preview_export=lambda data: export_preview_payload(data, runtime.session, winners_dir, logger),
+                start_export=lambda data: export_start_payload(
+                    data,
+                    runtime.session,
+                    runtime.watermark_job,
+                    deps.set_watermark_job,
+                    winners_dir,
+                    logger,
+                ),
+                get_export_status=lambda: export_status_payload(runtime.watermark_job),
+                cancel_export=lambda: export_cancel_payload(runtime.watermark_job),
+                open_export_out_dir=lambda: export_open_out_dir_payload(runtime.watermark_job),
             )
         )
     )

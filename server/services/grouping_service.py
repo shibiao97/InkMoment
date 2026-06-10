@@ -4,6 +4,7 @@ import time
 from typing import Callable
 
 from server.services.selection_service import group_best_path, group_earliest_dt
+from server.services.image_signal_service import serialize_image_signals
 
 
 def serialize_grouping_progress(grouping: dict, since: int = 0) -> dict:
@@ -95,6 +96,9 @@ def serialize_preview_groups(session) -> dict:
                 "size": len(group.images),
                 "samples": ordered[:4],
                 "best_path": best,
+                "signals": {
+                    "best": serialize_image_signals(session, best),
+                },
                 "earliest_dt": group_earliest_dt(session, group),
                 "span_seconds": _group_span_seconds(session, group),
             }
