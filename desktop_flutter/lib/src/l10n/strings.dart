@@ -1,22 +1,52 @@
 class Zh {
   static const appName = 'InkMoment';
   static const booting = '正在启动桌面运行环境';
+
+  static const authBrand = 'InkMoment 授权';
   static const loginTitle = '登录并确认授权';
   static const login = '登录';
   static const register = '注册';
+  static const registerAndBind = '注册并绑定本机';
+  static const processing = '处理中';
   static const email = '账号邮箱';
   static const password = '密码';
   static const displayName = '显示名';
   static const cdk = 'CDK 激活码';
   static const redeem = '兑换并开通';
   static const refreshAuth = '刷新授权';
+  static const authRefreshed = '授权状态已刷新';
   static const logout = '退出登录';
+  static const unbindReason = '解绑原因';
+  static const defaultUnbindReason = '用户自助换机';
+  static const unbindDevice = '解除设备绑定';
+  static const account = '账号';
+  static const signedIn = '已登录';
+  static const signedOut = '未登录';
+  static const authorization = '授权';
+  static const service = '服务';
+  static const serviceConfigured = '已配置';
+  static const serviceUnavailable = '不可用';
+  static const authorized = '已开通';
+  static const notActivated = '未开通';
+  static const expired = '已过期';
+  static const revoked = '已撤销';
+  static const deviceMismatch = '设备不匹配';
+  static const authServerNotConfigured = '授权服务未配置';
+  static const authServerUnavailable = '授权服务不可用';
+  static const authCheckFailed = '授权检查失败';
+  static const authPending = '授权尚未完成';
+  static const authValid = '有效';
+  static const authAbnormal = '异常';
+  static const authorizedAccount = '授权账号';
+  static const authorizedFallback = '已授权';
+
   static const mode = '模式';
   static const folder = '文件夹';
   static const analyze = '分析';
   static const review = '复核';
   static const select = '选片';
   static const export = '导出';
+  static const modeFolderStep = '模式 / 文件夹';
   static const chooseFolder = '选择照片文件夹';
   static const startAnalyze = '开始分析';
   static const cancelAnalyze = '取消分析';
@@ -31,4 +61,90 @@ class Zh {
   static const openOutput = '打开输出目录';
   static const newTask = '新建任务';
   static const noData = '暂无数据';
+
+  static const chooseModeAndFolder = '选择模式与照片文件夹';
+  static const quickSelection = '快速选片';
+  static const quickSelectionDesc = '基础分析，适合先跑一遍大批量照片';
+  static const aiPrescreen = 'AI 初筛';
+  static const aiPrescreenDesc = '启用智能初筛，先找出明显问题照片';
+  static const fullWorkflow = '完整流程';
+  static const fullWorkflowDesc = '分析、复核、选片、导出全部串联';
+  static const folderNotSelected = '尚未选择照片文件夹';
+  static const folderScanHint = '选择文件夹后会显示照片数量与预览摘要。';
+  static String scannedPhotos(Object count) => '已扫描 $count 张照片';
+
+  static const analyzingPhotos = '正在分析照片';
+  static const preparing = '准备中';
+  static const completed = '已完成';
+  static const total = '总数';
+  static const progress = '进度';
+
+  static const reviewTitle = 'AI 初筛复核';
+  static const noPrescreenRejectedPhotos = '暂无初筛剔除照片';
+  static const prescreenRejectedSection = 'AI 初筛复核';
+  static const photoFallback = '照片';
+  static const smartPrescreen = '智能初筛';
+  static const noGroupPreview = '暂无分组预览';
+  static const groupPreview = '分组预览';
+  static const representativePhoto = '代表图';
+  static String reviewSummary(int rejectedCount, int groupCount) =>
+      '待复核 $rejectedCount 张，分组预览 $groupCount 组';
+  static String scoreLabel(Object? value) => '评分：${value ?? noData}';
+  static String groupSummary(int index, Object size) => '第 $index 组 · $size 张';
+  static String recommendationLabel(Object? value) => '推荐：${value ?? noData}';
+  static String clarityLabel(Object? value) => '清晰度：${value ?? noData}';
+
+  static const arenaTitle = '双图对比选片';
+  static const leftPhoto = '左图';
+  static const rightPhoto = '右图';
+  static const noImage = '无图';
+  static String qualityScoreLabel(Object? value) => '质量分：${value ?? noData}';
+  static String aiReasonLabel(Object? value) => 'AI 理由：${value ?? noData}';
+
+  static const exportWinners = '导出胜出照片';
+  static const formatLabel = '导出格式';
+  static const originalFile = '原始文件';
+  static const quality = '质量';
+  static const previewWatermarkHint = '点击预览后显示水印效果';
+  static const previewExport = '预览导出';
+  static const cancelExport = '取消导出';
+  static const exportIdle = '空闲';
+  static const exportRunning = '导出中';
+  static const exportDone = '已完成';
+  static const exportCancelled = '已取消';
+  static const exportFailed = '失败';
+  static const unknown = '未知';
+  static String exportStatusLine(Object? status, Object done, Object total) =>
+      '导出状态：${statusLabel(status)}  $done/$total';
+  static String statusLabel(Object? status) => switch (status?.toString()) {
+    'idle' => exportIdle,
+    'running' => exportRunning,
+    'done' => exportDone,
+    'cancelled' => exportCancelled,
+    'error' => exportFailed,
+    _ => unknown,
+  };
+
+  static const waitingTask = '等待新任务';
+  static const currentFlow = '当前流程';
+  static const backendReady = '后端就绪';
+  static const authNormal = '授权正常';
+  static const contextInspector = '上下文检查器';
+  static const currentStep = '当前步骤';
+  static const operationHint = '操作提示';
+  static const operationHintText = '按当前步骤完成必要操作后继续';
+  static const status = '状态';
+  static const backend = '后端';
+  static const connecting = '连接中';
+  static const ready = '就绪';
+  static const backendConnected = '后端已连接';
+  static const backendHealthFailed = '后端健康检查失败';
+  static const backendStartFailed = '后端启动失败';
+  static const healthEndpointUnavailable = '无法访问 /api/health';
+  static const appPyMissing = '找不到 app.py';
+  static const backendStartTimeout = '后端启动超时';
+  static const readyJsonTimeout = '等待 ready JSON 超时';
+  static String healthCheckWaiting(Object error) => '健康检查等待中：$error';
+  static const logs = '日志';
+  static const logUnit = '条';
 }
