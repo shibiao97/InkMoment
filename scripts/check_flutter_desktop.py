@@ -54,6 +54,9 @@ def main() -> int:
     run([flutter, "--version"], env=env)
     if not args.skip_create:
         run([flutter, "create", f"--platforms={args.platform}", "."], cwd=FLUTTER_DIR, env=env)
+        generated_test = FLUTTER_DIR / "test" / "widget_test.dart"
+        if generated_test.exists():
+            generated_test.unlink()
     run([flutter, "pub", "get"], cwd=FLUTTER_DIR, env=env)
     run([flutter, "analyze"], cwd=FLUTTER_DIR, env=env)
     run([flutter, "test"], cwd=FLUTTER_DIR, env=env)
