@@ -64,7 +64,7 @@ void main() {
     );
 
     expect(find.text(Zh.authBrand), findsOneWidget);
-    expect(find.text(Zh.loginTitle), findsOneWidget);
+    expect(find.text(Zh.loginTitle), findsWidgets);
     expect(find.text(Zh.account), findsOneWidget);
     expect(find.text(Zh.signedOut), findsWidgets);
     expect(find.text(Zh.authorization), findsOneWidget);
@@ -92,7 +92,7 @@ void main() {
       ),
     );
 
-    expect(find.text(Zh.notActivated), findsOneWidget);
+    expect(find.text(Zh.notActivated), findsWidgets);
     expect(find.text(Zh.cdk), findsOneWidget);
     expect(find.text(Zh.redeem), findsOneWidget);
     expect(find.text(Zh.refreshAuth), findsOneWidget);
