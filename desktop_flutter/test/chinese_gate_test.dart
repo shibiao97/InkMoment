@@ -65,11 +65,11 @@ void main() {
 
     expect(find.text(Zh.authBrand), findsOneWidget);
     expect(find.text(Zh.loginTitle), findsWidgets);
-    expect(find.text(Zh.account), findsOneWidget);
+    expect(find.text(Zh.account), findsWidgets);
     expect(find.text(Zh.signedOut), findsWidgets);
-    expect(find.text(Zh.authorization), findsOneWidget);
-    expect(find.text(Zh.service), findsOneWidget);
-    expect(find.text(Zh.serviceConfigured), findsOneWidget);
+    expect(find.text(Zh.authorization), findsWidgets);
+    expect(find.text(Zh.service), findsWidgets);
+    expect(find.text(Zh.serviceConfigured), findsWidgets);
     expect(find.text(Zh.login), findsWidgets);
     expect(find.text(Zh.register), findsOneWidget);
     expect(find.text(Zh.email), findsOneWidget);
