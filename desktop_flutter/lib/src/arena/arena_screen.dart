@@ -211,9 +211,9 @@ class _ArenaScreenState extends State<ArenaScreen> {
         height: 58,
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: StitchColors.winner.withOpacity(0.18),
+          color: StitchColors.winner.withValues(alpha: 0.18),
           borderRadius: BorderRadius.circular(999),
-          border: Border.all(color: StitchColors.winner.withOpacity(0.46)),
+          border: Border.all(color: StitchColors.winner.withValues(alpha: 0.46)),
         ),
         child: Text(
           'VS',

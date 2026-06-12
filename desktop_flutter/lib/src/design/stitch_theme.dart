@@ -89,7 +89,7 @@ ThemeData buildStitchTheme() {
       activeTrackColor: StitchColors.accentDeep,
       inactiveTrackColor: StitchColors.accentSoft,
       thumbColor: StitchColors.accentDeep,
-      overlayColor: StitchColors.accent.withOpacity(0.14),
+      overlayColor: StitchColors.accent.withValues(alpha: 0.14),
     ),
     dropdownMenuTheme: DropdownMenuThemeData(
       inputDecorationTheme: InputDecorationTheme(

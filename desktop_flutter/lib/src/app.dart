@@ -177,7 +177,7 @@ class _BootScreen extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: StitchColors.warningSoft,
                       borderRadius: BorderRadius.circular(StitchRadius.md),
-                      border: Border.all(color: StitchColors.warning.withOpacity(0.28)),
+                      border: Border.all(color: StitchColors.warning.withValues(alpha: 0.28)),
                     ),
                     child: Text(
                       error,
