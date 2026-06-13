@@ -52,6 +52,11 @@ class DesktopReleaseBuildTest(unittest.TestCase):
                     [dmg],
                 )
 
+    def test_console_path_escapes_non_console_characters(self):
+        path = Path("src-tauri/target/release/bundle/nsis/影刻_0.1.0_x64-setup.exe")
+        with patch.object(build_desktop_release.sys, "stdout", SimpleNamespace(encoding="cp1252")):
+            self.assertIn("\\u5f71\\u523b", build_desktop_release.console_path(path))
+
     def test_build_tauri_passes_sidecar_env_and_requested_flags(self):
         args = SimpleNamespace(
             target="aarch64-apple-darwin",

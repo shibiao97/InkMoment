@@ -132,6 +132,12 @@ def find_artifacts(bundle: str, *, debug: bool, target: str | None) -> list[Path
     )
 
 
+def console_path(path: Path) -> str:
+    """Return a path that can be printed on non-UTF-8 Windows consoles."""
+    encoding = sys.stdout.encoding or "utf-8"
+    return str(path).encode(encoding, errors="backslashreplace").decode(encoding)
+
+
 def build_tauri(args: argparse.Namespace, bundle: str) -> None:
     env = os.environ.copy()
     env["INKMOMENT_USE_BUNDLED_SIDECAR"] = "1"
@@ -301,7 +307,7 @@ def main() -> int:
 
     print("\nDesktop release artifact(s):", flush=True)
     for artifact in artifacts:
-        print(f"  {artifact.relative_to(ROOT)}", flush=True)
+        print(f"  {console_path(artifact.relative_to(ROOT))}", flush=True)
     return 0
 
 
