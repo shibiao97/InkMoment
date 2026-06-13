@@ -124,7 +124,7 @@ def main() -> int:
             display = artifact.relative_to(build_desktop_release.ROOT)
         except ValueError:
             display = artifact
-        print(f"  {display}")
+        print(f"  {build_desktop_release.console_path(display)}")
     return 0
 
 
