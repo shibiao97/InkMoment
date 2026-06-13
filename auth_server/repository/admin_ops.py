@@ -130,7 +130,9 @@ class AdminOpsStoreMixin:
             for row in rows
         ]
 
-    def admin_list_notices(self, audience: str = "", published_only: bool = False, limit: int = 100) -> list[dict[str, Any]]:
+    def admin_list_notices(
+        self, audience: str = "", published_only: bool = False, limit: int = 100
+    ) -> list[dict[str, Any]]:
         normalized_audience = (audience or "").strip().lower()
         where_parts: list[str] = []
         params: list[Any] = []
@@ -451,7 +453,9 @@ class AdminOpsStoreMixin:
         backup_dir.mkdir(parents=True, exist_ok=True)
         backup_id = uuid.uuid4().hex
         safe_label = _safe_backup_label(label)
-        backup_path = backup_dir / f"auth-{time.strftime('%Y%m%d-%H%M%S', time.localtime(current_time))}-{backup_id[:8]}.sqlite3"
+        backup_path = (
+            backup_dir / f"auth-{time.strftime('%Y%m%d-%H%M%S', time.localtime(current_time))}-{backup_id[:8]}.sqlite3"
+        )
         with self.connection() as conn:
             conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
         shutil.copy2(self.path, backup_path)

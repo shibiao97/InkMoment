@@ -207,7 +207,11 @@ class DependencyDownloadManager:
         finally:
             self._terminate_active_runners()
             with self._lock:
-                if self._job and self._job.get("id") == job_id and self._job.get("status") in TERMINAL_DOWNLOAD_STATUSES:
+                if (
+                    self._job
+                    and self._job.get("id") == job_id
+                    and self._job.get("status") in TERMINAL_DOWNLOAD_STATUSES
+                ):
                     self._active_runners = {}
                     self._cancel_event = None
 
@@ -432,7 +436,9 @@ def _expert_runtime_tasks(engine: str, cache_dir: Path, *, dino_download_require
     return [
         _runtime_task("runtime:expert:dinov2", "DINOv2-small 运行资源", 20, engine, cache_dir, depends_on=dino_deps),
         _runtime_task("runtime:expert:nima", "NIMA 运行资源", 15, engine, cache_dir),
-        _runtime_task("runtime:expert:pyiqa", "MUSIQ / CLIP-IQA+ 运行资源", 15, engine, cache_dir, depends_on=["repair"]),
+        _runtime_task(
+            "runtime:expert:pyiqa", "MUSIQ / CLIP-IQA+ 运行资源", 15, engine, cache_dir, depends_on=["repair"]
+        ),
         _runtime_task("runtime:expert:insightface", "InsightFace 运行资源", 15, engine, cache_dir),
     ]
 

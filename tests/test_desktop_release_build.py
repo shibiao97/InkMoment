@@ -144,9 +144,7 @@ class DesktopReleaseBuildTest(unittest.TestCase):
         build_sidecar.add_pyinstaller_collection_args(cmd)
 
         excluded = {
-            cmd[index + 1]
-            for index, value in enumerate(cmd)
-            if value == "--exclude-module" and index + 1 < len(cmd)
+            cmd[index + 1] for index, value in enumerate(cmd) if value == "--exclude-module" and index + 1 < len(cmd)
         }
         self.assertIn("datasets", excluded)
         self.assertIn("pyarrow", excluded)
@@ -215,13 +213,17 @@ class DesktopReleaseBuildTest(unittest.TestCase):
             def fake_pyinstaller_run(_cmd):
                 dist_dir = root / "dist" / "inkmoment-sidecar"
                 dist_dir.mkdir(parents=True)
-                (dist_dir / ("inkmoment-sidecar" + (".exe" if build_sidecar.os.name == "nt" else ""))).write_bytes(b"sidecar")
+                (dist_dir / ("inkmoment-sidecar" + (".exe" if build_sidecar.os.name == "nt" else ""))).write_bytes(
+                    b"sidecar"
+                )
 
             with patch.object(build_sidecar, "ROOT", root):
                 with patch.object(build_sidecar, "BIN_DIR", bin_dir):
                     with patch.object(build_sidecar, "python_executable", return_value="/venv/bin/python"):
                         with patch.object(build_sidecar, "ensure_pyinstaller"):
-                            with patch.object(build_sidecar, "add_pyinstaller_collection_args", side_effect=fake_collection_args):
+                            with patch.object(
+                                build_sidecar, "add_pyinstaller_collection_args", side_effect=fake_collection_args
+                            ):
                                 with patch.object(build_sidecar, "run", side_effect=fake_pyinstaller_run):
                                     self.assertEqual(build_sidecar.main(), 0)
 
@@ -236,7 +238,9 @@ class DesktopReleaseBuildTest(unittest.TestCase):
                 dist_dir = root / "dist" / "inkmoment-sidecar"
                 torch_lib = dist_dir / "_internal" / "torch" / "lib"
                 torch_lib.mkdir(parents=True)
-                (dist_dir / "inkmoment-sidecar").write_bytes(b"sidecar")
+                (dist_dir / ("inkmoment-sidecar" + (".exe" if build_sidecar.os.name == "nt" else ""))).write_bytes(
+                    b"sidecar"
+                )
                 (torch_lib / "libtorch_cpu.dylib").write_bytes(b"torch")
                 (dist_dir / "_internal" / "libtorch_cpu.dylib").symlink_to("torch/lib/libtorch_cpu.dylib")
 

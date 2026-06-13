@@ -206,7 +206,9 @@ class DependencyServiceTest(unittest.TestCase):
     @patch("server.services.dependency_service._hf_model_cache_status")
     @patch("server.services.dependencies.payloads._prepare_runtime_models", return_value=({"downloaded": []}, 200))
     @patch("server.services.dependency_service.repair_runtime_dependencies")
-    def test_download_repairs_manual_resources_without_model_download(self, repair_dependencies, _runtime, cache_status):
+    def test_download_repairs_manual_resources_without_model_download(
+        self, repair_dependencies, _runtime, cache_status
+    ):
         repair_dependencies.return_value = {
             "ok": True,
             "checked": [{"id": "python:pyiqa", "message": "pyiqa 模块资源已补齐。"}],
@@ -242,16 +244,18 @@ class DependencyServiceTest(unittest.TestCase):
             "missing": [],
             "error": None,
         }
-        runner_factory = FakeRunnerFactory({
-            "repair": [
-                {"type": "progress", "progress": 40, "message": "repairing"},
-                {"type": "result", "result": {"repaired": [], "downloaded": [], "skipped": []}},
-            ],
-            "runtime:expert:dinov2": [{"type": "result", "result": {"downloaded": []}}],
-            "runtime:expert:nima": [{"type": "result", "result": {"downloaded": []}}],
-            "runtime:expert:pyiqa": [{"type": "result", "result": {"downloaded": []}}],
-            "runtime:expert:insightface": [{"type": "result", "result": {"downloaded": []}}],
-        })
+        runner_factory = FakeRunnerFactory(
+            {
+                "repair": [
+                    {"type": "progress", "progress": 40, "message": "repairing"},
+                    {"type": "result", "result": {"repaired": [], "downloaded": [], "skipped": []}},
+                ],
+                "runtime:expert:dinov2": [{"type": "result", "result": {"downloaded": []}}],
+                "runtime:expert:nima": [{"type": "result", "result": {"downloaded": []}}],
+                "runtime:expert:pyiqa": [{"type": "result", "result": {"downloaded": []}}],
+                "runtime:expert:insightface": [{"type": "result", "result": {"downloaded": []}}],
+            }
+        )
         manager = DependencyDownloadManager(lambda: self.store, runner_factory=runner_factory)
 
         payload, status = manager.start({"engine": "expert", "model_dir": str(self.root / "models")})
@@ -267,7 +271,9 @@ class DependencyServiceTest(unittest.TestCase):
                 break
             time.sleep(0.02)
         self.assertEqual(final["status"], "done")
-        self.assertIn({"model": "runtime:expert-models", "path": str((self.root / "models").resolve())}, final["downloaded"])
+        self.assertIn(
+            {"model": "runtime:expert-models", "path": str((self.root / "models").resolve())}, final["downloaded"]
+        )
         self.assertGreaterEqual(runner_factory.max_active, 2)
 
     @patch("server.services.dependencies.manager._hf_model_cache_status")
@@ -278,13 +284,15 @@ class DependencyServiceTest(unittest.TestCase):
             "missing": [],
             "error": None,
         }
-        runner_factory = FakeRunnerFactory({
-            "repair": [{"type": "result", "result": {"repaired": [], "downloaded": [], "skipped": []}}],
-            "runtime:expert:dinov2": FakeRunnerFactory.BLOCK,
-            "runtime:expert:nima": FakeRunnerFactory.BLOCK,
-            "runtime:expert:pyiqa": FakeRunnerFactory.BLOCK,
-            "runtime:expert:insightface": FakeRunnerFactory.BLOCK,
-        })
+        runner_factory = FakeRunnerFactory(
+            {
+                "repair": [{"type": "result", "result": {"repaired": [], "downloaded": [], "skipped": []}}],
+                "runtime:expert:dinov2": FakeRunnerFactory.BLOCK,
+                "runtime:expert:nima": FakeRunnerFactory.BLOCK,
+                "runtime:expert:pyiqa": FakeRunnerFactory.BLOCK,
+                "runtime:expert:insightface": FakeRunnerFactory.BLOCK,
+            }
+        )
         manager = DependencyDownloadManager(lambda: self.store, runner_factory=runner_factory)
 
         payload, status = manager.start({"engine": "expert", "model_dir": str(self.root / "models")})
@@ -307,13 +315,15 @@ class DependencyServiceTest(unittest.TestCase):
             "missing": [],
             "error": None,
         }
-        runner_factory = FakeRunnerFactory({
-            "repair": [{"type": "result", "result": {"repaired": [], "downloaded": [], "skipped": []}}],
-            "runtime:expert:dinov2": FakeRunnerFactory.BLOCK,
-            "runtime:expert:nima": FakeRunnerFactory.BLOCK,
-            "runtime:expert:pyiqa": FakeRunnerFactory.BLOCK,
-            "runtime:expert:insightface": FakeRunnerFactory.BLOCK,
-        })
+        runner_factory = FakeRunnerFactory(
+            {
+                "repair": [{"type": "result", "result": {"repaired": [], "downloaded": [], "skipped": []}}],
+                "runtime:expert:dinov2": FakeRunnerFactory.BLOCK,
+                "runtime:expert:nima": FakeRunnerFactory.BLOCK,
+                "runtime:expert:pyiqa": FakeRunnerFactory.BLOCK,
+                "runtime:expert:insightface": FakeRunnerFactory.BLOCK,
+            }
+        )
         manager = DependencyDownloadManager(
             lambda: self.store,
             concurrency_provider=lambda store: 3,
@@ -335,9 +345,11 @@ class DependencyServiceTest(unittest.TestCase):
             "missing": [],
             "error": None,
         }
-        runner_factory = FakeRunnerFactory({
-            "repair": [{"type": "result", "result": {"repaired": [], "downloaded": [], "skipped": []}}],
-        })
+        runner_factory = FakeRunnerFactory(
+            {
+                "repair": [{"type": "result", "result": {"repaired": [], "downloaded": [], "skipped": []}}],
+            }
+        )
         manager = DependencyDownloadManager(
             lambda: self.store,
             concurrency_provider=lambda store: 99,
@@ -367,9 +379,11 @@ class DependencyServiceTest(unittest.TestCase):
             "missing": [],
             "error": None,
         }
-        runner_factory = FakeRunnerFactory({
-            "repair": [{"type": "result", "result": {"repaired": [], "downloaded": [], "skipped": []}}],
-        })
+        runner_factory = FakeRunnerFactory(
+            {
+                "repair": [{"type": "result", "result": {"repaired": [], "downloaded": [], "skipped": []}}],
+            }
+        )
         manager = DependencyDownloadManager(lambda: self.store, runner_factory=runner_factory)
 
         _payload, status = manager.start({"engine": "expert", "model_dir": str(model_dir)})

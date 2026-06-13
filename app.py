@@ -192,7 +192,9 @@ def create_app() -> Flask:
             lambda: cancel_running_work_for_auth_failure(RUNTIME),
             ensure_recent_authorization,
             auth_summary,
-            lambda message, context: report_client_error(_state_store(), message, context=context, runtime=_auth_runtime()),
+            lambda message, context: report_client_error(
+                _state_store(), message, context=context, runtime=_auth_runtime()
+            ),
         )
     )
 

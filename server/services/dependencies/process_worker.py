@@ -7,7 +7,12 @@ from pathlib import Path
 from typing import Any, Callable
 
 from server.services.dependencies.cache import configure_model_cache_environment
-from server.services.dependencies.checks import DINO_MODEL_ID, DINO_REQUIRED_FILES, _download_hf_model, _hf_model_cache_status
+from server.services.dependencies.checks import (
+    DINO_MODEL_ID,
+    DINO_REQUIRED_FILES,
+    _download_hf_model,
+    _hf_model_cache_status,
+)
 from server.services.dependencies.repair import repair_runtime_dependencies
 
 

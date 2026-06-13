@@ -276,11 +276,7 @@ def _target_path(out_dir: Path, src: Path, index: int, options: dict) -> Optiona
 
 
 def _render_name(pattern: str, src: Path, index: int) -> str:
-    value = (
-        pattern.replace("{stem}", src.stem)
-        .replace("{name}", src.name)
-        .replace("{index}", f"{index:04d}")
-    )
+    value = pattern.replace("{stem}", src.stem).replace("{name}", src.name).replace("{index}", f"{index:04d}")
     cleaned = "".join(ch if ch not in '/\\:*?"<>|' else "_" for ch in value).strip()
     return cleaned or src.stem
 
