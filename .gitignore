@@ -59,6 +59,7 @@ job-*.log
 
 # ===== IDE / OS =====
 .DS_Store
+._*
 .idea/
 .vscode/
 *.swp
@@ -78,6 +79,7 @@ assets/.cursor/
 *.bak
 *.tmp
 *.log
+日志.txt
 .tmp_*/
 
 # 本地模型权重 / 数据库缓存
@@ -97,3 +99,5 @@ docs/*
 !docs/CONFIG.md
 !docs/REFACTOR_PROPOSAL_R2.md
 !docs/DESKTOP_SIGNING.md
+!docs/stitch-auth-admin/
+!docs/stitch-auth-admin/**

@@ -55,6 +55,12 @@ def skip_group_payload(
         if session is None:
             return {"error": "no session"}, 400
 
+        skip_finished()
+        if session.current_group >= len(session.groups):
+            return {"done": True}, 200
+        if _remaining_unfinished_groups(session) <= 1:
+            return {"error": "已经是最后一组，请先做出选择或回到结果页"}, 409
+
         if session.current_group < len(session.groups):
             group = session.groups.pop(session.current_group)
             session.groups.append(group)
@@ -66,6 +72,10 @@ def skip_group_payload(
             validate_current_pair,
             serialize_group,
         )
+
+
+def _remaining_unfinished_groups(session) -> int:
+    return sum(1 for group in session.groups[session.current_group :] if not group.finished)
 
 
 def kick_group_payload(

@@ -8,7 +8,7 @@ from pathlib import Path
 from sqlite3 import Connection
 from typing import Iterator
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 DEFAULT_DB_ENV = "INKMOMENT_AUTH_DB"
 
 
@@ -142,6 +142,61 @@ class AuthDatabase:
                   detail_json TEXT NOT NULL DEFAULT '{}',
                   created_at REAL NOT NULL
                 );
+
+                CREATE TABLE IF NOT EXISTS client_notices (
+                  id TEXT PRIMARY KEY,
+                  title TEXT NOT NULL,
+                  body TEXT NOT NULL,
+                  audience TEXT NOT NULL DEFAULT 'all',
+                  severity TEXT NOT NULL DEFAULT 'info',
+                  app_version TEXT NOT NULL DEFAULT '',
+                  published INTEGER NOT NULL DEFAULT 1,
+                  pinned INTEGER NOT NULL DEFAULT 0,
+                  created_at REAL NOT NULL,
+                  updated_at REAL NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS client_config (
+                  id TEXT PRIMARY KEY,
+                  config_json TEXT NOT NULL DEFAULT '{}',
+                  updated_at REAL NOT NULL,
+                  updated_by TEXT NOT NULL DEFAULT ''
+                );
+
+                CREATE TABLE IF NOT EXISTS client_error_logs (
+                  id TEXT PRIMARY KEY,
+                  email TEXT NOT NULL DEFAULT '',
+                  severity TEXT NOT NULL DEFAULT 'error',
+                  message TEXT NOT NULL,
+                  stack TEXT NOT NULL DEFAULT '',
+                  app_version TEXT NOT NULL DEFAULT '',
+                  device_fingerprint TEXT NOT NULL DEFAULT '',
+                  context_json TEXT NOT NULL DEFAULT '{}',
+                  resolved_at REAL,
+                  resolved_by TEXT NOT NULL DEFAULT '',
+                  created_at REAL NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS backup_records (
+                  id TEXT PRIMARY KEY,
+                  label TEXT NOT NULL DEFAULT '',
+                  path TEXT NOT NULL,
+                  size_bytes INTEGER NOT NULL DEFAULT 0,
+                  status TEXT NOT NULL DEFAULT 'ready',
+                  created_by TEXT NOT NULL DEFAULT '',
+                  created_at REAL NOT NULL,
+                  restored_at REAL,
+                  restored_by TEXT NOT NULL DEFAULT ''
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_client_notices_visibility
+                ON client_notices(published, pinned, updated_at);
+
+                CREATE INDEX IF NOT EXISTS idx_client_error_logs_created
+                ON client_error_logs(created_at);
+
+                CREATE INDEX IF NOT EXISTS idx_backup_records_created
+                ON backup_records(created_at);
                 """
             )
             self.ensure_column(conn, "cdks", "status", "TEXT NOT NULL DEFAULT 'active'")

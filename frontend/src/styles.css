@@ -89,6 +89,129 @@ input:disabled {
   font-weight: 760;
 }
 
+.client-auth-dock {
+  position: fixed;
+  top: 18px;
+  right: 18px;
+  z-index: 135;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: min(340px, calc(100vw - 36px));
+  min-height: 36px;
+  padding: 8px 12px;
+  color: var(--im-text, #1f2922);
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid var(--im-border, #dbe6d4);
+  border-radius: 999px;
+  box-shadow: 0 12px 32px rgba(31, 41, 34, 0.12);
+  font-size: 12px;
+}
+
+.client-auth-dock strong {
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.client-auth-dock.is-ready .status-dot {
+  background: var(--accent, #477453);
+}
+
+.client-auth-dock.is-warning .status-dot,
+.client-auth-dock.is-pending .status-dot {
+  background: #c7a348;
+}
+
+.client-auth-dock.is-blocked .status-dot {
+  background: var(--im-danger, #b0443f);
+}
+
+.client-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1250;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(20, 29, 23, 0.42);
+  backdrop-filter: blur(5px);
+}
+
+.client-dialog-backdrop.is-confirm,
+.notice-backdrop {
+  z-index: 1260;
+}
+
+.client-dialog {
+  display: grid;
+  gap: 16px;
+  width: min(620px, 100%);
+  max-height: min(760px, calc(100vh - 48px));
+  padding: 20px;
+  overflow: auto;
+  color: var(--im-text, #1f2922);
+  background: var(--im-surface, #ffffff);
+  border: 1px solid var(--im-border, #dbe6d4);
+  border-radius: 8px;
+  box-shadow: 0 28px 80px rgba(31, 41, 34, 0.28);
+}
+
+.client-dialog-head {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.client-dialog-head h2 {
+  margin: 4px 0 0;
+  color: var(--im-text, #1f2922);
+  font-size: 22px;
+  line-height: 1.2;
+}
+
+.client-dialog-copy {
+  margin: 0;
+  color: var(--im-muted, #607063);
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.auth-dialog-panel {
+  width: min(680px, 100%);
+}
+
+.client-confirm-dialog,
+.notice-dialog {
+  width: min(480px, 100%);
+}
+
+.auth-expired-box {
+  display: grid;
+  gap: 5px;
+  padding: 12px;
+  color: #93000a;
+  background: #fffbff;
+  border: 1px solid #ffdad6;
+  border-radius: 6px;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.notice-version {
+  flex: 0 0 auto;
+  padding: 5px 8px;
+  color: var(--accent, #477453);
+  background: color-mix(in srgb, var(--accent, #477453) 9%, var(--im-surface-low, #f8fcf7));
+  border: 1px solid color-mix(in srgb, var(--accent, #477453) 28%, var(--im-border, #dbe6d4));
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .global-busy-overlay {
   position: fixed;
   inset: 0;
@@ -3143,6 +3266,7 @@ select {
 .studio-inspector,
 .studio-panel,
 .auth-panel,
+.client-dialog,
 .app-boot-panel,
 .flow-item,
 .llm-panel,
@@ -3401,6 +3525,7 @@ select {
 .auth-form input,
 .auth-tabs,
 .auth-tabs button,
+.client-dialog,
 .reason-chip,
 .meta-pills span,
 .arena-shortcuts span,
@@ -3784,6 +3909,27 @@ select {
 .auth-account-row,
 .auth-device-box {
   padding: 10px;
+}
+
+.client-dialog {
+  background: var(--im-surface);
+  border-color: var(--im-border);
+  box-shadow: 0 24px 70px rgba(20, 35, 26, 0.24);
+}
+
+.client-dialog-head h2 {
+  color: var(--im-text);
+  font-weight: 650;
+}
+
+.client-dialog-copy {
+  color: var(--im-muted);
+}
+
+.client-auth-dock {
+  color: var(--im-text);
+  background: color-mix(in srgb, var(--im-surface) 94%, transparent);
+  border-color: var(--im-border);
 }
 
 .processing-shell,

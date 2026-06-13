@@ -33,13 +33,37 @@ class EnginesTest(unittest.TestCase):
         self.assertGreaterEqual(get_engine("fast").resolve_workers(None, None), 2)
 
     def test_tycoon_workers_respect_env_cap(self):
+        calls = []
+        fake_llm = SimpleNamespace(
+            configure_concurrency_for_model=lambda model: calls.append(model),
+            recommended_workers=lambda model: 99,
+        )
+        with patch.dict("sys.modules", {"inkmoment.llm_judge": fake_llm}):
+            with patch.dict("os.environ", {"INKMOMENT_TYCOON_ANALYSIS_WORKERS": "3"}):
+                self.assertEqual(get_engine("tycoon").resolve_workers(None, "vision-model"), 3)
+        self.assertEqual(calls, ["vision-model"])
+
+    def test_tycoon_workers_default_to_serial_local_analysis(self):
         fake_llm = SimpleNamespace(
             configure_concurrency_for_model=lambda model: None,
             recommended_workers=lambda model: 99,
         )
         with patch.dict("sys.modules", {"inkmoment.llm_judge": fake_llm}):
-            with patch.dict("os.environ", {"ARK_MAX_WORKERS": "3"}):
-                self.assertEqual(get_engine("tycoon").resolve_workers(None, "vision-model"), 3)
+            with patch.dict("os.environ", {"ARK_MAX_WORKERS": "20"}, clear=False):
+                self.assertEqual(get_engine("tycoon").resolve_workers(None, "vision-model"), 1)
+
+    def test_tycoon_workers_clamp_requested_and_env_values(self):
+        fake_llm = SimpleNamespace(
+            configure_concurrency_for_model=lambda model: None,
+            recommended_workers=lambda model: None,
+        )
+        engine = get_engine("tycoon")
+        self.assertEqual(engine.resolve_workers(99, "vision-model"), 4)
+        self.assertEqual(engine.resolve_workers(0, "vision-model"), 1)
+        self.assertEqual(engine.resolve_workers("bad", "vision-model"), 1)
+        with patch.dict("sys.modules", {"inkmoment.llm_judge": fake_llm}):
+            with patch.dict("os.environ", {"INKMOMENT_TYCOON_ANALYSIS_WORKERS": "99"}):
+                self.assertEqual(engine.resolve_workers(None, "vision-model"), 4)
 
     def test_unknown_engine_raises_clear_error(self):
         with self.assertRaisesRegex(ValueError, "未知 engine"):

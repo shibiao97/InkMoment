@@ -1,0 +1,59 @@
+{% extends "admin/base.html" %}
+{% block body %}
+<main class="app-shell">
+  <aside class="sidebar">
+    <div class="brand-block">
+      <div class="brand-row">
+        <span class="brand-mark">▣</span>
+        <div>
+          <div class="brand-title">影刻</div>
+          <div class="brand-subtitle">Enterprise Security</div>
+        </div>
+      </div>
+    </div>
+    <nav class="nav-list" aria-label="管理导航">
+      <a class="nav-link {{ 'active' if active_nav == 'dashboard' else '' }}" href="{{ url_for('admin_dashboard.admin_dashboard') }}"><span class="nav-icon">⌂</span>首页看板</a>
+      <a class="nav-link {{ 'active' if active_nav == 'users' else '' }}" href="{{ url_for('admin_dashboard.admin_users_page') }}"><span class="nav-icon">◉</span>用户管理</a>
+      <a class="nav-link {{ 'active' if active_nav == 'cdks' else '' }}" href="{{ url_for('admin_dashboard.admin_cdks_page') }}"><span class="nav-icon">▣</span>CDK / 授权</a>
+      <a class="nav-link {{ 'active' if active_nav == 'devices' else '' }}" href="{{ url_for('admin_dashboard.admin_devices_page') }}"><span class="nav-icon">▤</span>设备管理</a>
+      <a class="nav-link {{ 'active' if active_nav == 'notices' else '' }}" href="{{ url_for('admin_dashboard.admin_notices_page') }}"><span class="nav-icon">●</span>公告与版本</a>
+      <a class="nav-link {{ 'active' if active_nav == 'client_config' else '' }}" href="{{ url_for('admin_dashboard.admin_client_config_page') }}"><span class="nav-icon">◌</span>客户端配置</a>
+      <a class="nav-link {{ 'active' if active_nav == 'errors' else '' }}" href="{{ url_for('admin_dashboard.admin_errors_page') }}"><span class="nav-icon">!</span>异常日志</a>
+      <a class="nav-link {{ 'active' if active_nav == 'audit' else '' }}" href="{{ url_for('admin_dashboard.admin_events_page') }}"><span class="nav-icon">≡</span>操作审计</a>
+      {% if admin_can('admins:read') %}
+      <a class="nav-link {{ 'active' if active_nav == 'backups' else '' }}" href="{{ url_for('admin_dashboard.admin_backups_page') }}"><span class="nav-icon">⬇</span>备份恢复</a>
+      <a class="nav-link {{ 'active' if active_nav == 'admins' else '' }}" href="{{ url_for('admin_dashboard.admin_admins_page') }}"><span class="nav-icon">◆</span>管理员权限</a>
+      {% endif %}
+    </nav>
+    <div class="sidebar-footer">
+      <div class="actor-pill">{{ admin_actor_name() }}</div>
+      <form method="post" action="{{ url_for('admin_auth.admin_logout') }}"><button type="submit">退出登录</button></form>
+    </div>
+  </aside>
+
+  <section class="content">
+    <div class="admin-topbar">
+      <div class="topbar-status">
+        <span class="status-dot"></span>
+        <strong>授权服务在线</strong>
+        <small>Production</small>
+      </div>
+      <div class="topbar-tools">
+        <a href="{{ url_for('admin_dashboard.admin_events_page') }}" title="操作审计">◎</a>
+        {% if admin_can('admins:read') %}
+        <a href="{{ url_for('admin_dashboard.admin_admins_page') }}" title="管理员权限">⚙</a>
+        {% endif %}
+      </div>
+    </div>
+    <header class="page-head">
+      <div class="title-block">
+        {% block eyebrow %}{% endblock %}
+        <h1>{% block page_title %}{% endblock %}</h1>
+        <p>{% block page_desc %}{% endblock %}</p>
+      </div>
+      <div class="nav-actions">{% block page_actions %}{% endblock %}</div>
+    </header>
+    {% block admin_content %}{% endblock %}
+  </section>
+</main>
+{% endblock %}

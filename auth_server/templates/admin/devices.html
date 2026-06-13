@@ -1,0 +1,45 @@
+{% extends "admin/layout.html" %}
+{% block title %}设备管理 - 影刻授权服务管理中心{% endblock %}
+{% block page_title %}设备管理{% endblock %}
+{% block page_desc %}查看绑定设备、系统版本、应用版本和最近活跃时间。{% endblock %}
+{% block admin_content %}
+<div class="stack">
+  <section class="card">
+    <form class="form-grid" method="get" action="{{ url_for('admin_dashboard.admin_devices_page') }}">
+      <label>关键词<input name="q" value="{{ filters.q }}" placeholder="邮箱 / 指纹 / 设备名 / 版本"></label>
+      <label>绑定状态
+        <select name="status">
+          <option value="" {{ 'selected' if filters.status == '' else '' }}>全部</option>
+          <option value="bound" {{ 'selected' if filters.status == 'bound' else '' }}>已绑定</option>
+          <option value="unbound" {{ 'selected' if filters.status == 'unbound' else '' }}>已解绑</option>
+        </select>
+      </label>
+      <button type="submit">筛选</button>
+    </form>
+  </section>
+
+  <section class="table-card">
+    <div class="table-toolbar"><h2>设备列表</h2><span class="muted small">{{ devices|length }} 条</span></div>
+    <div class="table-scroll event-detail" tabindex="0" aria-label="设备列表，可上下左右滚动">
+      <table>
+        <thead><tr><th>账号</th><th>设备</th><th>指纹</th><th>系统</th><th>App</th><th>状态</th><th>最近活跃</th></tr></thead>
+        <tbody>
+        {% for device in devices %}
+          <tr>
+            <td><a href="{{ url_for('admin_dashboard.admin_user_page', email=device.email) }}">{{ device.email }}</a><br><span class="muted small">{{ device.account_status or '-' }}</span></td>
+            <td>{{ device.name or '-' }}</td>
+            <td class="mono">{{ device.fingerprint }}</td>
+            <td>{{ device.os or '-' }} / {{ device.arch or '-' }}</td>
+            <td>{{ device.app_version or '-' }}</td>
+            <td>{% if device.bound %}<span class="badge badge-active">已绑定</span>{% else %}<span class="badge badge-disabled">已解绑</span>{% endif %}</td>
+            <td>{{ device.last_seen_at|admin_time }}</td>
+          </tr>
+        {% else %}
+          <tr><td colspan="7"><div class="empty">暂无设备</div></td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>
+{% endblock %}

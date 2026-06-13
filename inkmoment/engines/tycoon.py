@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import importlib
 import logging
 import os
 from pathlib import Path
@@ -19,6 +20,10 @@ TYCOON_DEPENDENCY_MODULES = (
     ("openai", "OpenAI SDK"),
     ("huggingface_hub", "HuggingFace Hub"),
 )
+
+TYCOON_ANALYSIS_WORKERS_ENV = "INKMOMENT_TYCOON_ANALYSIS_WORKERS"
+TYCOON_DEFAULT_ANALYSIS_WORKERS = 1
+TYCOON_MAX_ANALYSIS_WORKERS = 4
 
 
 @dataclass(frozen=True)
@@ -46,15 +51,16 @@ class TycoonEngine:
 
     def resolve_workers(self, requested_workers: Optional[int], llm_model: Optional[str]) -> int:
         if requested_workers is not None:
-            return requested_workers
-        from inkmoment import llm_judge
+            return _clamp_analysis_workers(requested_workers)
+        llm_judge = importlib.import_module("inkmoment.llm_judge")
 
+        # Keep the HTTP LLM limiter configured for the selected model, but do
+        # not reuse that value as the local vision worker count. DINOv2,
+        # InsightFace, rawpy, and MPS/ONNX backends can abort the packaged macOS
+        # process when many images are analyzed in parallel.
         llm_judge.configure_concurrency_for_model(llm_model)
-        if "ARK_MAX_WORKERS" in os.environ:
-            workers = int(os.getenv("ARK_MAX_WORKERS", "20"))
-        else:
-            workers = llm_judge.recommended_workers(llm_model) or 20
-        return max(1, min(workers, 32))
+        workers = _env_int(TYCOON_ANALYSIS_WORKERS_ENV, TYCOON_DEFAULT_ANALYSIS_WORKERS)
+        return _clamp_analysis_workers(workers)
 
     def cluster(self, infos) -> list[list[int]]:
         from inkmoment import clustering
@@ -150,3 +156,18 @@ class TycoonEngine:
             f"sharp={quality.get('blur_score')} "
             f"bright={quality.get('brightness_mean')}"
         )
+
+
+def _env_int(name: str, default: int) -> int:
+    try:
+        return int(os.getenv(name, str(default)))
+    except (TypeError, ValueError):
+        return default
+
+
+def _clamp_analysis_workers(value: int) -> int:
+    try:
+        workers = int(value)
+    except (TypeError, ValueError):
+        workers = TYCOON_DEFAULT_ANALYSIS_WORKERS
+    return max(1, min(workers, TYCOON_MAX_ANALYSIS_WORKERS))

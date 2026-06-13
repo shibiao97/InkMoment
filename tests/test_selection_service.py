@@ -1,4 +1,7 @@
 import threading
+from pathlib import Path
+
+from PIL import Image
 
 from server.domain.models import GroupState, SessionState
 from server.services.selection import handlers as selection_handlers
@@ -115,3 +118,46 @@ def test_kick_empty_side_rolls_back_undo_snapshot():
     assert status == 400
     assert payload == {"error": "no image on side"}
     assert session.undo_stack == []
+
+
+def test_skip_last_unfinished_group_returns_clear_error():
+    group = GroupState(images=["a.jpg", "b.jpg"], left="a.jpg", right="b.jpg")
+    session = make_session(group)
+    handlers = make_handlers(session)
+
+    payload, status = handlers.skip()
+
+    assert status == 409
+    assert payload == {"error": "已经是最后一组，请先做出选择或回到结果页"}
+    assert session.groups == [group]
+    assert session.current_group == 0
+
+
+def test_skip_moves_current_group_when_another_group_is_available(tmp_path):
+    paths = {name: str(_write_jpeg(tmp_path / name)) for name in ("a.jpg", "b.jpg", "c.jpg", "d.jpg")}
+    first = GroupState(
+        images=[paths["a.jpg"], paths["b.jpg"]],
+        left=paths["a.jpg"],
+        right=paths["b.jpg"],
+    )
+    second = GroupState(
+        images=[paths["c.jpg"], paths["d.jpg"]],
+        left=paths["c.jpg"],
+        right=paths["d.jpg"],
+    )
+    session = make_session(first)
+    session.folder = str(tmp_path)
+    session.groups.append(second)
+    handlers = make_handlers(session)
+
+    payload, status = handlers.skip()
+
+    assert status == 200
+    assert session.groups == [second, first]
+    assert payload["done"] is False
+    assert payload["group"]["left"] == paths["c.jpg"]
+
+
+def _write_jpeg(path: Path) -> Path:
+    Image.new("RGB", (16, 16), (120, 80, 40)).save(path, "JPEG")
+    return path

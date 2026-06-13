@@ -24,6 +24,9 @@ PYINSTALLER_COLLECT_DATA = [
     # PyInstaller imports the Python module but does not collect that directory
     # unless we ask for package data explicitly.
     "pyiqa",
+    # CLIP-IQA+ initializes clip.SimpleTokenizer, which reads the bundled BPE
+    # vocabulary from the clip package at runtime.
+    "clip",
 ]
 PYINSTALLER_COLLECT_SUBMODULES = [
     # pyiqa.create_metric dynamically resolves metric implementations.
@@ -154,6 +157,7 @@ def main() -> int:
         "server.services.branding_service",
         "server.services.auth_client_service",
         "server.services.capability_service",
+        "server.services.client_notice_service",
         "server.services.dependency_service",
         "server.services.dependencies.process_runner",
         "server.services.dependencies.process_worker",

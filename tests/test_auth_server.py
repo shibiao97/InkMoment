@@ -859,6 +859,149 @@ class AuthServerTest(unittest.TestCase):
         self.assertEqual(user["status"], "disabled")
         self.assertEqual(user["admin_events"][0]["actor"], "support")
 
+    def test_admin_ui_user_detail_handles_unbound_account(self):
+        self.store.create_account("unbound@example.com", "password123")
+        self._create_admin()
+        self.client.post(
+            "/admin/login",
+            data={
+                "username": "support",
+                "password": "admin-password123",
+            },
+        )
+
+        detail = self.client.get("/admin/ui/users/unbound@example.com")
+
+        self.assertEqual(detail.status_code, 200)
+        html = detail.get_data(as_text=True)
+        self.assertIn("unbound@example.com", html)
+        self.assertIn("未绑定", html)
+
+    def test_admin_ops_api_supports_stitch_admin_functions(self):
+        self._register_user()
+        admin_token = self._bootstrap_admin_token()
+        headers = {"Authorization": f"Bearer {admin_token}"}
+
+        metrics = self.client.get("/admin/dashboard", headers=headers)
+        self.assertEqual(metrics.status_code, 200)
+        self.assertIn("accounts_total", metrics.get_json()["metrics"])
+
+        notice = self.client.post(
+            "/admin/notices",
+            headers=headers,
+            json={
+                "title": "维护通知",
+                "body": "今晚 22:00 维护",
+                "severity": "warning",
+                "published": True,
+                "pinned": True,
+            },
+        )
+        self.assertEqual(notice.status_code, 201)
+        notice_id = notice.get_json()["notice"]["id"]
+        client_notices = self.client.get("/auth/client/notices")
+        self.assertEqual(client_notices.status_code, 200)
+        self.assertEqual(client_notices.get_json()["notices"][0]["id"], notice_id)
+
+        config = self.client.post(
+            "/admin/client-config",
+            headers=headers,
+            json={
+                "maintenance": True,
+                "maintenance_message": "维护中",
+                "auth_base_url": "https://heiyunairport.asia",
+                "download_concurrency": 2,
+                "feature_flags": {"cr3_preview": True},
+            },
+        )
+        self.assertEqual(config.status_code, 200)
+        self.assertTrue(config.get_json()["config"]["maintenance"])
+        client_config = self.client.get("/auth/client/config")
+        self.assertEqual(client_config.status_code, 200)
+        self.assertEqual(client_config.get_json()["config"]["download_concurrency"], 2)
+
+        error_report = self.client.post(
+            "/auth/client/errors",
+            json={
+                "email": "user@example.com",
+                "message": "CR3 preview failed",
+                "severity": "error",
+                "app_version": "0.1.0",
+                "device_fingerprint": DEVICE_A["fingerprint"],
+                "context": {"screen": "preview"},
+            },
+        )
+        self.assertEqual(error_report.status_code, 201)
+        error_id = error_report.get_json()["error_log"]["id"]
+        errors = self.client.get("/admin/error-logs?unresolved=1", headers=headers)
+        self.assertEqual(errors.status_code, 200)
+        self.assertEqual(errors.get_json()["error_logs"][0]["id"], error_id)
+        resolved = self.client.post(f"/admin/error-logs/{error_id}/resolve", headers=headers)
+        self.assertEqual(resolved.status_code, 200)
+        self.assertIsNotNone(resolved.get_json()["error_log"]["resolved_at"])
+
+        devices = self.client.get("/admin/devices", headers=headers)
+        self.assertEqual(devices.status_code, 200)
+        self.assertEqual(devices.get_json()["devices"][0]["fingerprint"], DEVICE_A["fingerprint"])
+
+        unconfirmed_backup = self.client.post("/admin/backups", headers=headers, json={"label": "before release"})
+        self.assertEqual(unconfirmed_backup.status_code, 409)
+        backup = self.client.post(
+            "/admin/backups",
+            headers=headers,
+            json={"label": "before release", "confirm_action": "CONFIRM"},
+        )
+        self.assertEqual(backup.status_code, 201)
+        backup_id = backup.get_json()["backup"]["id"]
+        download = self.client.get(f"/admin/backups/{backup_id}/download", headers=headers)
+        self.assertEqual(download.status_code, 200)
+        self.assertIn("attachment", download.headers["Content-Disposition"])
+        unconfirmed_restore = self.client.post(f"/admin/backups/{backup_id}/restore", headers=headers, json={})
+        self.assertEqual(unconfirmed_restore.status_code, 409)
+        restored = self.client.post(
+            f"/admin/backups/{backup_id}/restore",
+            headers=headers,
+            json={"confirm_action": "CONFIRM"},
+        )
+        self.assertEqual(restored.status_code, 200)
+        self.assertTrue(restored.get_json()["ok"])
+        self.assertIn("safety_backup", restored.get_json())
+
+    def test_admin_ui_renders_stitch_information_architecture_pages(self):
+        self._register_user()
+        self._create_cdk("UI-STITCH-7D", 7)
+        self.store.admin_upsert_notice("维护通知", "今晚维护", actor="test")
+        self.store.record_client_error("CR3 preview failed", email="user@example.com")
+        self.store.admin_update_client_config({"download_concurrency": 2}, actor="test")
+        self.store.admin_create_backup("ui smoke", actor="test")
+        self._create_admin()
+        self.client.post(
+            "/admin/login",
+            data={
+                "username": "support",
+                "password": "admin-password123",
+            },
+        )
+
+        paths_and_markers = {
+            "/admin": "首页看板",
+            "/admin/ui/users": "用户管理",
+            "/admin/ui/users/user@example.com": "用户详情",
+            "/admin/ui/cdks": "CDK / 授权管理",
+            "/admin/ui/devices": "设备管理",
+            "/admin/ui/notices": "公告与版本管理",
+            "/admin/ui/client-config": "客户端远程配置",
+            "/admin/ui/errors": "异常日志管理",
+            "/admin/ui/events": "操作审计日志",
+            "/admin/ui/backups": "数据备份与恢复",
+            "/admin/ui/admins": "管理员与权限设置",
+        }
+        for path, marker in paths_and_markers.items():
+            with self.subTest(path=path):
+                response = self.client.get(path)
+                self.assertEqual(response.status_code, 200)
+                self.assertIn(marker, response.get_data(as_text=True))
+
     def test_https_proxy_requests_receive_security_headers(self):
         response = self.client.get(
             "/health",

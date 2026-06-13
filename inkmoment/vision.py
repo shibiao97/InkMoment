@@ -26,8 +26,21 @@ import threading
 from pathlib import Path
 from typing import Callable, List
 
-import numpy as np
-from PIL import Image
+# Keep native ML libraries from creating large nested thread pools inside the
+# app-level image worker. Packaged macOS runs have shown SIGABRT crashes in
+# malloc/ONNX/Torch when this is left unbounded. Set these before importing
+# numpy/Pillow/Torch-adjacent native modules so their runtimes see the defaults.
+for _thread_env in (
+    "OMP_NUM_THREADS",
+    "OPENBLAS_NUM_THREADS",
+    "MKL_NUM_THREADS",
+    "VECLIB_MAXIMUM_THREADS",
+    "NUMEXPR_NUM_THREADS",
+):
+    os.environ.setdefault(_thread_env, "1")
+
+import numpy as np  # noqa: E402
+from PIL import Image  # noqa: E402
 
 # 默认走国内镜像下载 HuggingFace 模型（DINOv2 等）。
 # 经 launcher 启动时它已设过；直接运行 app.py 时这里兜底，否则会直连
@@ -124,6 +137,7 @@ def _ensure_dinov2():
             from transformers import AutoImageProcessor, AutoModel
         except ImportError as e:
             raise VisionUnavailable(f"DINOv2 依赖缺失：{e}。质感优选需要 `pip install torch transformers`。") from e
+        _configure_torch_threads(torch)
         logger.info("vision: 加载 DINOv2-small（首次约 86MB）…")
         hf_cache_dir = os.environ.get("HUGGINGFACE_HUB_CACHE", "").strip() or None
         cache_kwargs = {"cache_dir": hf_cache_dir} if hf_cache_dir else {}
@@ -533,3 +547,21 @@ def _prewarm_step(
 def _raise_if_cancelled(cancel_check: Callable[[], bool] | None) -> None:
     if cancel_check is not None and cancel_check():
         raise VisionUnavailable("用户已停止资源下载")
+
+
+def _configure_torch_threads(torch_module) -> None:
+    try:
+        torch_module.set_num_threads(_env_int("INKMOMENT_TORCH_THREADS", 1))
+    except Exception:
+        logger.debug("vision: torch.set_num_threads failed", exc_info=True)
+    try:
+        torch_module.set_num_interop_threads(_env_int("INKMOMENT_TORCH_INTEROP_THREADS", 1))
+    except Exception:
+        logger.debug("vision: torch.set_num_interop_threads failed", exc_info=True)
+
+
+def _env_int(name: str, default: int) -> int:
+    try:
+        return max(1, int(os.getenv(name, str(default))))
+    except (TypeError, ValueError):
+        return default

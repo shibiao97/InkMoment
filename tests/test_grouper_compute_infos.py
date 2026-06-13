@@ -4,6 +4,7 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw
 
+from inkmoment.grouping.models import ImageInfo
 from inkmoment.grouper import compute_infos, scan_folder
 
 
@@ -46,6 +47,31 @@ class GrouperComputeInfosTest(unittest.TestCase):
 
         normalized = [(Path(primary).name, [Path(item).name for item in companions]) for primary, companions in pairs]
         self.assertEqual(normalized, [("A001.CR3", ["A001.JPG"]), ("B001.JPG", [])])
+
+    def test_cached_infos_emit_photo_wall_events(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            photo = Path(tmp) / "IMG_0001.jpg"
+            _save_checkerboard(photo)
+            cached = ImageInfo(
+                path=str(photo),
+                phash="0" * 16,
+                quality={"quality_score": 88},
+                exif_summary={},
+            )
+            events = []
+
+            infos, skipped = compute_infos(
+                tmp,
+                engine="fast",
+                workers=1,
+                cache_get=lambda *_args: cached,
+                event_cb=lambda name, path, info, reason: events.append((name, path, info, reason)),
+            )
+
+        self.assertEqual(skipped, [])
+        self.assertEqual(infos, [cached])
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0], ("IMG_0001.jpg", str(photo), cached, None))
 
 
 def _save_checkerboard(path: Path, size: int = 256, block: int = 16) -> None:

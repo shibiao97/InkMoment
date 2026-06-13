@@ -31,6 +31,7 @@ from server.services.session_builder_service import build_session_from_groups as
 from server.services.session_apply_service import apply_pending_groups
 from server.services.session_state_service import load_state as load_session_state, save_state
 from server.services.auth_client_service import AuthRuntime, auth_summary, ensure_recent_authorization
+from server.services.client_runtime_config_service import report_client_error
 from server.services.job_event_service import emit_job_image_event
 from server.services.job_log_service import close_runtime_job_log, open_runtime_job_log
 from server.services.logging_service import configure_app_logger
@@ -191,6 +192,7 @@ def create_app() -> Flask:
             lambda: cancel_running_work_for_auth_failure(RUNTIME),
             ensure_recent_authorization,
             auth_summary,
+            lambda message, context: report_client_error(_state_store(), message, context=context, runtime=_auth_runtime()),
         )
     )
 

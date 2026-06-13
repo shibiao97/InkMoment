@@ -1,4 +1,6 @@
 import json
+import importlib.util
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -129,6 +131,7 @@ class DesktopReleaseBuildTest(unittest.TestCase):
 
         self.assertIn("--collect-data", cmd)
         self.assertIn("pyiqa", cmd)
+        self.assertIn("clip", cmd)
         self.assertIn("--collect-submodules", cmd)
         self.assertIn("--add-data", cmd)
         self.assertIn(f"/tmp/pyiqa{build_sidecar.os.pathsep}pyiqa", cmd)
@@ -152,6 +155,33 @@ class DesktopReleaseBuildTest(unittest.TestCase):
         self.assertNotIn("torch.distributed", excluded)
         self.assertNotIn("torch.testing", excluded)
         self.assertIn("transformers.trainer", excluded)
+
+    def test_pyiqa_runtime_hook_stubs_dataset_package(self):
+        hook = Path("scripts/pyinstaller_hooks/rthook_pyiqa_runtime.py")
+        original_modules = {
+            name: module
+            for name, module in sys.modules.items()
+            if name == "pyiqa.data" or name == "pyiqa.data.dataset_api"
+        }
+        for name in original_modules:
+            sys.modules.pop(name, None)
+
+        try:
+            spec = importlib.util.spec_from_file_location("inkmoment_pyiqa_runtime_hook_test", hook)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+
+            data_package = sys.modules["pyiqa.data"]
+            dataset_api = sys.modules["pyiqa.data.dataset_api"]
+            self.assertTrue(all(Path(value).name == "data" for value in data_package.__path__))
+            self.assertIs(data_package.dataset_api, dataset_api)
+            self.assertIs(data_package.load_dataset, dataset_api.load_dataset)
+            with self.assertRaisesRegex(RuntimeError, "not bundled"):
+                data_package.build_dataset({})
+        finally:
+            sys.modules.pop("pyiqa.data", None)
+            sys.modules.pop("pyiqa.data.dataset_api", None)
+            sys.modules.update(original_modules)
 
     def test_resolve_package_root_uses_requested_python(self):
         with tempfile.TemporaryDirectory() as folder:

@@ -1,0 +1,54 @@
+{% extends "admin/layout.html" %}
+{% block title %}异常日志管理 - 影刻授权服务管理中心{% endblock %}
+{% block page_title %}异常日志管理{% endblock %}
+{% block page_desc %}查看客户端上报异常，筛选版本、设备和未处理记录。{% endblock %}
+{% block admin_content %}
+<div class="stack">
+  <section class="card">
+    <form class="form-grid" method="get" action="{{ url_for('admin_dashboard.admin_errors_page') }}">
+      <label>关键词<input name="q" value="{{ filters.q }}" placeholder="邮箱 / 版本 / 设备 / 消息"></label>
+      <label>级别
+        <select name="severity">
+          <option value="" {{ 'selected' if filters.severity == '' else '' }}>全部</option>
+          <option value="debug" {{ 'selected' if filters.severity == 'debug' else '' }}>debug</option>
+          <option value="info" {{ 'selected' if filters.severity == 'info' else '' }}>info</option>
+          <option value="warning" {{ 'selected' if filters.severity == 'warning' else '' }}>warning</option>
+          <option value="error" {{ 'selected' if filters.severity == 'error' else '' }}>error</option>
+          <option value="critical" {{ 'selected' if filters.severity == 'critical' else '' }}>critical</option>
+        </select>
+      </label>
+      <label class="checkbox-field"><input type="checkbox" name="unresolved" value="1" {{ 'checked' if filters.unresolved else '' }}> 仅未处理</label>
+      <button type="submit">筛选</button>
+    </form>
+  </section>
+
+  <section class="table-card">
+    <div class="table-toolbar"><h2>异常列表</h2><span class="muted small">{{ errors|length }} 条</span></div>
+    <div class="table-scroll event-detail">
+      <table>
+        <thead><tr><th>级别</th><th>消息</th><th>账号</th><th>版本</th><th>设备</th><th>状态</th><th>时间</th><th>操作</th></tr></thead>
+        <tbody>
+        {% for error in errors %}
+          <tr>
+            <td><span class="badge badge-{{ error.severity }}">{{ error.severity }}</span></td>
+            <td><div class="identity"><strong>{{ error.message }}</strong>{% if error.stack %}<small class="mono">{{ error.stack }}</small>{% endif %}</div></td>
+            <td>{{ error.email or '-' }}</td>
+            <td>{{ error.app_version or '-' }}</td>
+            <td class="mono">{{ error.device_fingerprint or '-' }}</td>
+            <td>{% if error.resolved_at %}<span class="badge badge-active">已处理</span><br><span class="muted small">{{ error.resolved_by }}</span>{% else %}<span class="badge badge-disabled">未处理</span>{% endif %}</td>
+            <td>{{ error.created_at|admin_time }}</td>
+            <td>
+              {% if not error.resolved_at and can('users:write') %}
+              <form method="post" action="{{ url_for('admin_dashboard.admin_ui_resolve_error', log_id=error.id) }}"><button type="submit">标记处理</button></form>
+              {% else %}<span class="muted">-</span>{% endif %}
+            </td>
+          </tr>
+        {% else %}
+          <tr><td colspan="8"><div class="empty">暂无异常日志</div></td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>
+{% endblock %}

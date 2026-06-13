@@ -1,0 +1,68 @@
+{% extends "admin/layout.html" %}
+{% block title %}公告与版本管理 - 影刻授权服务管理中心{% endblock %}
+{% block page_title %}公告与版本管理{% endblock %}
+{% block page_desc %}发布客户端公告、版本提示和维护通知。{% endblock %}
+{% block admin_content %}
+<div class="stack">
+  {% if can('users:write') %}
+  <section class="card">
+    <div class="card-head"><div><h2>发布公告</h2><p>公告会通过远程授权服务下发给客户端。</p></div></div>
+    <form method="post" action="{{ url_for('admin_dashboard.admin_ui_save_notice') }}" class="form-grid">
+      <label>标题<input name="title" placeholder="维护通知" required></label>
+      <label>内容<input name="body" placeholder="公告正文" required></label>
+      <label>受众
+        <select name="audience">
+          <option value="all">全部用户</option>
+          <option value="licensed">已授权用户</option>
+          <option value="trial">未授权用户</option>
+          <option value="admins">管理员</option>
+        </select>
+      </label>
+      <label>级别
+        <select name="severity">
+          <option value="info">info</option>
+          <option value="warning">warning</option>
+          <option value="error">error</option>
+          <option value="critical">critical</option>
+        </select>
+      </label>
+      <label>版本<input name="app_version" placeholder="留空表示全部版本"></label>
+      <label class="checkbox-field"><input type="checkbox" name="published" checked> 发布</label>
+      <label class="checkbox-field"><input type="checkbox" name="pinned"> 置顶</label>
+      <button type="submit">保存公告</button>
+    </form>
+  </section>
+  {% endif %}
+
+  <section class="table-card">
+    <div class="table-toolbar"><h2>公告列表</h2><span class="muted small">{{ notices|length }} 条</span></div>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>标题</th><th>级别</th><th>受众</th><th>版本</th><th>状态</th><th>更新时间</th><th>操作</th></tr></thead>
+        <tbody>
+        {% for notice in notices %}
+          <tr>
+            <td><div class="identity"><strong>{{ notice.title }}</strong><small>{{ notice.body }}</small></div></td>
+            <td><span class="badge badge-{{ notice.severity }}">{{ notice.severity }}</span></td>
+            <td>{{ notice.audience }}</td>
+            <td>{{ notice.app_version or '全部' }}</td>
+            <td>{% if notice.published %}<span class="badge badge-active">已发布</span>{% else %}<span class="badge badge-disabled">未发布</span>{% endif %}{% if notice.pinned %} <span class="badge badge-device">置顶</span>{% endif %}</td>
+            <td>{{ notice.updated_at|admin_time }}</td>
+            <td>
+              {% if can('users:write') %}
+              <form method="post" action="{{ url_for('admin_dashboard.admin_ui_publish_notice', notice_id=notice.id) }}">
+                <input type="hidden" name="published" value="{{ '0' if notice.published else '1' }}">
+                <button class="secondary" type="submit">{{ '下线' if notice.published else '发布' }}</button>
+              </form>
+              {% else %}<span class="muted">-</span>{% endif %}
+            </td>
+          </tr>
+        {% else %}
+          <tr><td colspan="7"><div class="empty">暂无公告</div></td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>
+{% endblock %}

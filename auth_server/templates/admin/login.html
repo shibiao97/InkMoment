@@ -1,44 +1,56 @@
 {% extends "admin/base.html" %}
-{% block title %}InkMoment Admin{% endblock %}
+{% block title %}影刻授权服务管理中心{% endblock %}
 {% block body %}
-<main class="login-shell">
-  <section class="login-panel">
-    <div class="login-side">
-      <div>
-        <span class="hint-pill">独立授权服务</span>
-        <h1 class="section">InkMoment Admin</h1>
-        <p>管理用户授权、CDK 兑换、设备绑定和审计日志。后台只做运营控制，不和桌面端运行进程耦合。</p>
-      </div>
-      <div class="login-hints">
-        <span>用户登录后绑定首台设备</span>
-        <span>CDK 决定使用期限</span>
-        <span>换机解绑默认扣除 3 天</span>
-      </div>
+<main class="auth-login-shell">
+  <section class="auth-login-wrap">
+    <div class="login-brand">
+      <div class="login-brand-mark">▣</div>
+      <h1>影刻</h1>
+      <p>企业级安全与授权服务控制台</p>
     </div>
-    <div class="login-form-wrap">
-      <div class="title-block">
-        <h2>管理员登录</h2>
-        <p>使用部署时创建的管理员账号进入后台。</p>
+
+    <section class="auth-panel">
+      <div class="auth-tabs" aria-label="登录模式">
+        <span class="active">账号登录</span>
+        <span class="{{ '' if allow_bootstrap else 'disabled' }}">系统初始化</span>
       </div>
-      {% if error %}<p class="danger-text">{{ error }}</p>{% endif %}
-      <form method="post" class="login-form">
-        <label class="field">管理员账号<input name="username" placeholder="admin" autocomplete="username" required></label>
-        <label class="field">管理员密码<input name="password" type="password" placeholder="请输入密码" autocomplete="current-password" required></label>
-        <button type="submit">进入后台</button>
-      </form>
-      {% if allow_bootstrap %}
-        <div class="card compact section">
-          <h3>初始化管理员</h3>
-          <p class="muted section">首次部署时使用 Bootstrap Token 创建第一个管理员。</p>
-          <form method="post" action="{{ url_for('admin_auth.admin_bootstrap') }}" class="login-form section">
-            <label class="field">账号<input name="username" placeholder="admin" autocomplete="username" required></label>
-            <label class="field">密码<input name="password" type="password" placeholder="至少 12 位" autocomplete="new-password" required></label>
+
+      <div class="auth-panel-body">
+        {% if error %}<p class="danger-text auth-error">{{ error }}</p>{% endif %}
+        <form method="post" class="login-form">
+          <label class="field">账号<input name="username" placeholder="请输入管理员账号" autocomplete="username" required></label>
+          <label class="field">密码<input name="password" type="password" placeholder="请输入密码" autocomplete="current-password" required></label>
+          <label class="checkbox-field remember-field"><input type="checkbox" name="remember" value="1"> 记住登录状态</label>
+          <button type="submit">登录系统</button>
+        </form>
+
+        {% if allow_bootstrap %}
+        <div class="bootstrap-card">
+          <h2>系统初始化</h2>
+          <form method="post" action="{{ url_for('admin_auth.admin_bootstrap') }}" class="login-form">
+            <label class="field">管理员账号<input name="username" placeholder="admin" autocomplete="username" required></label>
+            <label class="field">管理员密码<input name="password" type="password" placeholder="至少 12 位" autocomplete="new-password" required></label>
             <label class="field">Bootstrap Token<input name="admin_token" type="password" placeholder="部署时生成的 token" required></label>
-            <button type="submit">创建并登录</button>
+            <button type="submit" class="secondary">创建管理员</button>
           </form>
         </div>
-      {% endif %}
+        {% endif %}
+      </div>
+
+      <div class="auth-meta">
+        <span></span>
+        <strong>SERVER 1</strong>
+        <em>PRODUCTION MODE</em>
+        <span></span>
+      </div>
+    </section>
+
+    <div class="login-footer-links">
+      <span>技术支持</span>
+      <span>隐私政策</span>
+      <span>帮助中心</span>
     </div>
+    <p class="login-copy">© 2026 影刻 InkMoment. All rights reserved.</p>
   </section>
 </main>
 {% endblock %}

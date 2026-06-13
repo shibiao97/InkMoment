@@ -81,6 +81,38 @@ def create_user_api_blueprint(deps: UserApiDeps) -> Blueprint:
     def status(account):
         return jsonify(_account_response(store, account, session_token=_bearer_token()))
 
+    @bp.route("/auth/client/notices")
+    def client_notices():
+        return jsonify(
+            {
+                "notices": store.client_list_notices(
+                    app_version=request.args.get("app_version", ""),
+                )
+            }
+        )
+
+    @bp.route("/auth/client/config")
+    def client_config():
+        return jsonify({"config": store.client_get_config()})
+
+    @bp.route("/auth/client/errors", methods=["POST"])
+    def client_errors():
+        data = request.get_json(silent=True) or {}
+        try:
+            error = store.record_client_error(
+                data.get("message") or "",
+                email=data.get("email") or "",
+                severity=data.get("severity") or "error",
+                app_version=data.get("app_version") or "",
+                device_fingerprint=data.get("device_fingerprint")
+                or request.headers.get("X-Device-Fingerprint", "").strip(),
+                stack=data.get("stack") or "",
+                context=data.get("context") if isinstance(data.get("context"), dict) else {},
+            )
+        except ValueError as exc:
+            return jsonify({"error": str(exc), "code": "invalid_request"}), 400
+        return jsonify({"ok": True, "error_log": error}), 201
+
     @bp.route("/auth/redeem", methods=["POST"])
     @require_user
     def redeem(account):

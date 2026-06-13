@@ -1,0 +1,49 @@
+{% extends "admin/layout.html" %}
+{% block title %}数据备份与恢复 - 影刻授权服务管理中心{% endblock %}
+{% block page_title %}数据备份与恢复{% endblock %}
+{% block page_desc %}创建和下载授权服务 SQLite 数据备份。{% endblock %}
+{% block admin_content %}
+<div class="stack">
+  <section class="card">
+    <div class="card-head"><div><h2>数据库备份</h2><p class="mono">{{ db_path }}</p></div></div>
+    {% if can('admins:write') %}
+    <form method="post" action="{{ url_for('admin_dashboard.admin_ui_create_backup') }}" class="form-grid" data-confirm="确认创建授权服务数据库备份？">
+      <label>备注<input name="label" placeholder="发布前备份"></label>
+      <input name="confirm_action" type="hidden" value="CONFIRM">
+      <button type="submit">创建备份</button>
+    </form>
+    {% endif %}
+  </section>
+
+  <section class="table-card">
+    <div class="table-toolbar"><h2>备份列表</h2><span class="muted small">{{ backups|length }} 条</span></div>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>备注</th><th>大小</th><th>状态</th><th>创建人</th><th>创建时间</th><th>恢复</th><th>下载</th></tr></thead>
+        <tbody>
+        {% for backup in backups %}
+          <tr>
+            <td><div class="identity"><strong>{{ backup.label or '未命名备份' }}</strong><small class="mono">{{ backup.id }}</small></div></td>
+            <td>{{ backup.size_bytes }} B</td>
+            <td><span class="badge badge-active">{{ backup.status }}</span></td>
+            <td>{{ backup.created_by }}</td>
+            <td>{{ backup.created_at|admin_time }}</td>
+            <td>
+              {% if can('admins:write') %}
+              <form method="post" action="{{ url_for('admin_dashboard.admin_ui_restore_backup', backup_id=backup.id) }}" data-confirm="确认恢复这个备份？当前数据库会先自动生成安全备份。">
+                <input name="confirm_action" type="hidden" value="CONFIRM">
+                <button class="danger" type="submit">恢复</button>
+              </form>
+              {% else %}<span class="muted">-</span>{% endif %}
+            </td>
+            <td><a class="btn secondary" href="{{ url_for('admin_api.admin_download_backup', backup_id=backup.id) }}">下载</a></td>
+          </tr>
+        {% else %}
+          <tr><td colspan="7"><div class="empty">暂无备份</div></td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>
+{% endblock %}

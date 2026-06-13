@@ -1,0 +1,49 @@
+{% extends "admin/layout.html" %}
+{% block title %}管理员与权限设置 - 影刻授权服务管理中心{% endblock %}
+{% block page_title %}管理员与权限设置{% endblock %}
+{% block page_desc %}创建受限后台账号，管理 owner、operator、agent、auditor 权限边界。{% endblock %}
+{% block admin_content %}
+<div class="stack">
+  {% if can('admins:write') %}
+  <section class="card">
+    <div class="card-head"><div><h2>创建管理员</h2><p>子账号只能创建 agent、operator 或 auditor。</p></div></div>
+    <form method="post" action="{{ url_for('admin_dashboard.admin_ui_create_admin') }}" class="form-grid five" data-confirm="确认创建后台子账号？">
+      <label>账号<input name="username" placeholder="agent001" autocomplete="off" required></label>
+      <label>密码<input name="password" type="password" minlength="12" placeholder="至少 12 位" autocomplete="new-password" required></label>
+      <label>显示名<input name="display_name" placeholder="代理名称"></label>
+      <label>角色
+        <select name="role">
+          <option value="agent" selected>代理 agent</option>
+          <option value="operator">运营 operator</option>
+          <option value="auditor">审计 auditor</option>
+        </select>
+      </label>
+      <input name="confirm_action" type="hidden" value="CONFIRM">
+      <button type="submit">创建子用户</button>
+    </form>
+  </section>
+  {% endif %}
+
+  <section class="table-card">
+    <div class="table-toolbar"><h2>管理员列表</h2><span class="muted small">{{ admins|length }} 个账号</span></div>
+    <div class="table-scroll" tabindex="0" aria-label="管理员列表，可上下左右滚动">
+      <table>
+        <thead><tr><th>账号</th><th>角色</th><th>状态</th><th>最近登录</th><th>权限</th></tr></thead>
+        <tbody>
+        {% for admin in admins %}
+          <tr>
+            <td><div class="identity"><strong>{{ admin.username }}</strong><small>{{ admin.display_name or '未设置显示名' }}</small></div></td>
+            <td><span class="badge badge-admin">{{ admin.role }}</span></td>
+            <td>{{ admin.status }}</td>
+            <td>{{ admin.last_login_at|admin_time }}</td>
+            <td><span class="muted small">{{ admin.permissions|join(', ') }}</span></td>
+          </tr>
+        {% else %}
+          <tr><td colspan="5"><div class="empty">暂无后台账号</div></td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>
+{% endblock %}

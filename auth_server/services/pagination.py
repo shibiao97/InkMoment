@@ -21,7 +21,12 @@ def bounded_limit(value, default: int = 200, maximum: int = ADMIN_API_LIST_LIMIT
     return bounded_int(value, default, 1, maximum)
 
 
-def pagination_meta(page_param: str, size_param: str, total: int, endpoint: str = "admin_dashboard") -> dict:
+def pagination_meta(
+    page_param: str,
+    size_param: str,
+    total: int,
+    endpoint: str = "admin_dashboard.admin_dashboard",
+) -> dict:
     page_size = bounded_int(
         request.args.get(size_param),
         DEFAULT_DASHBOARD_PAGE_SIZE,

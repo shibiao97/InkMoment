@@ -28,6 +28,8 @@ const {
   error,
   overallPercent,
   groupPercent,
+  canSkip,
+  skipHint,
   statusLabel,
   statusState,
   load,
@@ -122,7 +124,7 @@ function handleKeydown(event) {
       choose("both");
     } else if (key === "s") {
       event.preventDefault();
-      skip();
+      if (canSkip.value) skip();
     } else if (key === "u" && canUndo.value) {
       event.preventDefault();
       undo();
@@ -147,7 +149,7 @@ function handleKeydown(event) {
     choose("both");
   } else if (key === "s") {
     event.preventDefault();
-    skip();
+    if (canSkip.value) skip();
   } else if (key === "u" && canUndo.value) {
     event.preventDefault();
     undo();
@@ -236,8 +238,8 @@ onBeforeUnmount(() => {
       <button class="btn-ghost" type="button" :disabled="disableActions" @click="choose('both')">
         {{ isSingleReview ? "放手这张" : "都放手" }}
       </button>
-      <button class="btn-ghost" type="button" :disabled="disableActions" @click="skip">
-        稍后再选
+      <button class="btn-ghost" type="button" :disabled="disableActions || !canSkip" @click="skip">
+        {{ skipHint }}
       </button>
       <button class="btn-ghost" type="button" :disabled="disableActions || !canUndo" @click="undo">
         撤销

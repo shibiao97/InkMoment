@@ -10,6 +10,7 @@ class DependenciesDeps:
     download_dependencies: Callable[[dict], tuple[dict, int]]
     download_status: Optional[Callable[[], tuple[dict, int]]] = None
     download_cancel: Optional[Callable[[], tuple[dict, int]]] = None
+    report_error: Optional[Callable[[str, dict], None]] = None
 
 
 def create_dependencies_blueprint(deps: DependenciesDeps):
@@ -21,6 +22,7 @@ def create_dependencies_blueprint(deps: DependenciesDeps):
             payload, status = deps.preflight_dependencies(request.get_json(force=True) or {})
         except Exception as exc:
             current_app.logger.exception("dependency preflight failed")
+            _report_error(deps, "dependency preflight failed", exc, {"route": request.path})
             return jsonify({"error": f"启动前检查失败：{type(exc).__name__}: {exc}"}), 500
         return jsonify(payload), status
 
@@ -30,6 +32,7 @@ def create_dependencies_blueprint(deps: DependenciesDeps):
             payload, status = deps.download_dependencies(request.get_json(force=True) or {})
         except Exception as exc:
             current_app.logger.exception("dependency download failed")
+            _report_error(deps, "dependency download failed", exc, {"route": request.path})
             return jsonify({"error": f"资源下载失败：{type(exc).__name__}: {exc}"}), 500
         return jsonify(payload), status
 
@@ -41,6 +44,7 @@ def create_dependencies_blueprint(deps: DependenciesDeps):
             payload, status = deps.download_status()
         except Exception as exc:
             current_app.logger.exception("dependency download status failed")
+            _report_error(deps, "dependency download status failed", exc, {"route": request.path})
             return jsonify({"error": f"读取下载状态失败：{type(exc).__name__}: {exc}"}), 500
         return jsonify(payload), status
 
@@ -52,7 +56,24 @@ def create_dependencies_blueprint(deps: DependenciesDeps):
             payload, status = deps.download_cancel()
         except Exception as exc:
             current_app.logger.exception("dependency download cancel failed")
+            _report_error(deps, "dependency download cancel failed", exc, {"route": request.path})
             return jsonify({"error": f"停止资源下载失败：{type(exc).__name__}: {exc}"}), 500
         return jsonify(payload), status
 
     return dependencies_bp
+
+
+def _report_error(deps: DependenciesDeps, message: str, exc: Exception, context: dict) -> None:
+    if deps.report_error is None:
+        return
+    try:
+        deps.report_error(
+            message,
+            {
+                **context,
+                "exception_type": type(exc).__name__,
+                "exception": str(exc),
+            },
+        )
+    except Exception:
+        current_app.logger.exception("client error reporting failed")

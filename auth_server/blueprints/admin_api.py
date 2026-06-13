@@ -6,7 +6,7 @@ import secrets
 from dataclasses import dataclass
 from typing import Callable
 
-from flask import Blueprint, Response, jsonify, request
+from flask import Blueprint, Response, jsonify, request, send_file
 
 from auth_server.config import ADMIN_EXPORT_LIMIT_MAX
 from auth_server.security import (
@@ -83,6 +83,11 @@ def create_admin_api_blueprint(deps: AdminApiDeps) -> Blueprint:
             return jsonify({"error": str(exc), "code": "invalid_request"}), 400
         return jsonify(payload), 201
 
+    @bp.route("/admin/dashboard")
+    @require_admin(ADMIN_PERMISSION_USERS_READ)
+    def admin_dashboard_metrics():
+        return jsonify({"metrics": store.admin_dashboard_metrics()})
+
     @bp.route("/admin/cdks/<path:code>/disable", methods=["POST"])
     @require_admin(ADMIN_PERMISSION_CDKS_WRITE)
     def admin_disable_cdk(code):
@@ -144,6 +149,19 @@ def create_admin_api_blueprint(deps: AdminApiDeps) -> Blueprint:
             }
         )
 
+    @bp.route("/admin/devices")
+    @require_admin(ADMIN_PERMISSION_USERS_READ)
+    def admin_devices():
+        return jsonify(
+            {
+                "devices": store.admin_list_devices(
+                    request.args.get("q", ""),
+                    request.args.get("status", ""),
+                    limit=bounded_limit(request.args.get("limit"), 200),
+                )
+            }
+        )
+
     @bp.route("/admin/admins", methods=["GET", "POST"])
     @require_admin
     def admin_admins():
@@ -188,6 +206,129 @@ def create_admin_api_blueprint(deps: AdminApiDeps) -> Blueprint:
                 )
             }
         )
+
+    @bp.route("/admin/notices", methods=["GET", "POST"])
+    @require_admin
+    def admin_notices():
+        if request.method == "GET":
+            if not can_admin(ADMIN_PERMISSION_USERS_READ):
+                return permission_denied_response(ADMIN_PERMISSION_USERS_READ)
+            return jsonify(
+                {
+                    "notices": store.admin_list_notices(
+                        request.args.get("audience", ""),
+                        published_only=request.args.get("published") == "1",
+                        limit=bounded_limit(request.args.get("limit"), 100),
+                    )
+                }
+            )
+        if not can_admin(ADMIN_PERMISSION_USERS_WRITE):
+            return permission_denied_response(ADMIN_PERMISSION_USERS_WRITE)
+        data = request.get_json(silent=True) or {}
+        try:
+            notice = store.admin_upsert_notice(
+                data.get("title") or "",
+                data.get("body") or "",
+                notice_id=data.get("id") or "",
+                audience=data.get("audience") or "all",
+                severity=data.get("severity") or "info",
+                app_version=data.get("app_version") or "",
+                published=bool(data.get("published", True)),
+                pinned=bool(data.get("pinned", False)),
+                actor=admin_actor(),
+            )
+        except ValueError as exc:
+            return jsonify({"error": str(exc), "code": "invalid_request"}), 400
+        return jsonify({"notice": notice}), 201
+
+    @bp.route("/admin/notices/<notice_id>/publish", methods=["POST"])
+    @require_admin(ADMIN_PERMISSION_USERS_WRITE)
+    def admin_publish_notice(notice_id):
+        data = request.get_json(silent=True) or {}
+        try:
+            notice = store.admin_set_notice_published(
+                notice_id,
+                bool(data.get("published", True)),
+                actor=admin_actor(),
+            )
+        except ValueError as exc:
+            return jsonify({"error": str(exc), "code": "invalid_request"}), 400
+        return jsonify({"notice": notice})
+
+    @bp.route("/admin/client-config", methods=["GET", "POST"])
+    @require_admin
+    def admin_client_config():
+        if request.method == "GET":
+            if not can_admin(ADMIN_PERMISSION_USERS_READ):
+                return permission_denied_response(ADMIN_PERMISSION_USERS_READ)
+            return jsonify({"config": store.admin_get_client_config()})
+        if not can_admin(ADMIN_PERMISSION_USERS_WRITE):
+            return permission_denied_response(ADMIN_PERMISSION_USERS_WRITE)
+        data = request.get_json(silent=True) or {}
+        try:
+            config = store.admin_update_client_config(data.get("config") or data, actor=admin_actor())
+        except (TypeError, ValueError) as exc:
+            return jsonify({"error": str(exc), "code": "invalid_request"}), 400
+        return jsonify({"config": config})
+
+    @bp.route("/admin/error-logs")
+    @require_admin(ADMIN_PERMISSION_USERS_READ)
+    def admin_error_logs():
+        return jsonify(
+            {
+                "error_logs": store.admin_list_error_logs(
+                    request.args.get("q", ""),
+                    request.args.get("severity", ""),
+                    unresolved_only=request.args.get("unresolved") == "1",
+                    limit=bounded_limit(request.args.get("limit"), 100),
+                )
+            }
+        )
+
+    @bp.route("/admin/error-logs/<log_id>/resolve", methods=["POST"])
+    @require_admin(ADMIN_PERMISSION_USERS_WRITE)
+    def admin_resolve_error_log(log_id):
+        try:
+            error_log = store.admin_resolve_error_log(log_id, actor=admin_actor())
+        except ValueError as exc:
+            return jsonify({"error": str(exc), "code": "invalid_request"}), 400
+        return jsonify({"error_log": error_log})
+
+    @bp.route("/admin/backups", methods=["GET", "POST"])
+    @require_admin
+    def admin_backups():
+        if request.method == "GET":
+            if not can_admin(ADMIN_PERMISSION_ADMINS_READ):
+                return permission_denied_response(ADMIN_PERMISSION_ADMINS_READ)
+            return jsonify({"backups": store.admin_list_backups(limit=bounded_limit(request.args.get("limit"), 100))})
+        if not can_admin(ADMIN_PERMISSION_ADMINS_WRITE):
+            return permission_denied_response(ADMIN_PERMISSION_ADMINS_WRITE)
+        data = request.get_json(silent=True) or {}
+        if not confirmed(data):
+            return confirmation_required_response()
+        backup = store.admin_create_backup(data.get("label") or "", actor=admin_actor())
+        return jsonify({"backup": backup}), 201
+
+    @bp.route("/admin/backups/<backup_id>/download")
+    @require_admin(ADMIN_PERMISSION_ADMINS_READ)
+    def admin_download_backup(backup_id):
+        try:
+            path = store.admin_get_backup_path(backup_id)
+        except ValueError as exc:
+            return jsonify({"error": str(exc), "code": "invalid_request"}), 400
+        return send_file(path, as_attachment=True, download_name=path.name)
+
+    @bp.route("/admin/backups/<backup_id>/restore", methods=["POST"])
+    @require_admin(ADMIN_PERMISSION_ADMINS_WRITE)
+    def admin_restore_backup(backup_id):
+        data = request.get_json(silent=True) or {}
+        if not confirmed(data):
+            return confirmation_required_response()
+        try:
+            payload = store.admin_restore_backup(backup_id, actor=admin_actor())
+        except ValueError as exc:
+            return jsonify({"error": str(exc), "code": "invalid_request"}), 400
+        return jsonify(payload)
 
     @bp.route("/admin/users/<path:email>")
     @require_admin(ADMIN_PERMISSION_USERS_READ)

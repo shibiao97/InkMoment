@@ -16,6 +16,7 @@ FRONTEND_PUBLIC_PATHS = ("/static/", "/assets/")
 AUTH_PUBLIC_API_PATHS = {
     "/api/health",
     "/api/branding",
+    "/api/client_notices",
     "/api/dependencies/preflight",
 }
 
@@ -120,6 +121,7 @@ def create_authorization_check(
     cancel_running_work: Callable[[], None],
     ensure_recent_authorization_fn: Callable[[object, object], None],
     auth_summary_fn: Callable[[object], dict],
+    report_error_fn: Callable[[str, dict], None] | None = None,
 ):
     def authorization_check():
         if not auth_required_for_path(request.path):
@@ -132,6 +134,18 @@ def create_authorization_check(
             # Core photo processing remains blocked until the license is active.
             if request.path in AUTH_AUTHENTICATED_API_PATHS and exc.code == "not_activated":
                 return None
+            if report_error_fn is not None:
+                try:
+                    report_error_fn(
+                        "authorization check failed",
+                        {
+                            "route": request.path,
+                            "code": exc.code,
+                            "status": exc.status,
+                        },
+                    )
+                except Exception:
+                    pass
             cancel_running_work()
             return jsonify(
                 {

@@ -1,30 +1,39 @@
 import { ref } from "vue";
 
-const FLOW_VIEWS = new Set(["landing", "processing", "prescreen", "preview", "arena", "done"]);
-const STEP_TO_VIEW = {
-  prescreen: "prescreen",
-  "confirm-prescreen": "prescreen",
-  preview: "preview",
-  arena: "arena",
-  done: "done",
-  home: "landing",
-};
+export const FLOW_VIEW = Object.freeze({
+  LANDING: "landing",
+  PROCESSING: "processing",
+  PRESCREEN: "prescreen",
+  PREVIEW: "preview",
+  ARENA: "arena",
+  DONE: "done",
+});
+
+export const FLOW_VIEWS = new Set(Object.values(FLOW_VIEW));
+export const STEP_TO_VIEW = Object.freeze({
+  prescreen: FLOW_VIEW.PRESCREEN,
+  "confirm-prescreen": FLOW_VIEW.PRESCREEN,
+  preview: FLOW_VIEW.PREVIEW,
+  arena: FLOW_VIEW.ARENA,
+  done: FLOW_VIEW.DONE,
+  home: FLOW_VIEW.LANDING,
+});
 
 export function viewForStep(kind) {
-  return STEP_TO_VIEW[kind] || "landing";
+  return STEP_TO_VIEW[kind] || FLOW_VIEW.LANDING;
 }
 
 export function useFlowState() {
-  const currentView = ref("landing");
+  const currentView = ref(FLOW_VIEW.LANDING);
   const startedPayload = ref(null);
 
   function go(view) {
-    currentView.value = FLOW_VIEWS.has(view) ? view : "landing";
+    currentView.value = FLOW_VIEWS.has(view) ? view : FLOW_VIEW.LANDING;
   }
 
   function enterProcessing(payload) {
     startedPayload.value = payload;
-    go("processing");
+    go(FLOW_VIEW.PROCESSING);
   }
 
   function clearStartedPayload() {
@@ -39,12 +48,14 @@ export function useFlowState() {
     currentView,
     startedPayload,
     go,
+    navigateToView: go,
     enterProcessing,
     clearStartedPayload,
     resumeStep,
-    enterPreview: () => go("preview"),
-    enterArena: () => go("arena"),
-    enterDone: () => go("done"),
-    enterHome: () => go("landing"),
+    navigateToStep: resumeStep,
+    enterPreview: () => go(FLOW_VIEW.PREVIEW),
+    enterArena: () => go(FLOW_VIEW.ARENA),
+    enterDone: () => go(FLOW_VIEW.DONE),
+    enterHome: () => go(FLOW_VIEW.LANDING),
   };
 }

@@ -1,86 +1,56 @@
-{% extends "admin/base.html" %}
-{% block title %}InkMoment Admin Events{% endblock %}
-{% block body %}
-<main class="app-shell">
-  <aside class="sidebar">
-    <div class="brand-block">
-      <div class="brand-title">InkMoment</div>
-      <div class="brand-subtitle">审计中心</div>
+{% extends "admin/layout.html" %}
+{% block title %}操作审计日志 - 影刻授权服务管理中心{% endblock %}
+{% block page_title %}操作审计日志{% endblock %}
+{% block page_desc %}追踪授权、设备绑定和管理员操作，用于定位登录、换机、CDK 兑换问题。{% endblock %}
+{% block page_actions %}
+  {% if filters.source or filters.email or filters.event_type or filters.q %}
+  <a class="btn secondary" href="{{ url_for('admin_dashboard.admin_events_page') }}">清空筛选</a>
+  {% endif %}
+{% endblock %}
+{% block admin_content %}
+<div class="stack">
+  <section class="card">
+    <form method="get" action="{{ url_for('admin_dashboard.admin_events_page') }}" class="form-grid five">
+      <label>来源
+        <select name="source">
+          <option value="" {{ 'selected' if filters.source == '' else '' }}>全部来源</option>
+          <option value="license" {{ 'selected' if filters.source == 'license' else '' }}>授权</option>
+          <option value="device" {{ 'selected' if filters.source == 'device' else '' }}>设备</option>
+          <option value="admin" {{ 'selected' if filters.source == 'admin' else '' }}>管理员</option>
+        </select>
+      </label>
+      <label>账号邮箱<input name="email" value="{{ filters.email }}" placeholder="user@example.com"></label>
+      <label>事件类型<input name="event_type" value="{{ filters.event_type }}" placeholder="redeem"></label>
+      <label>关键字<input name="q" value="{{ filters.q }}" placeholder="详情 / 操作者"></label>
+      <button type="submit">筛选</button>
+    </form>
+  </section>
+
+  <section class="table-card">
+    <div class="table-toolbar">
+      <h2>事件列表</h2>
+      <p class="muted small">最多显示 300 条</p>
     </div>
-    <nav class="nav-list" aria-label="管理导航">
-      <a class="nav-link" href="{{ url_for('admin_dashboard.admin_dashboard') }}"><span class="nav-dot"></span>总览</a>
-      <a class="nav-link active" href="{{ url_for('admin_dashboard.admin_events_page') }}"><span class="nav-dot"></span>审计日志</a>
-    </nav>
-    <div class="sidebar-footer">
-      <form method="post" action="{{ url_for('admin_auth.admin_logout') }}"><button type="submit">退出登录</button></form>
-    </div>
-  </aside>
-
-  <section class="content">
-    <header class="page-head">
-      <div class="title-block">
-        <a href="{{ url_for('admin_dashboard.admin_dashboard') }}">← 返回总览</a>
-        <h1>审计日志</h1>
-        <p>追踪授权、设备绑定和管理员操作。用于定位登录、换机、CDK 兑换问题。</p>
-      </div>
-      {% if filters.source or filters.email or filters.event_type or filters.q %}
-        <a class="btn secondary" href="{{ url_for('admin_dashboard.admin_events_page') }}">清空筛选</a>
-      {% endif %}
-    </header>
-
-    <div class="stack">
-      <section class="card">
-        <div class="card-head">
-          <div>
-            <h2>筛选</h2>
-            <p>按来源、账号、事件类型和详情关键字过滤。</p>
-          </div>
-        </div>
-        <form method="get" action="{{ url_for('admin_dashboard.admin_events_page') }}" class="form-grid five">
-          <label>来源
-            <select name="source">
-              <option value="" {{ 'selected' if filters.source == '' else '' }}>全部来源</option>
-              <option value="license" {{ 'selected' if filters.source == 'license' else '' }}>授权</option>
-              <option value="device" {{ 'selected' if filters.source == 'device' else '' }}>设备</option>
-              <option value="admin" {{ 'selected' if filters.source == 'admin' else '' }}>管理员</option>
-            </select>
-          </label>
-          <label>账号邮箱<input name="email" value="{{ filters.email }}" placeholder="user@example.com"></label>
-          <label>事件类型<input name="event_type" value="{{ filters.event_type }}" placeholder="redeem"></label>
-          <label>关键字<input name="q" value="{{ filters.q }}" placeholder="详情 / 操作者"></label>
-          <button type="submit">筛选</button>
-        </form>
-      </section>
-
-      <section class="table-card">
-        <div class="table-toolbar">
-          <div>
-            <h2>事件列表</h2>
-            <p class="muted small">最多显示 200 条</p>
-          </div>
-        </div>
-        <div class="table-scroll event-detail">
-          <table>
-            <thead><tr><th>来源</th><th>账号</th><th>操作者</th><th>设备</th><th>事件</th><th>详情</th><th>时间</th></tr></thead>
-            <tbody>
-            {% for event in events %}
-              <tr>
-                <td><span class="badge badge-{{ event.source }}">{{ event.source|event_source_label }}</span></td>
-                <td>{% if event.email %}<a href="{{ url_for('admin_dashboard.admin_user_page', email=event.email) }}">{{ event.email }}</a>{% else %}<span class="muted">-</span>{% endif %}</td>
-                <td>{{ event.actor or '-' }}</td>
-                <td class="mono">{{ event.device_fingerprint or '-' }}</td>
-                <td><span class="badge">{{ event.event_type }}</span></td>
-                <td><pre>{{ event.detail|tojson(indent=2) }}</pre></td>
-                <td>{{ event.created_at|admin_time }}</td>
-              </tr>
-            {% else %}
-              <tr><td colspan="7"><div class="empty">暂无审计事件</div></td></tr>
-            {% endfor %}
-            </tbody>
-          </table>
-        </div>
-      </section>
+    <div class="table-scroll event-detail">
+      <table>
+        <thead><tr><th>来源</th><th>账号</th><th>操作者</th><th>设备</th><th>事件</th><th>详情</th><th>时间</th></tr></thead>
+        <tbody>
+        {% for event in events %}
+          <tr>
+            <td><span class="badge badge-{{ event.source }}">{{ event.source|event_source_label }}</span></td>
+            <td>{% if event.email %}<a href="{{ url_for('admin_dashboard.admin_user_page', email=event.email) }}">{{ event.email }}</a>{% else %}<span class="muted">-</span>{% endif %}</td>
+            <td>{{ event.actor or '-' }}</td>
+            <td class="mono">{{ event.device_fingerprint or '-' }}</td>
+            <td><span class="badge">{{ event.event_type }}</span></td>
+            <td><pre>{{ event.detail|tojson(indent=2) }}</pre></td>
+            <td>{{ event.created_at|admin_time }}</td>
+          </tr>
+        {% else %}
+          <tr><td colspan="7"><div class="empty">暂无审计事件</div></td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
     </div>
   </section>
-</main>
+</div>
 {% endblock %}

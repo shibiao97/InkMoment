@@ -33,6 +33,7 @@ model_check_workers = 8
 max_workers = 20
 pro_max_workers = 1
 initial_concurrency = 8
+tycoon_analysis_workers = 1
 ```
 
 `llm.api_key` 虽然能被 `Settings` 读取用于诊断和测试，但不建议写入
@@ -64,6 +65,9 @@ Keyring 并删除旧文件。
 | `ARK_MAX_WORKERS` | `llm.max_workers` | 空 | 土豪模式 LLM | 全局 LLM 并发上限；设置后覆盖模型推荐值。 |
 | `ARK_PRO_MAX_WORKERS` | `llm.pro_max_workers` | `1` | 土豪模式 LLM | Pro 模型并发上限。 |
 | `ARK_INITIAL_CONCURRENCY` | `llm.initial_concurrency` | `8` | 土豪模式 LLM | 自适应限流器初始并发。 |
+| `INKMOMENT_TYCOON_ANALYSIS_WORKERS` | `llm.tycoon_analysis_workers` | `1` | 土豪模式本地分析 | 大模型筛图本地视觉分析线程数；只影响 DINOv2 / InsightFace / RAW 读取阶段，不影响 LLM HTTP 限速器。 |
+| `INKMOMENT_TORCH_THREADS` | 无 | `1` | 本地视觉栈 | Torch intra-op 线程数排障开关；用于降低打包版 macOS native 线程池冲突风险。 |
+| `INKMOMENT_TORCH_INTEROP_THREADS` | 无 | `1` | 本地视觉栈 | Torch inter-op 线程数排障开关。 |
 
 ## 变更边界
 

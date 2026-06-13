@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import '../l10n/strings.dart';
+
 class RuntimeStatus {
   const RuntimeStatus({
     required this.ready,
@@ -31,9 +33,9 @@ class SidecarController {
       final healthy = await _waitForHealth(apiBaseUrl);
       final next = RuntimeStatus(
         ready: healthy,
-        message: healthy ? '后端已连接' : '后端健康检查失败',
+        message: healthy ? Zh.backendConnected : Zh.backendHealthFailed,
         apiBaseUrl: apiBaseUrl,
-        error: healthy ? '' : '无法访问 /api/health',
+        error: healthy ? '' : Zh.healthEndpointUnavailable,
       );
       status.add(next);
       return next;
@@ -42,7 +44,11 @@ class SidecarController {
     final python = _pythonExecutable();
     final appPath = _findAppPy();
     if (appPath == null) {
-      final next = const RuntimeStatus(ready: false, message: '后端启动失败', error: '找不到 app.py');
+      final next = const RuntimeStatus(
+        ready: false,
+        message: Zh.backendStartFailed,
+        error: Zh.appPyMissing,
+      );
       status.add(next);
       return next;
     }
@@ -50,39 +56,63 @@ class SidecarController {
     try {
       _process = await Process.start(
         python,
-        [appPath.path, '--host', '127.0.0.1', '--port', '0', '--no-browser', '--json-ready'],
+        [
+          appPath.path,
+          '--host',
+          '127.0.0.1',
+          '--port',
+          '0',
+          '--no-browser',
+          '--json-ready',
+        ],
         workingDirectory: appPath.parent.path,
         environment: _sidecarEnvironment(),
       );
     } catch (error) {
-      final next = RuntimeStatus(ready: false, message: '后端启动失败', error: error.toString());
+      final next = RuntimeStatus(
+        ready: false,
+        message: Zh.backendStartFailed,
+        error: error.toString(),
+      );
       status.add(next);
       return next;
     }
-    _process!.stderr.transform(utf8.decoder).transform(const LineSplitter()).listen(_appendLog);
+    _process!.stderr
+        .transform(utf8.decoder)
+        .transform(const LineSplitter())
+        .listen(_appendLog);
     final ready = Completer<RuntimeStatus>();
-    _process!.stdout.transform(utf8.decoder).transform(const LineSplitter()).listen((line) async {
-      _appendLog(line);
-      if (ready.isCompleted) return;
-      final payload = _decodeReadyPayload(line);
-      if (payload == null) return;
-      if (payload['event'] == 'ready' && payload['port'] != null) {
-        apiBaseUrl = 'http://127.0.0.1:${payload['port']}';
-        final healthy = await _waitForHealth(apiBaseUrl);
-        if (ready.isCompleted) return;
-        ready.complete(RuntimeStatus(
-          ready: healthy,
-          message: healthy ? '后端就绪' : '后端健康检查失败',
-          apiBaseUrl: apiBaseUrl,
-          pid: payload['pid'] is int ? payload['pid'] as int : null,
-          error: healthy ? '' : '无法访问 /api/health',
-        ));
-      }
-    });
+    _process!.stdout
+        .transform(utf8.decoder)
+        .transform(const LineSplitter())
+        .listen((line) async {
+          _appendLog(line);
+          if (ready.isCompleted) return;
+          final payload = _decodeReadyPayload(line);
+          if (payload == null) return;
+          if (payload['event'] == 'ready' && payload['port'] != null) {
+            apiBaseUrl = 'http://127.0.0.1:${payload['port']}';
+            final healthy = await _waitForHealth(apiBaseUrl);
+            if (ready.isCompleted) return;
+            ready.complete(
+              RuntimeStatus(
+                ready: healthy,
+                message: healthy ? Zh.ready : Zh.backendHealthFailed,
+                apiBaseUrl: apiBaseUrl,
+                pid: payload['pid'] is int ? payload['pid'] as int : null,
+                error: healthy ? '' : Zh.healthEndpointUnavailable,
+              ),
+            );
+          }
+        });
 
     final next = await ready.future.timeout(
       const Duration(seconds: 60),
-      onTimeout: () => const RuntimeStatus(ready: false, message: '后端启动超时', error: '等待 ready JSON 超时'),
+      onTimeout: () => const RuntimeStatus(
+        ready: false,
+        message: Zh.backendStartTimeout,
+        error: Zh.readyJsonTimeout,
+      ),
     );
     status.add(next);
     return next;
@@ -118,9 +148,11 @@ class SidecarController {
           final request = await client.getUrl(Uri.parse('$baseUrl/api/health'));
           final response = await request.close();
           await response.drain();
-          if (response.statusCode >= 200 && response.statusCode < 300) return true;
+          if (response.statusCode >= 200 && response.statusCode < 300) {
+            return true;
+          }
         } catch (error) {
-          _appendLog('健康检查等待中：$error');
+          _appendLog(Zh.healthCheckWaiting(error));
         }
         await Future<void>.delayed(const Duration(milliseconds: 350));
       }
@@ -139,7 +171,11 @@ class SidecarController {
   }
 
   File? _findAppPy() {
-    for (final candidate in [File('../app.py'), File('app.py'), File('../../app.py')]) {
+    for (final candidate in [
+      File('../app.py'),
+      File('app.py'),
+      File('../../app.py'),
+    ]) {
       if (candidate.existsSync()) return candidate.absolute;
     }
     return null;

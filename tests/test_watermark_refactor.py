@@ -1,4 +1,6 @@
 import io
+import sys
+import types
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -64,6 +66,46 @@ class WatermarkRefactorTest(unittest.TestCase):
 
             self.assertEqual(result, {"ok": 1, "failed": [], "total": 1})
             self.assertTrue((tmp_path / "out" / "sample.jpg").exists())
+
+    def test_raw_render_uses_embedded_preview(self):
+        with TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            raw_path = tmp_path / "IMG_0001.CR3"
+            raw_path.write_bytes(b"raw")
+            preview = io.BytesIO()
+            Image.new("RGB", (160, 100), (80, 120, 160)).save(preview, "JPEG")
+            rawpy_module = _fake_rawpy(preview.getvalue())
+            previous = sys.modules.get("rawpy")
+            sys.modules["rawpy"] = rawpy_module
+            try:
+                data = render(raw_path, WatermarkConfig(template="A"), preview_max_side=96)
+            finally:
+                if previous is None:
+                    sys.modules.pop("rawpy", None)
+                else:
+                    sys.modules["rawpy"] = previous
+
+        self.assertTrue(data.startswith(b"\xff\xd8"))
+        rendered = Image.open(io.BytesIO(data))
+        self.assertGreater(rendered.size[0], 0)
+        self.assertGreater(rendered.size[1], 0)
+
+
+def _fake_rawpy(jpeg_bytes: bytes):
+    class FakeRaw:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def extract_thumb(self):
+            return types.SimpleNamespace(format="jpeg", data=jpeg_bytes)
+
+    return types.SimpleNamespace(
+        ThumbFormat=types.SimpleNamespace(JPEG="jpeg", BITMAP="bitmap"),
+        imread=lambda _path: FakeRaw(),
+    )
 
 
 if __name__ == "__main__":

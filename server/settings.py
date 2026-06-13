@@ -30,6 +30,9 @@ CONFIG_ENV_VARS = (
     "ARK_MAX_WORKERS",
     "ARK_PRO_MAX_WORKERS",
     "ARK_INITIAL_CONCURRENCY",
+    "INKMOMENT_TYCOON_ANALYSIS_WORKERS",
+    "INKMOMENT_TORCH_THREADS",
+    "INKMOMENT_TORCH_INTEROP_THREADS",
 )
 
 DEFAULT_SETTINGS_FILE = Path.home() / ".config" / "inkmoment" / "settings.toml"
@@ -63,6 +66,7 @@ class Settings:
     ark_max_workers: int | None
     ark_pro_max_workers: int
     ark_initial_concurrency: int
+    tycoon_analysis_workers: int
 
     @classmethod
     def load(
@@ -115,6 +119,14 @@ class Settings:
                 "initial_concurrency",
                 8,
             ),
+            tycoon_analysis_workers=_int(
+                values,
+                "INKMOMENT_TYCOON_ANALYSIS_WORKERS",
+                data,
+                "llm",
+                "tycoon_analysis_workers",
+                1,
+            ),
         )
 
 
@@ -143,6 +155,7 @@ def apply_runtime_environment(settings: Settings) -> None:
     _set_env_default("ARK_MAX_WORKERS", settings.ark_max_workers)
     _set_env_default("ARK_PRO_MAX_WORKERS", settings.ark_pro_max_workers)
     _set_env_default("ARK_INITIAL_CONCURRENCY", settings.ark_initial_concurrency)
+    _set_env_default("INKMOMENT_TYCOON_ANALYSIS_WORKERS", settings.tycoon_analysis_workers)
 
 
 def _set_env_default(name: str, value: object | None) -> None:

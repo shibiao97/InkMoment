@@ -6,6 +6,7 @@ from flask import Blueprint, jsonify
 from server.domain.models import JobState, SessionState
 from server.services.branding_service import load_branding
 from server.services.capability_service import get_capabilities
+from server.services.client_notice_service import load_client_notices
 from server.services.health_service import serialize_health
 
 
@@ -13,6 +14,7 @@ from server.services.health_service import serialize_health
 class SystemDeps:
     get_job: Callable[[], Optional[JobState]]
     get_session: Callable[[], Optional[SessionState]]
+    state_store: Callable[[], object] | None = None
 
 
 def create_system_blueprint(deps: SystemDeps):
@@ -32,5 +34,11 @@ def create_system_blueprint(deps: SystemDeps):
     def api_capabilities():
         """前端用：探测当前后端可用的初筛能力。"""
         return jsonify(get_capabilities())
+
+    @system_bp.route("/api/client_notices")
+    def api_client_notices():
+        """客户端公告、维护和版本提示配置。"""
+        store = deps.state_store() if deps.state_store is not None else None
+        return jsonify(load_client_notices(store))
 
     return system_bp

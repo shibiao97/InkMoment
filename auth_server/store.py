@@ -7,6 +7,7 @@ from sqlite3 import Connection
 # Compatibility facade: keep legacy auth_server.store imports working.
 from auth_server.repository.constants import *  # noqa: F403
 from auth_server.repository.accounts import AccountStoreMixin
+from auth_server.repository.admin_ops import AdminOpsStoreMixin
 from auth_server.repository.admins import AdminStoreMixin
 from auth_server.repository.cdks import CdkStoreMixin
 from auth_server.repository.devices import DeviceStoreMixin
@@ -28,6 +29,7 @@ from auth_server.services.license_service import license_payload as license_payl
 
 class AuthStore(
     AdminStoreMixin,
+    AdminOpsStoreMixin,
     EventStoreMixin,
     AccountStoreMixin,
     CdkStoreMixin,

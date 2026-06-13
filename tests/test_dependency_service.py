@@ -300,6 +300,64 @@ class DependencyServiceTest(unittest.TestCase):
         self.assertEqual(final["message"], "已停止资源下载")
 
     @patch("server.services.dependencies.manager._hf_model_cache_status")
+    def test_download_manager_uses_runtime_concurrency_provider(self, cache_status):
+        cache_status.return_value = {
+            "model": "facebook/dinov2-small",
+            "cached": True,
+            "missing": [],
+            "error": None,
+        }
+        runner_factory = FakeRunnerFactory({
+            "repair": [{"type": "result", "result": {"repaired": [], "downloaded": [], "skipped": []}}],
+            "runtime:expert:dinov2": FakeRunnerFactory.BLOCK,
+            "runtime:expert:nima": FakeRunnerFactory.BLOCK,
+            "runtime:expert:pyiqa": FakeRunnerFactory.BLOCK,
+            "runtime:expert:insightface": FakeRunnerFactory.BLOCK,
+        })
+        manager = DependencyDownloadManager(
+            lambda: self.store,
+            concurrency_provider=lambda store: 3,
+            runner_factory=runner_factory,
+        )
+
+        payload, status = manager.start({"engine": "expert", "model_dir": str(self.root / "models")})
+
+        self.assertEqual(status, 202)
+        self.assertEqual(payload["concurrency"], 3)
+        self.assertTrue(runner_factory.wait_for_active_count(3, timeout=1))
+        manager.cancel()
+
+    @patch("server.services.dependencies.manager._hf_model_cache_status")
+    def test_download_manager_clamps_runtime_concurrency_to_admin_limit(self, cache_status):
+        cache_status.return_value = {
+            "model": "facebook/dinov2-small",
+            "cached": True,
+            "missing": [],
+            "error": None,
+        }
+        runner_factory = FakeRunnerFactory({
+            "repair": [{"type": "result", "result": {"repaired": [], "downloaded": [], "skipped": []}}],
+        })
+        manager = DependencyDownloadManager(
+            lambda: self.store,
+            concurrency_provider=lambda store: 99,
+            runner_factory=runner_factory,
+        )
+
+        payload, status = manager.start({"engine": "fast", "model_dir": str(self.root / "models")})
+
+        self.assertEqual(status, 202)
+        self.assertEqual(payload["concurrency"], 8)
+        deadline = time.time() + 2
+        final = {}
+        while time.time() < deadline:
+            final, _status = manager.status()
+            if final.get("status") == "done":
+                break
+            time.sleep(0.02)
+        self.assertEqual(final["status"], "done")
+
+    @patch("server.services.dependencies.manager._hf_model_cache_status")
     def test_download_manager_does_not_mark_runtime_ready_without_runtime_tasks(self, cache_status):
         model_dir = self.root / "models"
         self.store.set_setting(EXPERT_RUNTIME_READY_SETTING, {"ready": True, "cache_dir": str(model_dir.resolve())})

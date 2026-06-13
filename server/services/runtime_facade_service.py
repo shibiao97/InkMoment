@@ -3,6 +3,7 @@ from __future__ import annotations
 import time
 
 from server.services.auth_client_service import load_auth_runtime
+from server.services.client_runtime_config_service import configured_dependency_download_concurrency
 from server.services.dependency_service import DependencyDownloadManager
 from server.state.local_store import LocalStateStore
 
@@ -22,7 +23,10 @@ def get_auth_runtime(runtime, state_store):
 
 def get_dependency_download_manager(runtime, state_store) -> DependencyDownloadManager:
     if runtime.dependency_downloads is None:
-        runtime.dependency_downloads = DependencyDownloadManager(state_store)
+        runtime.dependency_downloads = DependencyDownloadManager(
+            state_store,
+            concurrency_provider=configured_dependency_download_concurrency,
+        )
     return runtime.dependency_downloads
 
 

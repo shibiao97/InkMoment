@@ -1,0 +1,55 @@
+{% extends "admin/layout.html" %}
+{% block title %}用户管理 - 影刻授权服务管理中心{% endblock %}
+{% block page_title %}用户管理{% endblock %}
+{% block page_desc %}查询账号、授权状态、设备绑定和最近登录。{% endblock %}
+{% block page_actions %}
+  <a class="btn secondary" href="{{ url_for('admin_dashboard.admin_events_page') }}">查看审计</a>
+{% endblock %}
+{% block admin_content %}
+<div class="stack">
+  <section class="card">
+    <form class="form-grid" method="get" action="{{ url_for('admin_dashboard.admin_users_page') }}">
+      <label>账号 / 显示名<input name="q" value="{{ query }}" placeholder="user@example.com"></label>
+      <label>每页
+        <select name="page_size">{% for size in page.page_size_choices %}<option value="{{ size }}" {{ 'selected' if size == page.page_size else '' }}>{{ size }}</option>{% endfor %}</select>
+      </label>
+      <button type="submit">筛选</button>
+      {% if query %}<a class="btn secondary" href="{{ url_for('admin_dashboard.admin_users_page') }}">清空</a>{% endif %}
+    </form>
+  </section>
+
+  <section class="table-card">
+    <div class="table-toolbar">
+      <h2>用户列表</h2>
+      <span class="muted small">{{ page.total }} 个账号</span>
+    </div>
+    <div class="table-scroll" tabindex="0" aria-label="用户列表，可上下左右滚动">
+      <table>
+        <thead><tr><th>账号</th><th>状态</th><th>授权</th><th>设备</th><th>最近登录</th><th></th></tr></thead>
+        <tbody>
+        {% for user in users %}
+          <tr>
+            <td><div class="identity"><strong>{{ user.email }}</strong><small>{{ user.display_name or '未设置显示名' }}</small></div></td>
+            <td><span class="badge badge-{{ user.status }}">{{ user.status|account_status_label }}</span></td>
+            <td><span class="badge badge-{{ user.license.reason }}">{{ user.license.reason|license_reason_label }}</span><br><span class="muted small">{{ user.license_expires_at|admin_time }}</span></td>
+            <td>{% if user.device.bound %}<span>{{ user.device.name or '已绑定设备' }}</span><br><span class="muted small mono">{{ user.device.fingerprint }}</span>{% else %}<span class="muted">未绑定</span>{% endif %}</td>
+            <td>{{ user.last_login_at|admin_time }}</td>
+            <td><a class="btn secondary" href="{{ url_for('admin_dashboard.admin_user_page', email=user.email) }}">详情</a></td>
+          </tr>
+        {% else %}
+          <tr><td colspan="6"><div class="empty">暂无用户</div></td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="pager">
+      <div class="pager-info">用户：{{ page.start }}-{{ page.end }} / {{ page.total }}，第 {{ page.page }} / {{ page.total_pages }} 页</div>
+      <div class="pager-actions">
+        <a class="pager-link {{ '' if page.has_prev else 'disabled' }}" href="{{ page.prev_url }}">上一页</a>
+        <div class="pager-pages">{% for item in page.page_links %}<a class="pager-link {{ 'active' if item.active else '' }}" href="{{ item.url }}">{{ item.page }}</a>{% endfor %}</div>
+        <a class="pager-link {{ '' if page.has_next else 'disabled' }}" href="{{ page.next_url }}">下一页</a>
+      </div>
+    </div>
+  </section>
+</div>
+{% endblock %}

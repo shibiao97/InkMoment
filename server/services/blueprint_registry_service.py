@@ -38,6 +38,7 @@ from server.services.auth_client_service import (
     register as auth_register,
     unbind_device as auth_unbind_device,
 )
+from server.services.client_runtime_config_service import report_client_error
 from server.services.dependency_service import preflight_dependencies_payload
 from server.services.export_service import (
     export_cancel_payload,
@@ -153,6 +154,12 @@ def register_app_blueprints(flask_app: Flask, deps: BlueprintRegistryDeps) -> No
                 download_dependencies=lambda data: deps.dependency_download_manager().start(data),
                 download_status=lambda: deps.dependency_download_manager().status(),
                 download_cancel=lambda: deps.dependency_download_manager().cancel(),
+                report_error=lambda message, context: report_client_error(
+                    deps.state_store(),
+                    message,
+                    context=context,
+                    runtime=deps.auth_runtime(),
+                ),
             )
         )
     )
@@ -239,6 +246,7 @@ def register_app_blueprints(flask_app: Flask, deps: BlueprintRegistryDeps) -> No
             SystemDeps(
                 get_job=lambda: runtime.job,
                 get_session=lambda: runtime.session,
+                state_store=deps.state_store,
             )
         )
     )

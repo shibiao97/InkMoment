@@ -5,6 +5,10 @@ export function getBranding() {
   return fetchJSON("/api/branding");
 }
 
+export function getClientNotices() {
+  return fetchJSON("/api/client_notices");
+}
+
 export function getHealth() {
   return fetchJSON("/api/health");
 }

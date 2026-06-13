@@ -38,6 +38,13 @@ export function formatMeta(meta, otherMeta = null) {
     });
 }
 
+export function canSkipCurrentGroup(status, group, done = false) {
+  if (done || !group) return false;
+  const unfinished = Number(status?.unfinished_groups ?? 0);
+  if (Number.isFinite(unfinished) && unfinished > 0) return unfinished > 1;
+  return true;
+}
+
 export function useArenaGroup() {
   const status = ref(null);
   const group = ref(null);
@@ -56,6 +63,12 @@ export function useArenaGroup() {
     const total = group.value?.total_images || 0;
     if (!total) return 0;
     return Math.min(100, Math.round(((group.value?.decided || 0) / total) * 100));
+  });
+  const canSkip = computed(() => canSkipCurrentGroup(status.value, group.value, done.value));
+  const skipHint = computed(() => {
+    if (canSkip.value) return "稍后再选";
+    if (done.value || !group.value) return "稍后再选";
+    return "已经是最后一组";
   });
   const statusLabel = computed(() => {
     if (error.value) return "选片需要处理";
@@ -138,6 +151,8 @@ export function useArenaGroup() {
     error,
     overallPercent,
     groupPercent,
+    canSkip,
+    skipHint,
     statusLabel,
     statusState,
     load,

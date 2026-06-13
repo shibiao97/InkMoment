@@ -1,0 +1,81 @@
+{% extends "admin/layout.html" %}
+{% block title %}CDK / 授权管理 - 影刻授权服务管理中心{% endblock %}
+{% block page_title %}CDK / 授权管理{% endblock %}
+{% block page_desc %}生成、筛选、导出和禁用授权兑换码。{% endblock %}
+{% block page_actions %}
+  <a class="btn secondary" href="{{ url_for('admin_api.admin_export_cdks', q=query, status=status, limit=1000) }}">导出 CDK</a>
+{% endblock %}
+{% block admin_content %}
+<div class="stack">
+  {% if admin_can('cdks:write') %}
+  <section class="card">
+    <div class="card-head"><div><h2>生成 CDK</h2><p>批量生成需要二次确认，代码会按前缀自动去重。</p></div></div>
+    <form method="post" action="{{ url_for('admin_dashboard.admin_ui_create_cdk') }}" class="form-grid five" data-confirm="确认生成 CDK？">
+      <label>CDK<input name="code" placeholder="留空自动生成"></label>
+      <label>授权天数<input name="duration_days" type="number" min="1" placeholder="30" required></label>
+      <label>数量<input name="count" type="number" min="1" max="1000" value="1"></label>
+      <label>批量前缀<input name="prefix" placeholder="INKMOMENT"></label>
+      <input name="confirm_action" type="hidden" value="CONFIRM">
+      <button type="submit">生成</button>
+    </form>
+  </section>
+  {% endif %}
+
+  <section class="card">
+    <form class="form-grid" method="get" action="{{ url_for('admin_dashboard.admin_cdks_page') }}">
+      <label>CDK / 账号 / 批次<input name="q" value="{{ query }}" placeholder="INKMOMENT"></label>
+      <label>状态
+        <select name="status">
+          <option value="" {{ 'selected' if status == '' else '' }}>全部</option>
+          <option value="active" {{ 'selected' if status == 'active' else '' }}>可兑换</option>
+          <option value="redeemed" {{ 'selected' if status == 'redeemed' else '' }}>已兑换</option>
+          <option value="disabled" {{ 'selected' if status == 'disabled' else '' }}>已禁用</option>
+        </select>
+      </label>
+      <label>每页
+        <select name="page_size">{% for size in page.page_size_choices %}<option value="{{ size }}" {{ 'selected' if size == page.page_size else '' }}>{{ size }}</option>{% endfor %}</select>
+      </label>
+      <button type="submit">筛选</button>
+    </form>
+  </section>
+
+  <section class="table-card">
+    <div class="table-toolbar"><h2>兑换码列表</h2><span class="muted small">{{ page.total }} 条</span></div>
+    <div class="table-scroll" tabindex="0" aria-label="CDK 列表，可上下左右滚动">
+      <table>
+        <thead><tr><th>CDK</th><th>状态</th><th>天数</th><th>兑换账号</th><th>创建时间</th><th>操作</th></tr></thead>
+        <tbody>
+        {% for cdk in cdks %}
+          <tr>
+            <td><div class="identity"><strong class="mono">{{ cdk.code }}</strong><small>{{ cdk.batch_id or '单个创建' }}</small></div></td>
+            <td><span class="badge badge-{{ cdk.status }}">{{ cdk.status|cdk_status_label }}</span></td>
+            <td>{{ cdk.duration_days }}</td>
+            <td>{% if cdk.redeemed_by %}<a href="{{ url_for('admin_dashboard.admin_user_page', email=cdk.redeemed_by) }}">{{ cdk.redeemed_by }}</a><br><span class="muted small">{{ cdk.redeemed_at|admin_time }}</span>{% else %}<span class="muted">未兑换</span>{% endif %}</td>
+            <td>{{ cdk.created_at|admin_time }}</td>
+            <td>
+              {% if cdk.status == 'active' and admin_can('cdks:write') %}
+              <form method="post" action="{{ url_for('admin_dashboard.admin_ui_disable_cdk', code=cdk.code) }}" data-confirm="确认禁用这个 CDK？">
+                <input name="reason" placeholder="原因">
+                <input name="confirm_action" type="hidden" value="CONFIRM">
+                <button class="danger" type="submit">禁用</button>
+              </form>
+              {% else %}<span class="muted">-</span>{% endif %}
+            </td>
+          </tr>
+        {% else %}
+          <tr><td colspan="6"><div class="empty">暂无 CDK</div></td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="pager">
+      <div class="pager-info">CDK：{{ page.start }}-{{ page.end }} / {{ page.total }}，第 {{ page.page }} / {{ page.total_pages }} 页</div>
+      <div class="pager-actions">
+        <a class="pager-link {{ '' if page.has_prev else 'disabled' }}" href="{{ page.prev_url }}">上一页</a>
+        <div class="pager-pages">{% for item in page.page_links %}<a class="pager-link {{ 'active' if item.active else '' }}" href="{{ item.url }}">{{ item.page }}</a>{% endfor %}</div>
+        <a class="pager-link {{ '' if page.has_next else 'disabled' }}" href="{{ page.next_url }}">下一页</a>
+      </div>
+    </div>
+  </section>
+</div>
+{% endblock %}

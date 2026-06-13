@@ -6,7 +6,7 @@ import threading
 import time
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from inkmoment.engines import ENGINE_LABELS, get_engine
 from server.services.dependencies.cache import (
@@ -28,6 +28,7 @@ from server.state.local_store import LocalStateStore
 ACTIVE_DOWNLOAD_STATUSES = {"pending", "running", "cancelling"}
 TERMINAL_DOWNLOAD_STATUSES = {"done", "error", "cancelled"}
 DEFAULT_DOWNLOAD_CONCURRENCY = 2
+MAX_DOWNLOAD_CONCURRENCY = 8
 
 
 class DependencyDownloadCancelled(RuntimeError):
@@ -42,11 +43,13 @@ class DependencyDownloadManager:
         store_factory,
         *,
         concurrency: int | None = None,
+        concurrency_provider: Callable[[LocalStateStore], int | None] | None = None,
         runner_factory=None,
         command_factory: WorkerCommandFactory | None = None,
     ) -> None:
         self._store_factory = store_factory
         self._concurrency = _bounded_concurrency(concurrency)
+        self._concurrency_provider = concurrency_provider
         self._runner_factory = runner_factory or DependencyProcessRunner
         self._command_factory = command_factory
         self._lock = threading.Lock()
@@ -55,6 +58,8 @@ class DependencyDownloadManager:
         self._active_runners: dict[str, DependencyProcessRunner] = {}
 
     def start(self, data: dict[str, Any]) -> tuple[dict[str, Any], int]:
+        store = self._store_factory()
+        concurrency = self._current_concurrency(store)
         with self._lock:
             if self._job and self._job.get("status") in ACTIVE_DOWNLOAD_STATUSES:
                 return dict(self._job), 409
@@ -66,10 +71,10 @@ class DependencyDownloadManager:
                 "phase": "pending",
                 "progress": 5,
                 "cancelable": True,
-                "concurrency": self._concurrency,
+                "concurrency": concurrency,
                 "active_workers": 0,
                 "download_dir": "",
-                "message": f"准备处理资源（最多 {self._concurrency} 个下载进程）",
+                "message": f"准备处理资源（最多 {concurrency} 个下载进程）",
                 "error": "",
                 "downloaded": [],
                 "repaired": [],
@@ -80,7 +85,7 @@ class DependencyDownloadManager:
             self._cancel_event = threading.Event()
             self._active_runners = {}
 
-        thread = threading.Thread(target=self._run, args=(job["id"], dict(data)), daemon=True)
+        thread = threading.Thread(target=self._run, args=(job["id"], dict(data), concurrency), daemon=True)
         thread.start()
         return dict(job), 202
 
@@ -132,7 +137,7 @@ class DependencyDownloadManager:
                 return dict(self._job), 202
         return payload, 202
 
-    def _run(self, job_id: str, data: dict[str, Any]) -> None:
+    def _run(self, job_id: str, data: dict[str, Any], concurrency: int) -> None:
         store = self._store_factory()
         try:
             plan = self._build_plan(data, store)
@@ -144,9 +149,9 @@ class DependencyDownloadManager:
                 phase="prepare",
                 progress=10,
                 download_dir=str(plan.cache_dir),
-                message=f"正在处理 {len(plan.tasks)} 个资源任务（并发 {self._concurrency}）",
+                message=f"正在处理 {len(plan.tasks)} 个资源任务（并发 {concurrency}）",
             )
-            result = self._run_plan(job_id, plan)
+            result = self._run_plan(job_id, plan, concurrency)
             if self._is_cancelled(job_id):
                 raise DependencyDownloadCancelled("用户已停止资源下载")
 
@@ -241,7 +246,7 @@ class DependencyDownloadManager:
 
         return _DownloadPlan(engine=engine, cache_dir=cache_dir, store=store, tasks=tasks)
 
-    def _run_plan(self, job_id: str, plan: "_DownloadPlan") -> dict[str, Any]:
+    def _run_plan(self, job_id: str, plan: "_DownloadPlan", concurrency: int) -> dict[str, Any]:
         work_dir = plan.store.path.parent / "dependency-downloads" / job_id
         task_count = max(1, len(plan.tasks))
         task_progress: dict[str, float] = {task["id"]: 0.0 for task in plan.tasks}
@@ -255,7 +260,7 @@ class DependencyDownloadManager:
             if self._is_cancelled(job_id):
                 raise DependencyDownloadCancelled("用户已停止资源下载")
 
-            while pending and len(running) < self._concurrency:
+            while pending and len(running) < concurrency:
                 ready_index = _first_ready_task_index(pending, completed)
                 if ready_index is None:
                     if running:
@@ -358,6 +363,14 @@ class DependencyDownloadManager:
         kwargs = {"command_factory": self._command_factory} if self._command_factory is not None else {}
         return self._runner_factory(task_id, payload, work_dir, **kwargs)
 
+    def _current_concurrency(self, store: LocalStateStore) -> int:
+        if self._concurrency_provider is None:
+            return self._concurrency
+        try:
+            return _bounded_concurrency(self._concurrency_provider(store))
+        except Exception:
+            return self._concurrency
+
     def _terminate_active_runners(self) -> None:
         with self._lock:
             runners = list(self._active_runners.values())
@@ -411,7 +424,7 @@ def _bounded_concurrency(value: int | None) -> int:
                 configured = DEFAULT_DOWNLOAD_CONCURRENCY
     if configured is None:
         configured = DEFAULT_DOWNLOAD_CONCURRENCY
-    return max(1, min(int(configured), 4))
+    return max(1, min(int(configured), MAX_DOWNLOAD_CONCURRENCY))
 
 
 def _expert_runtime_tasks(engine: str, cache_dir: Path, *, dino_download_required: bool) -> list[dict[str, Any]]:

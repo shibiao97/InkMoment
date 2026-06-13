@@ -63,7 +63,7 @@ def watermark_preview_payload(
     if not winners:
         return {"error": "没有 winner 照片可预览"}, 400
 
-    from inkmoment.watermark import WatermarkConfig, parse_exif, render
+    from inkmoment.watermark import WatermarkConfig, render
 
     cfg = WatermarkConfig.from_dict(cfg_dict)
     try:
@@ -74,9 +74,7 @@ def watermark_preview_payload(
     src = winners[preview_index]
 
     try:
-        from PIL import Image
-
-        exif = parse_exif(Image.open(src))
+        exif = read_watermark_exif(src)
         data = render(src, cfg, preview_max_side=1400)
     except Exception as error:
         logger.exception("watermark preview failed")
@@ -99,6 +97,18 @@ def watermark_preview_payload(
             "datetime": exif.datetime_str,
         },
     }, 200
+
+
+def read_watermark_exif(src: str) -> object:
+    from inkmoment.grouping.constants import RAW_EXTS
+    from inkmoment.watermark import ExifInfo, parse_exif
+    from PIL import Image
+
+    if Path(src).suffix.lower() in RAW_EXTS:
+        return ExifInfo()
+
+    with Image.open(src) as image:
+        return parse_exif(image)
 
 
 def run_watermark_job(

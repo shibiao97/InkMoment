@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from jinja2.runtime import Undefined
+
 
 def admin_time(value) -> str:
-    if value in (None, ""):
+    if value in (None, "") or isinstance(value, Undefined):
         return "-"
     try:
         return datetime.fromtimestamp(float(value)).strftime("%Y-%m-%d %H:%M")

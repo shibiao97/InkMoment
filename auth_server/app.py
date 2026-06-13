@@ -36,6 +36,14 @@ def create_app(store: AuthStore | None = None) -> Flask:
     app.after_request(add_security_headers)
 
     admin_auth = AdminAuthController(auth_store)
+
+    @app.context_processor
+    def inject_admin_context():
+        return {
+            "admin_can": admin_auth.can_admin,
+            "admin_actor_name": admin_auth.admin_actor,
+        }
+
     app.register_blueprint(create_health_blueprint())
     app.register_blueprint(create_user_api_blueprint(UserApiDeps(auth_store)))
     app.register_blueprint(create_admin_auth_blueprint(admin_auth))

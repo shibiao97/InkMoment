@@ -80,6 +80,11 @@ def compute_infos(
         if cached_info is not None:
             fresh[f] = cached_info
             cache_hits += 1
+            if event_cb:
+                try:
+                    event_cb(Path(f).name, f, cached_info, None)
+                except Exception:
+                    pass
             continue
         needed.append(f)
 
@@ -94,6 +99,7 @@ def compute_infos(
 
     if needed:
         workers = engine_spec.resolve_workers(workers, llm_model)
+        log.info(f"[{engine}] analysis workers: {workers}（待处理 {len(needed)} / 总数 {total}）")
         ex = ThreadPoolExecutor(max_workers=workers)
         try:
             futures = {

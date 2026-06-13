@@ -17,6 +17,7 @@ class SecurityServiceTest(unittest.TestCase):
         self.assertFalse(auth_required_for_path("/"))
         self.assertFalse(auth_required_for_path("/api/health"))
         self.assertFalse(auth_required_for_path("/api/branding"))
+        self.assertFalse(auth_required_for_path("/api/client_notices"))
         self.assertFalse(auth_required_for_path("/api/dependencies/preflight"))
         self.assertFalse(auth_required_for_path("/api/auth/status"))
 
@@ -87,6 +88,7 @@ class SecurityServiceTest(unittest.TestCase):
 
     def test_authorization_hook_blocks_core_api_and_cancels_work(self):
         cancel_calls = []
+        report_calls = []
 
         def ensure_authorized(store, runtime):
             self.assertEqual(store, "store")
@@ -97,6 +99,7 @@ class SecurityServiceTest(unittest.TestCase):
             ensure_authorized,
             lambda: cancel_calls.append("cancel"),
             lambda runtime: {"authorized": False, "reason": "expired"},
+            lambda message, context: report_calls.append((message, context)),
         ).test_client()
 
         response = client.post("/api/start")
@@ -104,6 +107,9 @@ class SecurityServiceTest(unittest.TestCase):
         self.assertEqual(response.status_code, 403)
         self.assertEqual(response.get_json()["code"], "expired")
         self.assertEqual(cancel_calls, ["cancel"])
+        self.assertEqual(report_calls[0][0], "authorization check failed")
+        self.assertEqual(report_calls[0][1]["route"], "/api/start")
+        self.assertEqual(report_calls[0][1]["code"], "expired")
 
     def test_authorization_hook_allows_download_before_activation(self):
         cancel_calls = []
@@ -139,6 +145,7 @@ class SecurityServiceTest(unittest.TestCase):
         ).test_client()
 
         self.assertEqual(client.get("/api/health").status_code, 200)
+        self.assertEqual(client.get("/api/client_notices").status_code, 200)
         self.assertEqual(client.get("/api/auth/status").status_code, 200)
         self.assertEqual(calls, [])
 
@@ -161,7 +168,7 @@ class SecurityServiceTest(unittest.TestCase):
 
         return flask_app
 
-    def _authorization_app(self, ensure_authorized, cancel, auth_summary):
+    def _authorization_app(self, ensure_authorized, cancel, auth_summary, report_error=None):
         runtime = {"token": "cached"}
         flask_app = Flask(__name__)
         flask_app.before_request(
@@ -171,12 +178,17 @@ class SecurityServiceTest(unittest.TestCase):
                 cancel,
                 ensure_authorized,
                 auth_summary,
+                report_error,
             )
         )
 
         @flask_app.route("/api/health")
         def health():
             return jsonify({"ok": True})
+
+        @flask_app.route("/api/client_notices")
+        def client_notices():
+            return jsonify({"maintenance": {"enabled": False}})
 
         @flask_app.route("/api/auth/status")
         def auth_status():

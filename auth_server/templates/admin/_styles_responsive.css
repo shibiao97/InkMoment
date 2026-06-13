@@ -1,49 +1,4 @@
-    background: var(--surface-soft);
-    border: 1px solid var(--soft-line);
-    border-radius: 8px;
-  }
-  .action-card p { color: var(--muted); font-size: 12px; line-height: 1.55; }
-  .danger-zone { border-color: #f4c7c1; background: #fff8f6; }
-  .event-detail pre { max-width: 620px; }
-  .login-shell {
-    min-height: 100vh;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 28px 16px;
-  }
-  .login-panel {
-    width: min(1040px, 100%);
-    min-height: 560px;
-    display: grid;
-    grid-template-columns: minmax(0, .9fr) minmax(360px, 1fr);
-    overflow: hidden;
-    background: var(--surface);
-    border: 1px solid var(--line);
-    border-radius: 10px;
-    box-shadow: 0 30px 80px rgba(15, 23, 42, .16);
-  }
-  .login-side {
-    display: grid;
-    align-content: space-between;
-    padding: 30px;
-    color: #fff;
-    background: #101828;
-  }
-  .login-side h1 { font-size: 30px; }
-  .login-side p { margin-top: 10px; color: #cbd5e1; line-height: 1.7; }
-  .login-form-wrap { padding: 34px; display: grid; align-content: center; gap: 18px; }
   .login-form { display: grid; gap: 12px; }
-  .login-hints { display: grid; gap: 8px; color: #cbd5e1; font-size: 12px; }
-  .hint-pill {
-    display: inline-flex;
-    align-items: center;
-    width: fit-content;
-    padding: 5px 9px;
-    color: #dbeafe;
-    background: rgba(36, 87, 214, .22);
-    border-radius: 999px;
-  }
   @media (min-width: 1800px) {
     .content { max-width: 1840px; padding-inline: 38px; }
     .split-grid { grid-template-columns: minmax(520px, .95fr) minmax(620px, 1.05fr); }
@@ -51,6 +6,7 @@
   }
   @media (max-width: 1320px) {
     .split-grid { grid-template-columns: 1fr; }
+    .dashboard-stat-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     .table-scroll { max-height: 520px; }
   }
   @media (max-width: 1080px) {
@@ -59,7 +15,7 @@
       flex-basis: 220px;
       padding: 18px 14px;
     }
-    .content { padding: 18px; }
+    .content { --content-pad: 18px; padding: var(--content-pad); }
     .page-head { align-items: stretch; flex-direction: column; }
     .nav-actions { justify-content: flex-start; }
   }
@@ -90,24 +46,26 @@
       white-space: nowrap;
     }
     .sidebar-footer { margin-top: 0; }
-    .content { padding: 16px; }
+    .content { --content-pad: 16px; padding: var(--content-pad); }
     .page-head, .card-head, .table-toolbar { align-items: stretch; flex-direction: column; }
     .nav-actions, .filters { justify-content: flex-start; }
     .metric-grid, .split-grid, .form-grid, .form-grid.five, .action-grid { grid-template-columns: 1fr; }
+    .dashboard-stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .dashboard-hero { align-items: flex-start; flex-direction: column; }
+    .hero-signal { width: 100%; }
     .kv { grid-template-columns: 1fr; }
     .filters input, .filters select { flex: 1 1 100%; }
     .table-scroll { max-height: min(540px, 64vh); }
     .pager { align-items: stretch; flex-direction: column; }
     .pager-actions { justify-content: space-between; }
     .pager-actions .pager-link { flex: 1 1 auto; }
-    .login-shell { align-items: stretch; padding: 16px; }
-    .login-panel { grid-template-columns: 1fr; min-height: 0; }
-    .login-side { gap: 24px; }
+    .auth-login-shell { padding: 22px 14px; }
+    .auth-panel-body { padding: 20px; }
   }
   @media (max-width: 520px) {
     body { font-size: 13px; }
     h1 { font-size: 23px; }
-    .content { padding: 12px; }
+    .content { --content-pad: 12px; padding: var(--content-pad); }
     .card, .metric { padding: 14px; }
     .metric-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
     .metric strong { font-size: 21px; }
@@ -120,7 +78,8 @@
     .table-scroll table { min-width: 680px; }
     .event-detail table { min-width: 860px; }
     pre { max-width: 76vw; }
-    .login-form-wrap, .login-side { padding: 22px; }
+    .admin-topbar { align-items: stretch; flex-direction: column; }
+    .topbar-tools { justify-content: flex-start; }
   }
   @media (max-width: 380px) {
     .metric-grid { grid-template-columns: 1fr; }

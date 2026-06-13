@@ -23,6 +23,7 @@ class SettingsTest(unittest.TestCase):
         self.assertEqual(settings.ark_model_check_timeout, 15.0)
         self.assertEqual(settings.ark_model_check_workers, 8)
         self.assertIsNone(settings.ark_max_workers)
+        self.assertEqual(settings.tycoon_analysis_workers, 1)
 
     def test_environment_values_are_normalized(self):
         env = {
@@ -43,6 +44,7 @@ class SettingsTest(unittest.TestCase):
             "ARK_MAX_WORKERS": "20",
             "ARK_PRO_MAX_WORKERS": "2",
             "ARK_INITIAL_CONCURRENCY": "6",
+            "INKMOMENT_TYCOON_ANALYSIS_WORKERS": "3",
         }
         with tempfile.TemporaryDirectory() as tmp:
             settings = Settings.load(env=env, config_file=Path(tmp) / "missing.toml")
@@ -72,6 +74,7 @@ class SettingsTest(unittest.TestCase):
         self.assertEqual(settings.ark_max_workers, 20)
         self.assertEqual(settings.ark_pro_max_workers, 2)
         self.assertEqual(settings.ark_initial_concurrency, 6)
+        self.assertEqual(settings.tycoon_analysis_workers, 3)
 
     def test_toml_is_used_when_environment_is_absent(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -105,6 +108,7 @@ model_check_workers = 3
 max_workers = 18
 pro_max_workers = 2
 initial_concurrency = 5
+tycoon_analysis_workers = 2
 """,
                 encoding="utf-8",
             )
@@ -132,6 +136,7 @@ initial_concurrency = 5
         self.assertEqual(settings.ark_max_workers, 9)
         self.assertEqual(settings.ark_pro_max_workers, 2)
         self.assertEqual(settings.ark_initial_concurrency, 5)
+        self.assertEqual(settings.tycoon_analysis_workers, 2)
 
     def test_config_document_covers_all_settings_env_vars(self):
         docs = (Path(__file__).resolve().parents[1] / "docs" / "CONFIG.md").read_text(encoding="utf-8")
@@ -159,6 +164,7 @@ model_check_workers = 3
 max_workers = 18
 pro_max_workers = 2
 initial_concurrency = 5
+tycoon_analysis_workers = 2
 """,
                 encoding="utf-8",
             )
@@ -178,6 +184,7 @@ initial_concurrency = 5
             self.assertEqual(os.environ["ARK_MAX_WORKERS"], "18")
             self.assertEqual(os.environ["ARK_PRO_MAX_WORKERS"], "2")
             self.assertEqual(os.environ["ARK_INITIAL_CONCURRENCY"], "5")
+            self.assertEqual(os.environ["INKMOMENT_TYCOON_ANALYSIS_WORKERS"], "2")
 
     def test_runtime_environment_keeps_explicit_env_over_file_settings(self):
         with tempfile.TemporaryDirectory() as tmp:

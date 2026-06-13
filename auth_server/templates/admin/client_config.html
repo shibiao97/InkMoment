@@ -1,0 +1,30 @@
+{% extends "admin/layout.html" %}
+{% block title %}客户端远程配置 - 影刻授权服务管理中心{% endblock %}
+{% block page_title %}客户端远程配置{% endblock %}
+{% block page_desc %}维护远程开关、下载并发数和客户端功能标记。{% endblock %}
+{% block admin_content %}
+<div class="stack">
+  <section class="metric-grid">
+    <div class="metric"><span>维护模式</span><strong>{{ '开启' if config.maintenance else '关闭' }}</strong><small>{{ config.maintenance_message or '无维护文案' }}</small></div>
+    <div class="metric"><span>下载并发</span><strong>{{ config.download_concurrency }}</strong><small>默认 2</small></div>
+    <div class="metric"><span>授权服务 URL</span><strong class="small">{{ config.auth_base_url or '自动' }}</strong><small>留空使用当前服务</small></div>
+    <div class="metric"><span>更新时间</span><strong class="small">{{ config.updated_at|admin_time }}</strong><small>{{ config.updated_by or '-' }}</small></div>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><div><h2>远程配置</h2><p>客户端读取 `/auth/client/config` 后应用这些配置。</p></div></div>
+    {% if can('users:write') %}
+    <form method="post" action="{{ url_for('admin_dashboard.admin_ui_update_client_config') }}" class="form-grid">
+      <label class="checkbox-field"><input type="checkbox" name="maintenance" {{ 'checked' if config.maintenance else '' }}> 维护模式</label>
+      <label>维护文案<input name="maintenance_message" value="{{ config.maintenance_message }}" placeholder="服务维护中"></label>
+      <label>授权服务 URL<input name="auth_base_url" value="{{ config.auth_base_url }}" placeholder="https://heiyunairport.asia"></label>
+      <label>下载并发<input name="download_concurrency" type="number" min="1" max="8" value="{{ config.download_concurrency }}"></label>
+      <label class="wide">功能标记 JSON<textarea name="feature_flags" rows="7">{{ config.feature_flags|tojson(indent=2) }}</textarea></label>
+      <button type="submit">保存配置</button>
+    </form>
+    {% else %}
+    <pre>{{ config|tojson(indent=2) }}</pre>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

@@ -5,7 +5,7 @@ import {
   getGroup,
   getStatus,
 } from "../api/inkmoment";
-import { formatMeta, useArenaGroup } from "./useArenaGroup";
+import { canSkipCurrentGroup, formatMeta, useArenaGroup } from "./useArenaGroup";
 
 vi.mock("../api/inkmoment", () => ({
   chooseGroup: vi.fn(),
@@ -66,5 +66,22 @@ describe("useArenaGroup", () => {
     expect(arena.done.value).toBe(false);
     expect(arena.error.value).toBe("status offline");
     expect(arena.busy.value).toBe(false);
+  });
+
+  it("disables skip when the current group is the last unfinished group", async () => {
+    getGroup.mockResolvedValue({
+      done: false,
+      group: { id: 1, left: "/last.jpg", right: "/last-right.jpg" },
+    });
+    getStatus.mockResolvedValue({
+      unfinished_groups: 1,
+    });
+    const arena = useArenaGroup();
+
+    await arena.load();
+
+    expect(arena.canSkip.value).toBe(false);
+    expect(arena.skipHint.value).toBe("已经是最后一组");
+    expect(canSkipCurrentGroup({ unfinished_groups: 2 }, arena.group.value)).toBe(true);
   });
 });
