@@ -151,15 +151,9 @@ class _ExportScreenState extends State<ExportScreen> {
     final status = _status?['status'];
     final done = _status?['done'] ?? 0;
     final total = _status?['total'] ?? 0;
-    return StitchCard(
-      padding: const EdgeInsets.all(24),
-      backgroundColor: StitchColors.cardGlow,
-      borderColor: StitchColors.borderSoft,
-      radius: StitchRadius.xl,
-      shadows: const [BoxShadow(color: Color(0x0E243527), blurRadius: 20, offset: Offset(0, 12))],
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
           Container(
             width: 60,
             height: 60,
@@ -209,8 +203,7 @@ class _ExportScreenState extends State<ExportScreen> {
             ),
           ),
         ],
-      ),
-    );
+      );
   }
 
   Widget _desktopLayout(BuildContext context, String? preview) {
@@ -254,8 +247,8 @@ class _ExportScreenState extends State<ExportScreen> {
       padding: const EdgeInsets.all(22),
       backgroundColor: StitchColors.card,
       borderColor: StitchColors.borderSoft,
-      radius: StitchRadius.xl,
-      shadows: const [BoxShadow(color: Color(0x0E243527), blurRadius: 20, offset: Offset(0, 12))],
+      radius: StitchRadius.md,
+      shadows: const [],
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -346,8 +339,8 @@ class _ExportScreenState extends State<ExportScreen> {
       padding: const EdgeInsets.all(22),
       backgroundColor: StitchColors.card,
       borderColor: StitchColors.borderSoft,
-      radius: StitchRadius.xl,
-      shadows: const [BoxShadow(color: Color(0x0E243527), blurRadius: 20, offset: Offset(0, 12))],
+      radius: StitchRadius.md,
+      shadows: const [],
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -386,8 +379,8 @@ class _ExportScreenState extends State<ExportScreen> {
       padding: const EdgeInsets.all(22),
       backgroundColor: StitchColors.cardGlow,
       borderColor: StitchColors.borderSoft,
-      radius: StitchRadius.xl,
-      shadows: const [BoxShadow(color: Color(0x0E243527), blurRadius: 20, offset: Offset(0, 12))],
+      radius: StitchRadius.md,
+      shadows: const [],
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

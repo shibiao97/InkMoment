@@ -134,7 +134,7 @@ class DesktopReleaseBuildTest(unittest.TestCase):
         self.assertIn("clip", cmd)
         self.assertIn("--collect-submodules", cmd)
         self.assertIn("--add-data", cmd)
-        self.assertIn(f"/tmp/pyiqa{build_sidecar.os.pathsep}pyiqa", cmd)
+        self.assertIn(f"{Path('/tmp/pyiqa')}{build_sidecar.os.pathsep}pyiqa", cmd)
         self.assertIn("--runtime-hook", cmd)
         self.assertIn(str(build_sidecar.PYIQA_RUNTIME_HOOK), cmd)
 
@@ -215,7 +215,7 @@ class DesktopReleaseBuildTest(unittest.TestCase):
             def fake_pyinstaller_run(_cmd):
                 dist_dir = root / "dist" / "inkmoment-sidecar"
                 dist_dir.mkdir(parents=True)
-                (dist_dir / "inkmoment-sidecar").write_bytes(b"sidecar")
+                (dist_dir / ("inkmoment-sidecar" + (".exe" if build_sidecar.os.name == "nt" else ""))).write_bytes(b"sidecar")
 
             with patch.object(build_sidecar, "ROOT", root):
                 with patch.object(build_sidecar, "BIN_DIR", bin_dir):

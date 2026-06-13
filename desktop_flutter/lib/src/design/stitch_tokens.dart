@@ -19,6 +19,7 @@ abstract final class StitchColors {
   static const warning = Color(0xFFC77D78);
   static const warningSoft = Color(0xFFF9E4E0);
   static const shadow = Color(0x1A243527);
+  static const logButton = Color(0xFF12452E);
 }
 
 abstract final class StitchSpacing {
@@ -64,9 +65,15 @@ abstract final class StitchTextStyles {
   );
 
   static const pageTitle = TextStyle(
-    fontSize: 28,
-    height: 1.15,
+    fontSize: 34,
+    height: 1.12,
     fontWeight: FontWeight.w800,
+    color: StitchColors.textPrimary,
+  );
+
+  static const brandTitle = TextStyle(
+    fontSize: 22,
+    fontWeight: FontWeight.w900,
     color: StitchColors.textPrimary,
   );
 

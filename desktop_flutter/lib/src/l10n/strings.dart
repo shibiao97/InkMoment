@@ -1,5 +1,7 @@
 class Zh {
   static const appName = 'InkMoment';
+  static const appDisplayName = '影刻';
+  static const localPrivateRun = '本地运行 · 不上传';
   static const booting = '正在启动桌面运行环境';
 
   static const authBrand = 'InkMoment 授权';
@@ -41,6 +43,8 @@ class Zh {
   static const authorizedFallback = '已授权';
 
   static const mode = '模式';
+  static const style = '风格';
+  static const clearMint = '清新绿';
   static const folder = '文件夹';
   static const analyze = '分析';
   static const review = '复核';
@@ -48,6 +52,7 @@ class Zh {
   static const export = '导出';
   static const modeFolderStep = '模式 / 文件夹';
   static const chooseFolder = '选择照片文件夹';
+  static const start = '开始';
   static const startAnalyze = '开始分析';
   static const cancelAnalyze = '取消分析';
   static const restore = '恢复';
@@ -70,7 +75,18 @@ class Zh {
   static const fullWorkflow = '完整流程';
   static const fullWorkflowDesc = '分析、复核、选片、导出全部串联';
   static const folderNotSelected = '尚未选择照片文件夹';
-  static const folderScanHint = '选择文件夹后会显示照片数量与预览摘要。';
+  static const folderScanHint = '先按相似度自动成组、淘汰明显失败片，剩下的两两摆上擂台，由你裁决。';
+  static const taskHeroEyebrow = '在一撮照片里，留下那一刻';
+  static const taskHeroTitle = '让 AI 替你过一遍，由你做最后的决定。';
+  static const importPhotos = '导入照片';
+  static const baseRuntimeBundle = '基础运行包';
+  static const filterPlan = '筛选方案';
+  static const noConfigNeeded = '无需配置';
+  static const textureFirst = '质感优选';
+  static const textureFirstDesc = '本地多维评分 · 支持资源缓存 · 适合更严格的批量筛选';
+  static const cloudReview = '云端精评';
+  static const cloudReviewDesc = '远程视觉评审 · 需要 API Key · 适合少量精选照片';
+  static const pasteFolderPath = '粘贴照片文件夹绝对路径';
   static String scannedPhotos(Object count) => '已扫描 $count 张照片';
 
   static const analyzingPhotos = '正在分析照片';
@@ -147,4 +163,13 @@ class Zh {
   static String healthCheckWaiting(Object error) => '健康检查等待中：$error';
   static const logs = '日志';
   static const logUnit = '条';
+  static const taskSummary = '任务摘要';
+  static const photoFolder = '照片文件夹';
+  static const runtimeResource = '运行资源';
+  static const pendingCheck = '待检查';
+  static const dependencyCheck = '依赖检查';
+  static const checkCurrentMode = '检查当前模式';
+  static const checkProcessingResource = '检查并处理资源';
+  static const copyCheckResult = '复制检查结果';
+  static const authValidFull = '授权有效';
 }

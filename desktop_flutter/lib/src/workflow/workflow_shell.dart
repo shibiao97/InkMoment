@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../api/inkmoment_api.dart';
-import '../api/json_utils.dart';
 import '../analysis/analysis_screen.dart';
 import '../arena/arena_screen.dart';
 import '../design/stitch_components.dart';
@@ -36,13 +35,13 @@ class WorkflowShell extends StatefulWidget {
 
 class _WorkflowShellState extends State<WorkflowShell> {
   WorkflowStep _step = WorkflowStep.modeFolder;
-  String _summary = Zh.waitingTask;
+  String _summary = Zh.quickSelection;
   String _message = '';
 
   void _go(WorkflowStep step, [String? summary]) {
     setState(() {
       _step = step;
-      if (summary != null) _summary = summary;
+      if (summary != null && summary.isNotEmpty) _summary = summary;
     });
   }
 
@@ -87,43 +86,30 @@ class _WorkflowShellState extends State<WorkflowShell> {
     final compact = StitchLayout.compact(context);
     return Scaffold(
       body: StitchScaffold(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(24),
         child: compact ? _compactLayout(context) : _desktopLayout(context),
       ),
     );
   }
 
   Widget _desktopLayout(BuildContext context) {
-    return Column(
+    return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _HeaderBar(
+        _LeftRail(summary: _summary, step: _step),
+        const SizedBox(width: 28),
+        Expanded(child: _screen()),
+        const SizedBox(width: 28),
+        _RightInspector(
           step: _step,
-          summary: _summary,
-          authorized: _authorized,
           auth: widget.auth,
+          runtime: widget.runtime,
+          message: _message,
+          authorized: _authorized,
+          summary: _summary,
+          onRefreshAuth: _refreshAuth,
+          onLogout: _logout,
         ),
-        const SizedBox(height: 16),
-        Expanded(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _LeftRail(summary: _summary, step: _step),
-              const SizedBox(width: 16),
-              Expanded(child: _contentArea(context)),
-              const SizedBox(width: 16),
-              _RightInspector(
-                step: _step,
-                auth: widget.auth,
-                message: _message,
-                onRefreshAuth: _refreshAuth,
-                onLogout: _logout,
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 16),
-        _StatusBar(runtime: widget.runtime, auth: widget.auth),
       ],
     );
   }
@@ -133,43 +119,22 @@ class _WorkflowShellState extends State<WorkflowShell> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _HeaderBar(
-            step: _step,
-            summary: _summary,
-            authorized: _authorized,
-            auth: widget.auth,
-          ),
-          const SizedBox(height: 16),
-          _contentArea(context),
-          const SizedBox(height: 16),
+          _LeftRail(summary: _summary, step: _step, compact: true),
+          const SizedBox(height: 18),
+          _screen(),
+          const SizedBox(height: 18),
           _RightInspector(
             step: _step,
             auth: widget.auth,
+            runtime: widget.runtime,
             message: _message,
+            authorized: _authorized,
+            summary: _summary,
             onRefreshAuth: _refreshAuth,
             onLogout: _logout,
             compact: true,
           ),
-          const SizedBox(height: 16),
-          _StatusBar(runtime: widget.runtime, auth: widget.auth),
         ],
-      ),
-    );
-  }
-
-  Widget _contentArea(BuildContext context) {
-    return StitchCard(
-      padding: EdgeInsets.zero,
-      backgroundColor: StitchColors.card,
-      borderColor: StitchColors.borderSoft,
-      radius: StitchRadius.xl,
-      shadows: const [BoxShadow(color: Color(0x10243527), blurRadius: 22, offset: Offset(0, 14))],
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(StitchRadius.xl),
-        child: ColoredBox(
-          color: StitchColors.card,
-          child: _screen(),
-        ),
       ),
     );
   }
@@ -197,210 +162,101 @@ class _WorkflowShellState extends State<WorkflowShell> {
     ),
     WorkflowStep.export => ExportScreen(
       api: widget.api,
-      onNewTask: () => _go(WorkflowStep.modeFolder, Zh.waitingTask),
+      onNewTask: () => _go(WorkflowStep.modeFolder, Zh.quickSelection),
       onAuthInvalid: widget.onAuthInvalid,
     ),
   };
 }
 
-class _HeaderBar extends StatelessWidget {
-  const _HeaderBar({
-    required this.step,
-    required this.summary,
-    required this.auth,
-    required this.authorized,
-  });
-
-  final WorkflowStep step;
-  final String summary;
-  final Map<String, dynamic> auth;
-  final bool authorized;
-
-  @override
-  Widget build(BuildContext context) {
-    return StitchCard(
-      padding: const EdgeInsets.all(18),
-      backgroundColor: StitchColors.cardGlow,
-      borderColor: StitchColors.borderSoft,
-      radius: StitchRadius.xl,
-      shadows: const [],
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 56,
-            height: 56,
-            decoration: BoxDecoration(
-              color: StitchColors.accentSoft,
-              borderRadius: BorderRadius.circular(StitchRadius.lg),
-              border: Border.all(color: StitchColors.borderSoft),
-            ),
-            child: const Icon(Icons.photo_camera_outlined, color: StitchColors.accentDeep),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  Zh.appName,
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                        fontWeight: FontWeight.w800,
-                        color: StitchColors.textPrimary,
-                      ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  summary,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: StitchColors.textMuted,
-                      ),
-                ),
-                const SizedBox(height: 14),
-                Wrap(
-                  spacing: 10,
-                  runSpacing: 10,
-                  children: [
-                    StitchPill(label: Zh.currentFlow, value: step.label),
-                    StitchPill(label: Zh.account, value: _accountLabel(auth)),
-                    StitchPill(
-                      label: Zh.authorization,
-                      value: authorized ? Zh.authNormal : _reasonText(auth['reason']),
-                      color: authorized ? StitchColors.accentDeep : StitchColors.warning,
-                    ),
-                    const StitchPill(label: Zh.backend, value: Zh.ready),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _accountLabel(Map<String, dynamic> auth) {
-    final account = asStringMap(auth['account']);
-    final email = account?['email']?.toString();
-    if (email == null || email.isEmpty) return Zh.authorizedFallback;
-    return email;
-  }
-
-  String _reasonText(Object? reason) => switch (reason?.toString()) {
-        'active' => Zh.authorized,
-        'unauthenticated' => Zh.signedOut,
-        'not_activated' => Zh.notActivated,
-        'expired' => Zh.expired,
-        'revoked' => Zh.revoked,
-        'device_mismatch' => Zh.deviceMismatch,
-        'auth_server_not_configured' => Zh.authServerNotConfigured,
-        'auth_not_configured' => Zh.authServerNotConfigured,
-        'auth_server_unavailable' => Zh.authServerUnavailable,
-        'auth_check_failed' => Zh.authCheckFailed,
-        null || '' => Zh.signedOut,
-        _ => Zh.authPending,
-      };
-}
-
 class _LeftRail extends StatelessWidget {
-  const _LeftRail({required this.summary, required this.step});
+  const _LeftRail({required this.summary, required this.step, this.compact = false});
 
   final String summary;
   final WorkflowStep step;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: 258,
+      width: compact ? double.infinity : StitchLayout.leftRailWidth,
       child: StitchCard(
-        padding: const EdgeInsets.all(18),
+        padding: const EdgeInsets.all(26),
         backgroundColor: StitchColors.card,
         borderColor: StitchColors.borderSoft,
-        radius: StitchRadius.xl,
-        shadows: const [BoxShadow(color: Color(0x10243527), blurRadius: 22, offset: Offset(0, 14))],
+        radius: StitchRadius.lg,
+        shadows: StitchShadow.soft,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              Zh.currentFlow,
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    color: StitchColors.textPrimary,
-                    fontWeight: FontWeight.w800,
-                  ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              step.label,
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    color: StitchColors.textPrimary,
-                    fontWeight: FontWeight.w800,
-                  ),
-            ),
-            const SizedBox(height: 10),
-            Text(
-              summary,
-              maxLines: 4,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: StitchColors.textMuted,
-                    height: 1.5,
-                  ),
-            ),
-            const SizedBox(height: 18),
-            Text(
-              Zh.modeFolderStep,
-              style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                    color: StitchColors.textMuted,
-                    fontWeight: FontWeight.w700,
-                  ),
-            ),
-            const SizedBox(height: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
+            _BrandBlock(compact: compact),
+            const SizedBox(height: 42),
+            if (compact)
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
                 children: [
-                  for (final item in WorkflowStep.values) ...[
-                    _StepRailItem(step: item, selected: item == step),
-                    if (item != WorkflowStep.export) const SizedBox(height: 10),
+                  for (final item in WorkflowStep.values) _CompactStepChip(step: item, selected: item == step),
+                ],
+              )
+            else
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (final item in WorkflowStep.values) ...[
+                      _StepRailItem(step: item, selected: item == step),
+                      if (item != WorkflowStep.export) const SizedBox(height: 18),
+                    ],
+                    const Spacer(),
+                    Container(height: 1, color: StitchColors.borderSoft),
+                    const SizedBox(height: 22),
+                    Text(Zh.taskSummary, style: StitchTextStyles.muted),
+                    const SizedBox(height: 8),
+                    Text(summary, style: StitchTextStyles.sectionTitle),
+                    const SizedBox(height: 8),
+                    Text(Zh.folderNotSelected, style: StitchTextStyles.muted),
                   ],
-                ],
+                ),
               ),
-            ),
-            const SizedBox(height: 18),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: StitchColors.cardGlow,
-                borderRadius: BorderRadius.circular(StitchRadius.lg),
-                border: Border.all(color: StitchColors.borderSoft),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    Zh.operationHint,
-                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                          color: StitchColors.textMuted,
-                          fontWeight: FontWeight.w700,
-                        ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    Zh.operationHintText,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: StitchColors.textSecondary,
-                          height: 1.45,
-                        ),
-                  ),
-                ],
-              ),
-            ),
           ],
         ),
       ),
+    );
+  }
+}
+
+class _BrandBlock extends StatelessWidget {
+  const _BrandBlock({required this.compact});
+
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: compact ? MainAxisSize.min : MainAxisSize.max,
+      children: [
+        Container(
+          width: 58,
+          height: 58,
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [StitchColors.warmBackground, StitchColors.accentDeep],
+            ),
+            borderRadius: BorderRadius.circular(StitchRadius.md),
+          ),
+        ),
+        const SizedBox(width: 14),
+        const Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(Zh.appDisplayName, style: StitchTextStyles.brandTitle),
+            SizedBox(height: 4),
+            Text(Zh.localPrivateRun, style: StitchTextStyles.muted),
+          ],
+        ),
+      ],
     );
   }
 }
@@ -415,45 +271,33 @@ class _StepRailItem extends StatelessWidget {
   Widget build(BuildContext context) {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 180),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
       decoration: BoxDecoration(
-        color: selected ? StitchColors.accentSoft : StitchColors.cardGlow,
-        borderRadius: BorderRadius.circular(StitchRadius.lg),
-        border: Border.all(color: selected ? StitchColors.accent : StitchColors.borderSoft),
+        color: selected ? StitchColors.accentSoft : Colors.transparent,
+        borderRadius: BorderRadius.circular(StitchRadius.sm),
+        border: Border(left: BorderSide(color: selected ? StitchColors.accentDeep : Colors.transparent, width: 5)),
       ),
-      child: Row(
-        children: [
-          Container(
-            width: 24,
-            height: 24,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: selected ? StitchColors.accentDeep : StitchColors.card,
-              borderRadius: BorderRadius.circular(999),
-              border: Border.all(color: selected ? StitchColors.accentDeep : StitchColors.borderSoft),
-            ),
-            child: Text(
-              '${step.index + 1}',
-              style: TextStyle(
-                color: selected ? Colors.white : StitchColors.textMuted,
-                fontWeight: FontWeight.w800,
-                fontSize: 12,
-              ),
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              step.label,
-              style: TextStyle(
-                color: selected ? StitchColors.accentDeep : StitchColors.textSecondary,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-          ),
-        ],
+      child: Text(
+        step.label,
+        style: TextStyle(
+          color: selected ? StitchColors.textPrimary : StitchColors.textSecondary,
+          fontWeight: selected ? FontWeight.w800 : FontWeight.w500,
+          fontSize: 17,
+        ),
       ),
     );
+  }
+}
+
+class _CompactStepChip extends StatelessWidget {
+  const _CompactStepChip({required this.step, required this.selected});
+
+  final WorkflowStep step;
+  final bool selected;
+
+  @override
+  Widget build(BuildContext context) {
+    return StitchPill(label: step.label, selected: selected);
   }
 }
 
@@ -461,7 +305,10 @@ class _RightInspector extends StatelessWidget {
   const _RightInspector({
     required this.step,
     required this.auth,
+    required this.runtime,
     required this.message,
+    required this.authorized,
+    required this.summary,
     required this.onRefreshAuth,
     required this.onLogout,
     this.compact = false,
@@ -469,147 +316,128 @@ class _RightInspector extends StatelessWidget {
 
   final WorkflowStep step;
   final Map<String, dynamic> auth;
+  final SidecarController runtime;
   final String message;
+  final bool authorized;
+  final String summary;
   final VoidCallback onRefreshAuth;
   final VoidCallback onLogout;
   final bool compact;
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: compact ? double.infinity : 314,
-      child: StitchCard(
-        padding: const EdgeInsets.all(18),
+    final children = [
+      Align(
+        alignment: Alignment.centerRight,
+        child: _AuthBadge(authorized: authorized),
+      ),
+      const SizedBox(height: 18),
+      _InspectorCard(label: Zh.mode, value: summary, highlighted: true),
+      const SizedBox(height: 16),
+      const _InspectorCard(label: Zh.photoFolder, value: Zh.folderNotSelected),
+      const SizedBox(height: 16),
+      _InspectorCard(
+        label: Zh.runtimeResource,
+        value: runtime.apiBaseUrl.isEmpty ? Zh.pendingCheck : Zh.ready,
+      ),
+      const SizedBox(height: 34),
+      StitchCard(
+        padding: const EdgeInsets.all(26),
         backgroundColor: StitchColors.card,
         borderColor: StitchColors.borderSoft,
-        radius: StitchRadius.xl,
-        shadows: const [BoxShadow(color: Color(0x10243527), blurRadius: 22, offset: Offset(0, 14))],
+        radius: StitchRadius.md,
+        shadows: const [],
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(
-              Zh.contextInspector,
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    color: StitchColors.textPrimary,
-                    fontWeight: FontWeight.w800,
-                  ),
-            ),
-            const SizedBox(height: 14),
-            _line(context, Zh.currentStep, step.label),
-            _line(context, Zh.authorizedAccount, _accountLabel()),
-            _line(context, Zh.authorization, _reasonText(auth['reason'])),
-            _line(context, Zh.operationHint, Zh.operationHintText),
-            if (message.isNotEmpty) _line(context, Zh.status, message),
-            if (compact) const SizedBox(height: 8) else const Spacer(),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton(
-                onPressed: onRefreshAuth,
-                child: const Text(Zh.refreshAuth),
-              ),
-            ),
-            const SizedBox(height: 10),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton(
-                onPressed: onLogout,
-                child: const Text(Zh.logout),
-              ),
-            ),
+            Text(Zh.runtimeResource, style: StitchTextStyles.muted),
+            const SizedBox(height: 8),
+            Text('$summary${Zh.dependencyCheck}', style: StitchTextStyles.sectionTitle),
+            const SizedBox(height: 28),
+            FilledButton(onPressed: onRefreshAuth, child: const Text(Zh.checkCurrentMode)),
+            const SizedBox(height: 16),
+            FilledButton.tonal(onPressed: onRefreshAuth, child: const Text(Zh.checkProcessingResource)),
+            const SizedBox(height: 16),
+            OutlinedButton(onPressed: message.isEmpty ? null : onLogout, child: const Text(Zh.copyCheckResult)),
           ],
         ),
       ),
-    );
-  }
-
-  Widget _line(BuildContext context, String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                  color: StitchColors.textMuted,
-                  fontWeight: FontWeight.w700,
-                ),
+      if (!compact) const Spacer(),
+      Align(
+        alignment: Alignment.bottomRight,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+          decoration: BoxDecoration(
+            color: StitchColors.logButton,
+            borderRadius: BorderRadius.circular(999),
           ),
-          const SizedBox(height: 4),
-          Text(
-            value,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: StitchColors.textSecondary,
-                  height: 1.35,
-                ),
-          ),
-        ],
+          child: Text('${Zh.logs} ${runtime.logs.length}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800)),
+        ),
       ),
+    ];
+
+    return SizedBox(
+      width: compact ? double.infinity : StitchLayout.rightInspectorWidth,
+      child: compact
+          ? Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: children)
+          : Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: children),
     );
   }
-
-  String _accountLabel() {
-    final account = asStringMap(auth['account']);
-    final email = account?['email']?.toString();
-    if (email == null || email.isEmpty) return Zh.authorizedFallback;
-    return email;
-  }
-
-  String _reasonText(Object? reason) => switch (reason?.toString()) {
-        'active' => Zh.authorized,
-        'unauthenticated' => Zh.signedOut,
-        'not_activated' => Zh.notActivated,
-        'expired' => Zh.expired,
-        'revoked' => Zh.revoked,
-        'device_mismatch' => Zh.deviceMismatch,
-        'auth_server_not_configured' => Zh.authServerNotConfigured,
-        'auth_not_configured' => Zh.authServerNotConfigured,
-        'auth_server_unavailable' => Zh.authServerUnavailable,
-        'auth_check_failed' => Zh.authCheckFailed,
-        null || '' => Zh.signedOut,
-        _ => Zh.authPending,
-      };
 }
 
-class _StatusBar extends StatelessWidget {
-  const _StatusBar({required this.runtime, required this.auth});
+class _AuthBadge extends StatelessWidget {
+  const _AuthBadge({required this.authorized});
 
-  final SidecarController runtime;
-  final Map<String, dynamic> auth;
+  final bool authorized;
 
   @override
   Widget build(BuildContext context) {
     return StitchCard(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      backgroundColor: StitchColors.cardGlow,
-      borderColor: StitchColors.borderSoft,
-      radius: StitchRadius.lg,
-      shadows: const [],
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      backgroundColor: StitchColors.card,
+      borderColor: StitchColors.borderFaint,
+      radius: 999,
+      shadows: StitchShadow.soft,
       child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
-            '${Zh.backend}：${runtime.apiBaseUrl.isEmpty ? Zh.connecting : Zh.ready}',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: StitchColors.textMuted,
-                  fontWeight: FontWeight.w700,
-                ),
+          Container(
+            width: 10,
+            height: 10,
+            decoration: BoxDecoration(
+              color: authorized ? StitchColors.accentDeep : StitchColors.warning,
+              borderRadius: BorderRadius.circular(999),
+            ),
           ),
-          const SizedBox(width: 18),
-          Text(
-            '${Zh.authorization}：${auth['authorized'] == true ? Zh.authValid : Zh.authAbnormal}',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: StitchColors.textMuted,
-                  fontWeight: FontWeight.w700,
-                ),
-          ),
-          const Spacer(),
-          Text(
-            '${Zh.logs} ${runtime.logs.length} ${Zh.logUnit}',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: StitchColors.textMuted,
-                  fontWeight: FontWeight.w700,
-                ),
-          ),
+          const SizedBox(width: 10),
+          Text(authorized ? Zh.authValidFull : Zh.authAbnormal, style: StitchTextStyles.sectionTitle),
+        ],
+      ),
+    );
+  }
+}
+
+class _InspectorCard extends StatelessWidget {
+  const _InspectorCard({required this.label, required this.value, this.highlighted = false});
+
+  final String label;
+  final String value;
+  final bool highlighted;
+
+  @override
+  Widget build(BuildContext context) {
+    return StitchCard(
+      padding: const EdgeInsets.all(24),
+      backgroundColor: highlighted ? StitchColors.cardGlow : StitchColors.card,
+      borderColor: highlighted ? StitchColors.accent : StitchColors.borderSoft,
+      radius: StitchRadius.md,
+      shadows: const [],
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: StitchTextStyles.muted),
+          const SizedBox(height: 10),
+          Text(value, maxLines: 2, overflow: TextOverflow.ellipsis, style: StitchTextStyles.sectionTitle),
         ],
       ),
     );

@@ -19,7 +19,13 @@ void main() {
     expect(Zh.registerAndBind, '注册并绑定本机');
     expect(Zh.unbindDevice, '解除设备绑定');
     expect(Zh.contextInspector, '上下文检查器');
-    expect(Zh.appName, 'InkMoment');
+    expect(Zh.appDisplayName, '影刻');
+    expect(Zh.localPrivateRun, '本地运行 · 不上传');
+    expect(Zh.taskHeroTitle, '让 AI 替你过一遍，由你做最后的决定。');
+    expect(Zh.importPhotos, '导入照片');
+    expect(Zh.filterPlan, '筛选方案');
+    expect(Zh.photoFolder, '照片文件夹');
+    expect(Zh.checkCurrentMode, '检查当前模式');
     expect(Zh.authBrand, 'InkMoment 授权');
     expect(Zh.account, '账号');
     expect(Zh.authorization, '授权');

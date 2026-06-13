@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 
 import '../api/inkmoment_api.dart';
 import '../design/stitch_components.dart';
-import '../design/stitch_layout.dart';
 import '../design/stitch_tokens.dart';
 import '../l10n/strings.dart';
 
@@ -64,7 +63,7 @@ class _TaskSetupScreenState extends State<TaskSetupScreen> {
       final payload = await widget.api.startJob({
         'folder': _folder,
         'mode': 'copy',
-        'engine': _engine,
+        'engine': _engine == 'fast' ? 'fast' : 'expert',
         'prescreen_enabled': true,
       });
       if (!mounted) return;
@@ -83,266 +82,17 @@ class _TaskSetupScreenState extends State<TaskSetupScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final compact = StitchLayout.compact(context);
     return SingleChildScrollView(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 1280),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _hero(context),
-                const SizedBox(height: 20),
-                compact ? _compactLayout(context) : _desktopLayout(context),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _hero(BuildContext context) {
-    final count = _peek?['count'] ?? _peek?['total'];
-    return StitchCard(
-      padding: const EdgeInsets.all(24),
-      backgroundColor: StitchColors.cardGlow,
-      borderColor: StitchColors.borderSoft,
-      radius: StitchRadius.xl,
-      shadows: const [BoxShadow(color: Color(0x0E243527), blurRadius: 20, offset: Offset(0, 12))],
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 60,
-            height: 60,
-            decoration: BoxDecoration(
-              color: StitchColors.accentSoft,
-              borderRadius: BorderRadius.circular(StitchRadius.lg),
-              border: Border.all(color: StitchColors.borderSoft),
-            ),
-            child: const Icon(Icons.photo_library_outlined, color: StitchColors.accentDeep, size: 30),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  Zh.chooseModeAndFolder,
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                        color: StitchColors.textPrimary,
-                        fontWeight: FontWeight.w800,
-                      ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  Zh.folderScanHint,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: StitchColors.textMuted,
-                        height: 1.5,
-                      ),
-                ),
-                const SizedBox(height: 14),
-                Wrap(
-                  spacing: 10,
-                  runSpacing: 10,
-                  children: [
-                    StitchPill(label: Zh.mode, value: _modeText(_engine)),
-                    StitchPill(label: Zh.folder, value: _folder.isEmpty ? Zh.folderNotSelected : _folder),
-                    StitchPill(
-                      label: Zh.status,
-                      value: _busy
-                          ? Zh.processing
-                          : (count == null ? Zh.ready : Zh.scannedPhotos(count)),
-                      color: _busy ? StitchColors.warning : StitchColors.accentDeep,
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _desktopLayout(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          flex: 5,
-          child: _modePanel(context),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          flex: 6,
-          child: Column(
-            children: [
-              _folderPanel(context),
-              const SizedBox(height: 16),
-              _summaryPanel(context),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _compactLayout(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _modePanel(context),
-        const SizedBox(height: 16),
-        _folderPanel(context),
-        const SizedBox(height: 16),
-        _summaryPanel(context),
-      ],
-    );
-  }
-
-  Widget _modePanel(BuildContext context) {
-    return StitchCard(
-      padding: const EdgeInsets.all(22),
-      backgroundColor: StitchColors.card,
-      borderColor: StitchColors.borderSoft,
-      radius: StitchRadius.xl,
-      shadows: const [BoxShadow(color: Color(0x0E243527), blurRadius: 20, offset: Offset(0, 12))],
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            Zh.mode,
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  color: StitchColors.textPrimary,
-                  fontWeight: FontWeight.w800,
-                ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            Zh.fullWorkflowDesc,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: StitchColors.textMuted,
-                  height: 1.5,
-                ),
-          ),
-          const SizedBox(height: 18),
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: [
-              _modeCard(Zh.quickSelection, Zh.quickSelectionDesc, 'fast'),
-              _modeCard(Zh.aiPrescreen, Zh.aiPrescreenDesc, 'expert'),
-              _modeCard(Zh.fullWorkflow, Zh.fullWorkflowDesc, 'expert'),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _folderPanel(BuildContext context) {
-    return StitchCard(
-      padding: const EdgeInsets.all(22),
-      backgroundColor: StitchColors.card,
-      borderColor: StitchColors.borderSoft,
-      radius: StitchRadius.xl,
-      shadows: const [BoxShadow(color: Color(0x0E243527), blurRadius: 20, offset: Offset(0, 12))],
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          StitchSectionHeader(
-            eyebrow: Zh.folder,
-            title: Zh.chooseFolder,
-            description: Zh.folderScanHint,
-          ),
-          const SizedBox(height: 18),
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: StitchColors.cardGlow,
-              borderRadius: BorderRadius.circular(StitchRadius.lg),
-              border: Border.all(color: StitchColors.borderSoft),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.folder_open_outlined, color: StitchColors.accentDeep),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    _folder.isEmpty ? Zh.folderNotSelected : _folder,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: _folder.isEmpty ? StitchColors.textMuted : StitchColors.textPrimary,
-                          height: 1.45,
-                        ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                OutlinedButton(
-                  onPressed: _busy ? null : _pickFolder,
-                  child: Text(_busy ? Zh.processing : Zh.chooseFolder),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-          _scanSummary(context),
-          const SizedBox(height: 16),
-          Align(
-            alignment: Alignment.centerRight,
-            child: FilledButton(
-              onPressed: _folder.isEmpty || _busy ? null : _start,
-              child: Text(_busy ? Zh.processing : Zh.startAnalyze),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _summaryPanel(BuildContext context) {
-    final count = _peek?['count'] ?? _peek?['total'];
-    return StitchCard(
-      padding: const EdgeInsets.all(22),
-      backgroundColor: StitchColors.cardGlow,
-      borderColor: StitchColors.borderSoft,
-      radius: StitchRadius.xl,
-      shadows: const [BoxShadow(color: Color(0x0E243527), blurRadius: 20, offset: Offset(0, 12))],
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            Zh.status,
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  color: StitchColors.textPrimary,
-                  fontWeight: FontWeight.w800,
-                ),
-          ),
-          const SizedBox(height: 14),
-          StitchMetricCard(
-            label: Zh.mode,
-            value: _modeText(_engine),
-          ),
-          const SizedBox(height: 12),
-          StitchMetricCard(
-            label: Zh.folder,
-            value: _folder.isEmpty ? Zh.folderNotSelected : Zh.folder,
-            accent: StitchColors.accent,
-          ),
-          const SizedBox(height: 12),
-          StitchMetricCard(
-            label: Zh.noData,
-            value: count == null ? Zh.ready : Zh.scannedPhotos(count),
-            accent: StitchColors.winner,
-          ),
+          _hero(context),
+          const SizedBox(height: 28),
+          _folderPanel(context),
+          const SizedBox(height: 28),
+          _modePanel(context),
           if (_error.isNotEmpty) ...[
-            const SizedBox(height: 16),
+            const SizedBox(height: 18),
             StitchWarning(message: _error),
           ],
         ],
@@ -350,92 +100,198 @@ class _TaskSetupScreenState extends State<TaskSetupScreen> {
     );
   }
 
-  Widget _modeCard(String title, String description, String value) {
-    final selected = _engine == value;
-    return GestureDetector(
-      onTap: _busy ? null : () => setState(() => _engine = value),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        width: 234,
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: selected ? StitchColors.accentSoft : StitchColors.cardGlow,
-          border: Border.all(color: selected ? StitchColors.accent : StitchColors.borderSoft),
-          borderRadius: BorderRadius.circular(StitchRadius.lg),
+  Widget _hero(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(Zh.taskHeroEyebrow, style: StitchTextStyles.eyebrow),
+              const SizedBox(height: 14),
+              const Text(Zh.taskHeroTitle, style: StitchTextStyles.pageTitle),
+              const SizedBox(height: 14),
+              Text(Zh.folderScanHint, style: StitchTextStyles.body.copyWith(fontSize: 17, height: 1.5)),
+            ],
+          ),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        const SizedBox(width: 24),
+        Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              title,
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    color: selected ? StitchColors.accentDeep : StitchColors.textPrimary,
-                    fontWeight: FontWeight.w800,
-                  ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              description,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: StitchColors.textMuted,
-                    height: 1.45,
-                  ),
+            Text(Zh.style, style: StitchTextStyles.muted.copyWith(fontSize: 16)),
+            const SizedBox(width: 10),
+            Container(
+              width: 210,
+              height: 38,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              decoration: BoxDecoration(
+                color: StitchColors.card,
+                borderRadius: BorderRadius.circular(StitchRadius.sm),
+                border: Border.all(color: StitchColors.borderSoft),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: 'mint',
+                  items: const [DropdownMenuItem(value: 'mint', child: Text(Zh.clearMint))],
+                  onChanged: (_) {},
+                ),
+              ),
             ),
           ],
         ),
+      ],
+    );
+  }
+
+  Widget _folderPanel(BuildContext context) {
+    final count = _peek?['count'] ?? _peek?['total'];
+    return StitchCard(
+      padding: const EdgeInsets.all(28),
+      backgroundColor: StitchColors.card,
+      borderColor: StitchColors.borderSoft,
+      radius: StitchRadius.md,
+      shadows: const [],
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(Zh.importPhotos, style: StitchTextStyles.muted.copyWith(fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 10),
+                    Text(Zh.chooseFolder, style: StitchTextStyles.sectionTitle.copyWith(fontSize: 24)),
+                  ],
+                ),
+              ),
+              Text(Zh.baseRuntimeBundle, style: StitchTextStyles.muted),
+            ],
+          ),
+          const SizedBox(height: 30),
+          Text(Zh.photoFolder, style: StitchTextStyles.muted.copyWith(fontWeight: FontWeight.w700)),
+          const SizedBox(height: 14),
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: StitchColors.cardGlow,
+              borderRadius: BorderRadius.circular(StitchRadius.sm),
+              border: Border.all(color: StitchColors.accent),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: Text(
+                      _folder.isEmpty ? Zh.pasteFolderPath : _folder,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: _folder.isEmpty ? StitchColors.textFaint : StitchColors.textPrimary,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ),
+                OutlinedButton(onPressed: _busy ? null : _pickFolder, child: const Text(Zh.chooseFolder)),
+                const SizedBox(width: 10),
+                FilledButton(onPressed: _folder.isEmpty || _busy ? null : _start, child: Text(_busy ? Zh.processing : Zh.start)),
+              ],
+            ),
+          ),
+          if (count != null) ...[
+            const SizedBox(height: 14),
+            Text(Zh.scannedPhotos(count), style: StitchTextStyles.muted),
+          ],
+        ],
       ),
     );
   }
 
-  Widget _scanSummary(BuildContext context) {
-    if (_peek == null) {
-      return Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: StitchColors.cardGlow,
-          borderRadius: BorderRadius.circular(StitchRadius.lg),
-          border: Border.all(color: StitchColors.borderSoft),
-        ),
-        child: Text(
-          Zh.folderScanHint,
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: StitchColors.textMuted,
-                height: 1.45,
-              ),
-        ),
-      );
-    }
-    final count = _peek?['count'] ?? _peek?['total'] ?? 0;
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: StitchColors.cardGlow,
-        borderRadius: BorderRadius.circular(StitchRadius.lg),
-        border: Border.all(color: StitchColors.borderSoft),
-      ),
-      child: Row(
+  Widget _modePanel(BuildContext context) {
+    return StitchCard(
+      padding: const EdgeInsets.all(28),
+      backgroundColor: StitchColors.card,
+      borderColor: StitchColors.borderSoft,
+      radius: StitchRadius.md,
+      shadows: const [],
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Icon(Icons.photo_album_outlined, color: StitchColors.accentDeep),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              Zh.scannedPhotos(count),
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: StitchColors.textSecondary,
-                    fontWeight: FontWeight.w700,
-                  ),
-            ),
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(Zh.filterPlan, style: StitchTextStyles.muted.copyWith(fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 10),
+                    Text(Zh.quickSelection, style: StitchTextStyles.sectionTitle.copyWith(fontSize: 24)),
+                  ],
+                ),
+              ),
+              Text(Zh.noConfigNeeded, style: StitchTextStyles.muted),
+            ],
+          ),
+          const SizedBox(height: 28),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final compact = constraints.maxWidth < 760;
+              final cards = [
+                _modeCard(context, Zh.quickSelection, Zh.quickSelectionDesc, 'fast'),
+                _modeCard(context, Zh.textureFirst, Zh.textureFirstDesc, 'expert'),
+                _modeCard(context, Zh.cloudReview, Zh.cloudReviewDesc, 'cloud'),
+              ];
+              if (compact) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (final card in cards) ...[card, const SizedBox(height: 12)],
+                  ],
+                );
+              }
+              return Row(
+                children: [
+                  for (var i = 0; i < cards.length; i++) ...[
+                    Expanded(child: cards[i]),
+                    if (i != cards.length - 1) const SizedBox(width: 18),
+                  ],
+                ],
+              );
+            },
           ),
         ],
       ),
     );
   }
 
-  String _modeText(String value) => switch (value) {
-        'fast' => Zh.quickSelection,
-        'expert' => Zh.fullWorkflow,
-        _ => Zh.fullWorkflow,
-      };
+  Widget _modeCard(BuildContext context, String title, String description, String value) {
+    final selected = _engine == value;
+    return GestureDetector(
+      onTap: _busy ? null : () => setState(() => _engine = value),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        constraints: const BoxConstraints(minHeight: 170),
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: selected ? StitchColors.cardGlow : StitchColors.cardGlow,
+          border: Border.all(color: selected ? StitchColors.accentDeep : StitchColors.borderSoft, width: selected ? 2 : 1),
+          borderRadius: BorderRadius.circular(StitchRadius.sm),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title, style: StitchTextStyles.sectionTitle.copyWith(fontSize: 21)),
+            const SizedBox(height: 14),
+            Text(description, style: StitchTextStyles.body.copyWith(fontSize: 16, height: 1.5)),
+          ],
+        ),
+      ),
+    );
+  }
 }
