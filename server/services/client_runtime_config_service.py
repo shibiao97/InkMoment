@@ -141,7 +141,7 @@ def _normalize_config(value: object) -> dict[str, Any]:
 
 def _bounded_download_concurrency(value: object) -> int:
     try:
-        normalized = int(value)
+        normalized = int(value)  # type: ignore[call-overload]
     except (TypeError, ValueError):
         normalized = DEFAULT_DOWNLOAD_CONCURRENCY
     return max(1, min(normalized, 8))

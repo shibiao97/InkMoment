@@ -35,9 +35,9 @@ def repair_runtime_dependencies(
 ) -> dict[str, Any]:
     """Repair bundled module assets and model cache content for the selected engine."""
     normalized = normalize_engine(engine)
-    checked: list[dict[str, str]] = []
-    repaired: list[dict[str, str]] = []
-    skipped: list[dict[str, str]] = []
+    checked: list[dict[str, Any]] = []
+    repaired: list[dict[str, Any]] = []
+    skipped: list[dict[str, Any]] = []
 
     _raise_if_cancelled(cancel_event)
     modules = {module for module, _label in get_engine(normalized).dependency_modules}
@@ -67,7 +67,7 @@ def repair_runtime_dependencies(
     }
 
 
-def repair_pyiqa_assets(cache_dir: Path, *, cancel_event: Event | None = None) -> dict[str, str]:
+def repair_pyiqa_assets(cache_dir: Path, *, cancel_event: Event | None = None) -> dict[str, Any]:
     _raise_if_cancelled(cancel_event)
     package_root = _package_root(PYIQA_PACKAGE)
     if package_root is None:

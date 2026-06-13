@@ -173,9 +173,6 @@ def _start_job_payload(data: dict) -> tuple[dict, int]:
     )
 
 
-# ---------------- Flask app factory ----------------
-
-
 def create_app() -> Flask:
     """Build the Flask app without starting the server.
 
