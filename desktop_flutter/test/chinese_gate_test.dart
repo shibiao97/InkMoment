@@ -18,6 +18,8 @@ void main() {
     expect(Zh.startExport, '开始批量导出');
     expect(Zh.registerAndBind, '注册并绑定本机');
     expect(Zh.unbindDevice, '解除设备绑定');
+    expect(Zh.noClientNotice, '暂无客户端通知');
+    expect(Zh.unbindPenaltyHint, '解除绑定会扣除 3 天使用时长，并需要重新登录。');
     expect(Zh.contextInspector, '上下文检查器');
     expect(Zh.appDisplayName, '影刻');
     expect(Zh.localPrivateRun, '本地运行 · 不上传');
@@ -92,6 +94,9 @@ void main() {
             'authenticated': true,
             'configured': true,
             'reason': 'not_activated',
+            'account': {'email': 'user@example.com'},
+            'device': {'name': 'MacBook'},
+            'license': {'remaining_seconds': 86400},
           },
           onAuthorized: (_) {},
         ),
@@ -99,11 +104,44 @@ void main() {
     );
 
     expect(find.text(Zh.notActivated), findsWidgets);
+    expect(find.text(Zh.accountEmail), findsOneWidget);
+    expect(find.text('user@example.com'), findsWidgets);
+    expect(find.text(Zh.device), findsWidgets);
+    expect(find.text('MacBook'), findsWidgets);
     expect(find.text(Zh.cdk), findsOneWidget);
     expect(find.text(Zh.redeem), findsOneWidget);
     expect(find.text(Zh.refreshAuth), findsOneWidget);
     expect(find.text(Zh.unbindReason), findsOneWidget);
     expect(find.text(Zh.unbindDevice), findsOneWidget);
+    expect(find.text(Zh.unbindPenaltyHint), findsOneWidget);
+    expect(find.text(Zh.logout), findsOneWidget);
+  });
+
+  testWidgets('已授权时显示授权元信息和状态检查操作', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AuthGate(
+          api: InkMomentApi('http://127.0.0.1:9'),
+          auth: const {
+            'authorized': true,
+            'authenticated': true,
+            'configured': true,
+            'reason': 'active',
+            'last_checked_at': 1770000000,
+            'account': {'email': 'user@example.com'},
+            'device': {'name': 'MacBook'},
+            'license': {'remaining_seconds': 172800, 'expires_at': 1770100000},
+          },
+          onAuthorized: (_) {},
+        ),
+      ),
+    );
+
+    expect(find.textContaining(Zh.authValidFull), findsWidgets);
+    expect(find.textContaining(Zh.remainingDays), findsOneWidget);
+    expect(find.text(Zh.expiresAt), findsOneWidget);
+    expect(find.text(Zh.lastCheckedAt), findsOneWidget);
+    expect(find.text(Zh.refreshAuth), findsOneWidget);
     expect(find.text(Zh.logout), findsOneWidget);
   });
 

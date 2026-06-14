@@ -16,9 +16,12 @@
     "tauri:build": "tauri build",
     "sidecar:build": "python3 scripts/build_sidecar.py",
     "tauri:build:sidecar": "npm run sidecar:build && INKMOMENT_USE_BUNDLED_SIDECAR=1 tauri build --config src-tauri/tauri.sidecar.conf.json",
+    "tauri:build:sidecar:legacy": "npm run tauri:build:sidecar",
     "desktop:release": "node scripts/build_desktop_release.mjs",
     "desktop:release:mac": "node scripts/build_desktop_release.mjs --bundle dmg",
-    "desktop:release:win": "node scripts/build_desktop_release.mjs --bundle nsis"
+    "desktop:release:win": "node scripts/build_desktop_release.mjs --bundle zip",
+    "desktop:release:tauri:mac": "node scripts/build_tauri_desktop_release.mjs --bundle dmg",
+    "desktop:release:tauri:win": "node scripts/build_tauri_desktop_release.mjs --bundle nsis"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.11.2"

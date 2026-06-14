@@ -22,8 +22,8 @@ except ModuleNotFoundError:  # pragma: no cover - used when imported as scripts.
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW_FILE = "desktop-release.yml"
-WINDOWS_ARTIFACT = "InkMoment-Windows-nsis"
-MAC_ARTIFACT = "InkMoment-macOS-dmg"
+WINDOWS_ARTIFACT = "InkMoment-Windows-flutter"
+MAC_ARTIFACT = "InkMoment-macOS-flutter-dmg"
 DEFAULT_ARTIFACT_DIR = ROOT / "dist" / "desktop-artifacts"
 
 
@@ -115,38 +115,38 @@ def download_artifacts(gh: str, repo: str, run_id: str, artifact_dir: Path, incl
         run([gh, "run", "download", run_id, "--repo", repo, "--name", name, "--dir", str(artifact_dir)])
 
 
-def windows_exe_paths(artifact_dir: Path) -> list[Path]:
-    return sorted(path for path in artifact_dir.rglob("*.exe") if path.is_file())
+def windows_zip_paths(artifact_dir: Path) -> list[Path]:
+    return sorted(path for path in artifact_dir.rglob("*.zip") if path.is_file())
 
 
 def verify_downloaded_windows_artifacts(artifact_dir: Path, min_size_mb: float) -> list[Path]:
-    exe_paths = windows_exe_paths(artifact_dir)
-    if not exe_paths:
-        raise SystemExit(f"No Windows .exe artifact found under {artifact_dir}.")
-    for exe in exe_paths:
+    zip_paths = windows_zip_paths(artifact_dir)
+    if not zip_paths:
+        raise SystemExit(f"No Windows Flutter zip artifact found under {artifact_dir}.")
+    for artifact in zip_paths:
         verify_desktop_release.verify_artifact(
-            exe,
-            "nsis",
+            artifact,
+            "zip",
             min_bytes=int(min_size_mb * 1024 * 1024),
             skip_native_check=True,
         )
-    return exe_paths
+    return zip_paths
 
 
-def verify_completion(exe_paths: list[Path]) -> None:
-    # Point completion audit at one verified EXE. The audit also sees any EXE
-    # under dist/desktop-artifacts, but this makes the evidence explicit.
+def verify_completion(artifacts: list[Path]) -> None:
+    # Point completion audit at one verified Windows Flutter zip. The audit also
+    # sees any zip under dist/desktop-artifacts, but this makes the evidence explicit.
     import os
 
-    old_value = os.environ.get("INKMOMENT_WINDOWS_EXE")
-    os.environ["INKMOMENT_WINDOWS_EXE"] = str(exe_paths[0])
+    old_value = os.environ.get("INKMOMENT_WINDOWS_FLUTTER_ZIP")
+    os.environ["INKMOMENT_WINDOWS_FLUTTER_ZIP"] = str(artifacts[0])
     try:
         failed = [check for check in audit_desktop_goal.run_audit(completion=True) if not check.ok]
     finally:
         if old_value is None:
-            os.environ.pop("INKMOMENT_WINDOWS_EXE", None)
+            os.environ.pop("INKMOMENT_WINDOWS_FLUTTER_ZIP", None)
         else:
-            os.environ["INKMOMENT_WINDOWS_EXE"] = old_value
+            os.environ["INKMOMENT_WINDOWS_FLUTTER_ZIP"] = old_value
     if failed:
         names = ", ".join(check.name for check in failed)
         raise SystemExit(f"Desktop completion audit failed: {names}")
@@ -192,12 +192,12 @@ def main() -> int:
         run([gh, "run", "watch", run_id, "--repo", repo, "--exit-status"])
 
     download_artifacts(gh, repo, run_id, artifact_dir, args.include_mac)
-    exe_paths = verify_downloaded_windows_artifacts(artifact_dir, args.min_size_mb)
-    verify_completion(exe_paths)
+    artifact_paths = verify_downloaded_windows_artifacts(artifact_dir, args.min_size_mb)
+    verify_completion(artifact_paths)
 
     print("\nDesktop release workflow artifacts verified:")
-    for exe in exe_paths:
-        print(f"  {exe}")
+    for artifact in artifact_paths:
+        print(f"  {artifact}")
     print("Desktop completion audit passed.")
     return 0
 

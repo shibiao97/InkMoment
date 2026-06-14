@@ -19,6 +19,7 @@ ROOT = Path(__file__).resolve().parents[1]
 BIN_DIR = ROOT / "src-tauri" / "binaries"
 SIDECAR_NAME = "inkmoment-sidecar"
 PYIQA_RUNTIME_HOOK = ROOT / "scripts" / "pyinstaller_hooks" / "rthook_pyiqa_runtime.py"
+PYINSTALLER_HOOKS_DIR = ROOT / "scripts" / "pyinstaller_hooks"
 PYINSTALLER_COLLECT_DATA = [
     # pyiqa looks up packaged metric definitions from pyiqa/models at runtime.
     # PyInstaller imports the Python module but does not collect that directory
@@ -46,6 +47,12 @@ PYINSTALLER_EXCLUDE_MODULES = [
     "notebook",
     "pytest",
     "tensorboard",
+    "bitsandbytes",
+    "triton",
+    "torch._dynamo",
+    "torch._inductor",
+    "torch.distributed",
+    "torch.testing",
     "torch.utils.tensorboard",
     "transformers.trainer",
     "transformers.trainer_seq2seq",
@@ -107,6 +114,7 @@ def resolve_package_root(python: str, module: str) -> Path | None:
 
 
 def add_pyinstaller_collection_args(cmd: list[str], *, python: str | None = None) -> None:
+    cmd.extend(["--additional-hooks-dir", str(PYINSTALLER_HOOKS_DIR)])
     cmd.extend(["--runtime-hook", str(PYIQA_RUNTIME_HOOK)])
     for module in PYINSTALLER_COLLECT_DATA:
         cmd.extend(["--collect-data", module])
@@ -207,7 +215,11 @@ def main() -> int:
     if not built_executable.exists():
         raise SystemExit(f"PyInstaller did not produce {built_executable}")
     shutil.rmtree(sidecar_resource_dir, ignore_errors=True)
-    shutil.copytree(built_dir, sidecar_resource_dir, symlinks=True)
+    try:
+        shutil.move(str(built_dir), str(sidecar_resource_dir))
+    except OSError:
+        shutil.copytree(built_dir, sidecar_resource_dir, symlinks=True)
+        shutil.rmtree(built_dir, ignore_errors=True)
 
     for stale_binary in BIN_DIR.glob(f"{SIDECAR_NAME}-*"):
         if stale_binary.is_file():

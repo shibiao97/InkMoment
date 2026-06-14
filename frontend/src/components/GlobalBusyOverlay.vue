@@ -13,11 +13,13 @@ const emit = defineEmits(["cancel"]);
   <Teleport to="body">
     <div v-if="state" class="global-busy-overlay" role="status" aria-live="polite">
       <section class="global-busy-panel">
-        <span class="wait-spinner" aria-hidden="true"></span>
-        <div>
-          <p class="eyebrow">{{ state.status || "处理中" }}</p>
-          <h2>{{ state.title || "正在处理" }}</h2>
-          <p>{{ state.message || "请稍等，完成后会自动继续。" }}</p>
+        <div class="global-busy-main">
+          <span class="wait-spinner" aria-hidden="true"></span>
+          <div>
+            <p class="eyebrow">{{ state.status || "处理中" }}</p>
+            <h2>{{ state.title || "正在处理" }}</h2>
+            <p>{{ state.message || "请稍等，完成后会自动继续。" }}</p>
+          </div>
         </div>
         <div class="global-busy-progress">
           <div class="progress-bar">

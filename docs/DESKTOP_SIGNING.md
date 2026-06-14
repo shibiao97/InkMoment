@@ -1,21 +1,19 @@
 # InkMoment 桌面签名与公证流程
 
-> 当前状态：桌面 release workflow 已能产出 macOS DMG 与 Windows NSIS EXE，
-> 但 macOS job 仍显式使用 `--no-sign`。本文只定义启用签名/公证的步骤与
-> GitHub Actions secrets 模板，不默认切换发布链。
+> 当前状态：默认桌面 release workflow 已切到 `desktop_flutter/`，产出 macOS Flutter DMG
+> 与 Windows Flutter zip。本文只定义启用签名/公证的步骤与 GitHub Actions secrets 模板。
 
 ## 目标边界
 
 - macOS：使用 Developer ID Application 证书签名，并完成 Apple notarization。
-- Windows：签名 NSIS 安装包，降低 SmartScreen 与未受信任发布者提示。
-- 不改变 sidecar 构建、`scripts/build_desktop_release.py` 入口或产物路径。
+- Windows：当前先分发 Flutter release zip；如后续增加 NSIS/Inno 安装器，再签名安装器。
+- 不改变 sidecar 构建、`scripts/build_desktop_release.py` 入口或 `dist/flutter-desktop/` 产物路径。
 - 不把证书、私钥、PFX、`.p8` 文件提交到仓库。
 
 参考：
 
-- Tauri macOS signing: <https://v2.tauri.app/distribute/sign/macos/>
-- Tauri Windows signing: <https://v2.tauri.app/distribute/sign/windows/>
-- Tauri CLI environment variables: <https://v2.tauri.app/reference/environment-variables/>
+- Apple notarization: <https://developer.apple.com/documentation/security/notarizing_macos_software_before_distribution>
+- Windows SignTool: <https://learn.microsoft.com/windows/win32/seccrypto/signtool>
 
 ## macOS Developer ID + Notarization
 
@@ -55,19 +53,14 @@ CI 中需要把 `APPLE_API_KEY_P8` 写入临时文件，并设置 `APPLE_API_KEY
 
 ### Workflow 启用点
 
-当前 `.github/workflows/desktop-release.yml` 的 macOS matrix 为：
+当前 `.github/workflows/desktop-release.yml` 的 macOS matrix 已使用 Flutter DMG：
 
 ```yaml
-build_args: --ci --no-sign
+bundle: dmg
+artifact_path: dist/flutter-desktop/macos/release/*.dmg
 ```
 
-启用正式签名时改为：
-
-```yaml
-build_args: --ci
-```
-
-并在 `Build installer` 步骤注入 macOS secrets：
+启用正式签名时，在 `Build Flutter desktop release` 步骤注入 macOS secrets：
 
 ```yaml
 env:
@@ -79,21 +72,24 @@ env:
   APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
 ```
 
-首次排障时可以临时加 `--skip-stapling`，但正式 release 不建议跳过 stapling。
+Flutter DMG 目前由 `scripts/build_desktop_release.py` 创建；接入签名时需要在该脚本中对
+`.app` 做 Developer ID 签名，再创建/公证/staple DMG。
 
 ### 本地验证
 
 ```bash
 npm run desktop:release:mac -- --ci
 python3 scripts/verify_desktop_release.py --bundle dmg --profile release
-xcrun stapler validate "src-tauri/target/release/bundle/dmg/"*.dmg
-spctl -a -vv --type open "src-tauri/target/release/bundle/dmg/"*.dmg
+xcrun stapler validate "dist/flutter-desktop/macos/release/"*.dmg
+spctl -a -vv --type open "dist/flutter-desktop/macos/release/"*.dmg
 ```
 
-## Windows NSIS Code Signing
+## Windows Code Signing
 
-Windows 签名路线取决于证书形态。2023-06-01 之后签发的 OV/EV 证书通常不再是
-简单可导出的私钥文件，优先按证书商或 Azure Trusted Signing 文档选择实现。
+Windows 当前默认产物是 Flutter release zip。签名路线取决于后续是否增加安装器：
+若仍分发 zip，可签名 zip 内 `.exe` 后再压缩；若增加 NSIS/Inno/MSIX，则签名安装器。
+2023-06-01 之后签发的 OV/EV 证书通常不再是简单可导出的私钥文件，优先按证书商或
+Azure Trusted Signing 文档选择实现。
 
 ### 路线 A：PFX 可导入证书
 
@@ -105,7 +101,7 @@ Windows 签名路线取决于证书形态。2023-06-01 之后签发的 OV/EV 证
 | `WINDOWS_CERTIFICATE_PASSWORD` | `.pfx` 导出密码 |
 | `TAURI_WINDOWS_SIGNTOOL_PATH` | 可选；指定 `signtool.exe` 路径 |
 
-在 Windows job 的 `Build installer` 前增加证书导入步骤：
+在 Windows job 的 `Build Flutter desktop release` 前增加证书导入步骤：
 
 ```yaml
 - name: Import Windows certificate
@@ -124,8 +120,8 @@ Windows 签名路线取决于证书形态。2023-06-01 之后签发的 OV/EV 证
 
 ### 路线 B：Azure Trusted Signing / 自定义签名命令
 
-适用于 Azure Trusted Signing、EV token、远程 HSM 或证书商 CLI。Tauri 支持在
-`src-tauri/tauri.conf.json` 的 `bundle.windows.signCommand` 配置自定义签名命令。
+适用于 Azure Trusted Signing、EV token、远程 HSM 或证书商 CLI。接入前先确定
+Windows 最终分发形态是 zip 内 exe、NSIS/Inno 安装器还是 MSIX。
 
 常见 secrets：
 
@@ -138,15 +134,16 @@ Windows 签名路线取决于证书形态。2023-06-01 之后签发的 OV/EV 证
 | `AZURE_TRUSTED_SIGNING_ACCOUNT` | Trusted Signing account |
 | `AZURE_TRUSTED_SIGNING_PROFILE` | Certificate profile |
 
-只有选定实际签名服务后，才应把 `signCommand` 写入 `tauri.conf.json`。不要在没有
+只有选定实际签名服务后，才应把签名步骤写入 workflow 或 release builder。不要在没有
 证书商 CLI 验证的情况下提交占位命令。
 
 ### Windows 验证
 
 ```powershell
 npm run desktop:release:win -- --ci
-python scripts/verify_desktop_release.py --bundle nsis --profile release
-Get-AuthenticodeSignature "src-tauri\target\release\bundle\nsis\*.exe"
+python scripts/verify_desktop_release.py --bundle zip --profile release
+Expand-Archive "dist\flutter-desktop\windows\*.zip" -DestinationPath "$env:TEMP\inkmoment-flutter"
+Get-AuthenticodeSignature "$env:TEMP\inkmoment-flutter\*.exe"
 ```
 
 期望 `Get-AuthenticodeSignature` 返回 `Status: Valid`，`SignerCertificate`
@@ -156,15 +153,15 @@ Get-AuthenticodeSignature "src-tauri\target\release\bundle\nsis\*.exe"
 
 1. 先在 `workflow_dispatch` 手动触发，不随 tag 自动发布。
 2. macOS 先验证 DMG 可以通过 `stapler validate` 与 `spctl`。
-3. Windows 先下载 artifact，用干净虚拟机安装，确认发布者与启动行为。
+3. Windows 先下载 artifact，用干净虚拟机解压/运行，确认发布者与启动行为；如后续有安装器，再执行安装验收。
 4. 如签名失败，回滚方式是：
-   - macOS matrix 恢复 `build_args: --ci --no-sign`。
+   - macOS 签名步骤从 workflow/release builder 中移除，回到未签名 DMG。
    - 移除新增 signing env / certificate import step。
    - 保留本文档与 secrets，等待证书链路修复后再启用。
 
 ## 不纳入本轮的事项
 
-- Tauri updater 包签名与增量更新。
+- 旧 Tauri updater 包签名与增量更新。
 - Microsoft Store / Mac App Store 上架流程。
 - 证书采购与组织实名审核。
 - Windows EV token 的人工插拔或本地 agent 流程。

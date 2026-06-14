@@ -14,6 +14,7 @@ class Zh {
   static const password = '密码';
   static const displayName = '显示名';
   static const cdk = 'CDK 激活码';
+  static const accountEmail = '当前账号';
   static const redeem = '兑换并开通';
   static const refreshAuth = '刷新授权';
   static const authRefreshed = '授权状态已刷新';
@@ -41,6 +42,25 @@ class Zh {
   static const authAbnormal = '异常';
   static const authorizedAccount = '授权账号';
   static const authorizedFallback = '已授权';
+  static const device = '设备';
+  static const deviceBound = '已绑定';
+  static const deviceUnknown = '未识别';
+  static const expiresAt = '到期时间';
+  static const lastCheckedAt = '最近检查';
+  static const remainingDays = '剩余天数';
+  static const neverChecked = '尚未检查';
+  static const notOpened = '未开通';
+  static const maintenanceNotice = '维护公告';
+  static const versionNotice = '版本更新';
+  static const systemNotice = '系统公告';
+  static const noticeAction = '查看详情';
+  static const noticeDismiss = '知道了';
+  static const noClientNotice = '暂无客户端通知';
+  static const unbindPenaltyHint = '解除绑定会扣除 3 天使用时长，并需要重新登录。';
+  static const loginSuccessNeedCdk = '登录成功，请兑换 CDK 开通';
+  static const registerSuccessNeedCdk = '注册成功，请兑换 CDK 开通';
+  static const cdkSubmitted = 'CDK 已提交，请刷新授权状态';
+  static const deviceUnbound = '设备已解除绑定，请重新登录';
 
   static const mode = '模式';
   static const style = '风格';

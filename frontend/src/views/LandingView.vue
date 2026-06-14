@@ -325,7 +325,7 @@ function buildStartPayload() {
       </section>
     </form>
 
-    <aside class="studio-inspector">
+    <aside class="studio-inspector flow-inspector landing-inspector">
       <LandingFlowPanel :items="flowItems" />
       <LandingAdvancedOptions
         v-model:mode="mode"

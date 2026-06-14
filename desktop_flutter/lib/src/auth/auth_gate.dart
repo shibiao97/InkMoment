@@ -33,8 +33,16 @@ class _AuthGateState extends State<AuthGate> {
   bool _registerMode = false;
   bool _loading = false;
   String _message = '';
+  List<_ClientNotice> _notices = const [];
 
   bool get _authenticated => widget.auth['authenticated'] == true;
+  bool get _authorized => widget.auth['authorized'] == true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadNotices();
+  }
 
   @override
   void dispose() {
@@ -65,6 +73,21 @@ class _AuthGateState extends State<AuthGate> {
     }
   }
 
+  Future<void> _loadNotices() async {
+    try {
+      final payload = await widget.api.clientNotices();
+      if (!mounted) return;
+      setState(() {
+        _notices = _ClientNotice.fromPayload(payload);
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _notices = const [];
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final compact = StitchLayout.compact(context);
@@ -83,17 +106,15 @@ class _AuthGateState extends State<AuthGate> {
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(StitchRadius.xl),
-                child: IntrinsicHeight(
-                  child: compact
-                      ? _compactLayout(context)
-                      : Row(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            Expanded(flex: 5, child: _brandPanel(context)),
-                            Expanded(flex: 6, child: _formPanel(context)),
-                          ],
-                        ),
-                ),
+                child: compact
+                    ? _compactLayout(context)
+                    : Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(flex: 5, child: _brandPanel(context)),
+                          Expanded(flex: 6, child: _formPanel(context)),
+                        ],
+                      ),
               ),
             ),
           ),
@@ -116,6 +137,7 @@ class _AuthGateState extends State<AuthGate> {
 
   Widget _brandPanel(BuildContext context) {
     return Container(
+      constraints: const BoxConstraints(minHeight: 560),
       decoration: const BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
@@ -161,8 +183,9 @@ class _AuthGateState extends State<AuthGate> {
                   StitchPill(
                     label: Zh.authorization,
                     value: _reasonText(widget.auth['reason']),
-                    color: StitchColors.accentDeep,
+                    color: _authColor,
                   ),
+                  StitchPill(label: Zh.device, value: _deviceName),
                   StitchPill(
                     label: Zh.service,
                     value: widget.auth['configured'] == false
@@ -186,7 +209,7 @@ class _AuthGateState extends State<AuthGate> {
               ),
               const SizedBox(height: 8),
               Text(
-                _authenticated ? Zh.authorizedAccount : Zh.waitingTask,
+                _authenticated ? _accountEmail : Zh.waitingTask,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       color: StitchColors.textMuted,
                     ),
@@ -230,7 +253,7 @@ class _AuthGateState extends State<AuthGate> {
             ),
             const SizedBox(height: 10),
             Text(
-              _authenticated ? Zh.authRefreshed : Zh.chooseModeAndFolder,
+              _authenticated ? _authSummaryText : Zh.chooseModeAndFolder,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: StitchColors.textMuted,
                     height: 1.5,
@@ -238,8 +261,10 @@ class _AuthGateState extends State<AuthGate> {
             ),
             const SizedBox(height: 22),
             _statusRow(context),
+            const SizedBox(height: 16),
+            _noticePanel(context),
             const SizedBox(height: 22),
-            if (!_authenticated) _accountForm(context) else _redeemForm(context),
+            if (!_authenticated) _accountForm(context) else _authorizedPanel(context),
             if (_message.isNotEmpty || widget.error.isNotEmpty) ...[
               const SizedBox(height: 18),
               StitchWarning(message: _message.isNotEmpty ? _message : widget.error),
@@ -256,7 +281,8 @@ class _AuthGateState extends State<AuthGate> {
       runSpacing: 10,
       children: [
         StitchPill(label: Zh.account, value: _authenticated ? Zh.signedIn : Zh.signedOut),
-        StitchPill(label: Zh.authorization, value: _reasonText(widget.auth['reason']), color: StitchColors.accentDeep),
+        StitchPill(label: Zh.authorization, value: _reasonText(widget.auth['reason']), color: _authColor),
+        StitchPill(label: Zh.device, value: _deviceName),
         StitchPill(
           label: Zh.service,
           value: widget.auth['configured'] == false ? Zh.serviceUnavailable : Zh.serviceConfigured,
@@ -293,10 +319,32 @@ class _AuthGateState extends State<AuthGate> {
     );
   }
 
+  Widget _authorizedPanel(BuildContext context) {
+    if (!_authorized) return _redeemForm(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _authMetaGrid(context),
+        const SizedBox(height: 18),
+        OutlinedButton(
+          onPressed: _loading ? null : () => _run(() => widget.api.authStatus(force: true)),
+          child: const Text(Zh.refreshAuth),
+        ),
+        const SizedBox(height: 10),
+        TextButton(
+          onPressed: _loading ? null : () => _run(() => widget.api.logout()),
+          child: const Text(Zh.logout),
+        ),
+      ],
+    );
+  }
+
   Widget _redeemForm(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        _authMetaGrid(context),
+        const SizedBox(height: 18),
         _field(_cdk, Zh.cdk),
         FilledButton(
           onPressed: _loading ? null : () => _run(() => widget.api.redeem(_cdk.text.trim())),
@@ -308,6 +356,8 @@ class _AuthGateState extends State<AuthGate> {
           child: const Text(Zh.refreshAuth),
         ),
         const SizedBox(height: 18),
+        Text(Zh.unbindPenaltyHint, style: StitchTextStyles.muted),
+        const SizedBox(height: 8),
         _field(_unbindReason, Zh.unbindReason),
         OutlinedButton(
           onPressed: _loading
@@ -321,6 +371,92 @@ class _AuthGateState extends State<AuthGate> {
           child: const Text(Zh.logout),
         ),
       ],
+    );
+  }
+
+  Widget _authMetaGrid(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final columns = constraints.maxWidth > 620 ? 2 : 1;
+        return GridView.count(
+          crossAxisCount: columns,
+          crossAxisSpacing: 10,
+          mainAxisSpacing: 10,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          childAspectRatio: columns == 2 ? 3.6 : 5,
+          children: [
+            _authInfoTile(label: Zh.accountEmail, value: _accountEmail, accent: StitchColors.accentDeep),
+            _authInfoTile(label: Zh.device, value: _deviceName, accent: _authColor),
+            _authInfoTile(label: Zh.expiresAt, value: _formatAuthTime(_license['expires_at'], Zh.notOpened)),
+            _authInfoTile(
+              label: Zh.lastCheckedAt,
+              value: _formatAuthTime(widget.auth['last_checked_at'], Zh.neverChecked),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _authInfoTile({
+    required String label,
+    required String value,
+    Color accent = StitchColors.accentDeep,
+  }) {
+    return StitchCard(
+      padding: const EdgeInsets.all(14),
+      shadows: const [],
+      backgroundColor: StitchColors.cardGlow,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(label, style: StitchTextStyles.muted, overflow: TextOverflow.ellipsis),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: accent),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _noticePanel(BuildContext context) {
+    final notice = _firstEnabledNotice();
+    if (notice == null) {
+      return StitchCard(
+        padding: const EdgeInsets.all(14),
+        shadows: const [],
+        backgroundColor: StitchColors.cardGlow,
+        child: Text(Zh.noClientNotice, style: StitchTextStyles.muted),
+      );
+    }
+    final tone = notice.severity == 'warning' ? StitchColors.warning : StitchColors.accentDeep;
+    return StitchCard(
+      padding: const EdgeInsets.all(16),
+      shadows: const [],
+      backgroundColor: notice.severity == 'warning' ? StitchColors.warningSoft : StitchColors.accentSoft,
+      borderColor: tone.withValues(alpha: 0.26),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(notice.eyebrow, style: StitchTextStyles.eyebrow.copyWith(color: tone)),
+          const SizedBox(height: 6),
+          Text(notice.title, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+          if (notice.message.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(notice.message, style: StitchTextStyles.muted),
+          ],
+          if (notice.version.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            StitchPill(label: Zh.versionNotice, value: notice.version, color: tone),
+          ],
+        ],
+      ),
     );
   }
 
@@ -406,4 +542,125 @@ class _AuthGateState extends State<AuthGate> {
         null || '' => Zh.signedOut,
         _ => Zh.authPending,
       };
+
+  Color get _authColor {
+    if (_authorized) return StitchColors.accentDeep;
+    final reason = widget.auth['reason']?.toString() ?? _license['reason']?.toString() ?? '';
+    if (reason == 'expired' || reason == 'revoked' || reason == 'disabled' || reason == 'device_mismatch') {
+      return StitchColors.warning;
+    }
+    return StitchColors.accentDeep;
+  }
+
+  Map<String, dynamic> get _account => _mapValue(widget.auth['account']);
+  Map<String, dynamic> get _license => _mapValue(widget.auth['license']);
+  Map<String, dynamic> get _device {
+    final device = _mapValue(widget.auth['device']);
+    if (device.isNotEmpty) return device;
+    return _mapValue(_account['device']);
+  }
+
+  String get _accountEmail {
+    final value = _account['email']?.toString() ?? '';
+    return value.isEmpty ? Zh.signedIn : value;
+  }
+
+  String get _deviceName {
+    final value = _device['name']?.toString() ?? _device['hostname']?.toString() ?? _device['fingerprint']?.toString() ?? '';
+    return value.isEmpty ? Zh.deviceUnknown : value;
+  }
+
+  String get _authSummaryText {
+    if (_authorized) {
+      final remainingSeconds = num.tryParse('${_license['remaining_seconds'] ?? ''}') ?? 0;
+      final remainingDays = remainingSeconds <= 0 ? 0 : (remainingSeconds / 86400).ceil();
+      return '${Zh.authValidFull} · ${Zh.remainingDays} $remainingDays';
+    }
+    return _reasonText(widget.auth['reason'] ?? _license['reason']);
+  }
+
+  Map<String, dynamic> _mapValue(Object? value) {
+    return value is Map<String, dynamic> ? value : <String, dynamic>{};
+  }
+
+  String _formatAuthTime(Object? value, String fallback) {
+    final seconds = int.tryParse(value?.toString() ?? '') ?? 0;
+    if (seconds <= 0) return fallback;
+    final time = DateTime.fromMillisecondsSinceEpoch(seconds * 1000);
+    return '${time.year}-${_two(time.month)}-${_two(time.day)} ${_two(time.hour)}:${_two(time.minute)}';
+  }
+
+  String _two(int value) => value.toString().padLeft(2, '0');
+
+  _ClientNotice? _firstEnabledNotice() {
+    for (final notice in _notices) {
+      if (notice.enabled) return notice;
+    }
+    return null;
+  }
+}
+
+class _ClientNotice {
+  const _ClientNotice({
+    required this.kind,
+    required this.title,
+    required this.message,
+    this.version = '',
+    this.severity = 'info',
+    this.enabled = true,
+  });
+
+  final String kind;
+  final String title;
+  final String message;
+  final String version;
+  final String severity;
+  final bool enabled;
+
+  String get eyebrow => switch (kind) {
+        'version_update' || 'version' => Zh.versionNotice,
+        'maintenance' => Zh.maintenanceNotice,
+        _ => Zh.systemNotice,
+      };
+
+  static List<_ClientNotice> fromPayload(Map<String, dynamic> payload) {
+    final notices = <_ClientNotice>[];
+    for (final key in const ['maintenance', 'version_update']) {
+      final notice = _fromMap(payload[key], key);
+      if (notice != null) notices.add(notice);
+    }
+    final remote = payload['remote_notices'];
+    if (remote is List) {
+      for (final item in remote) {
+        final notice = _fromMap(item, 'notice');
+        if (notice != null) notices.add(notice);
+      }
+    }
+    notices.sort((left, right) => _priority(right).compareTo(_priority(left)));
+    return notices;
+  }
+
+  static int _priority(_ClientNotice notice) {
+    if (!notice.enabled) return 0;
+    if (notice.severity == 'warning') return 3;
+    if (notice.kind == 'maintenance') return 2;
+    return 1;
+  }
+
+  static _ClientNotice? _fromMap(Object? raw, String fallbackKind) {
+    if (raw is! Map) return null;
+    final enabled = raw['enabled'] == true;
+    if (!enabled) return null;
+    final title = raw['title']?.toString().trim() ?? '';
+    final message = (raw['message'] ?? raw['body'] ?? '').toString().trim();
+    if (title.isEmpty && message.isEmpty) return null;
+    return _ClientNotice(
+      kind: raw['kind']?.toString() ?? fallbackKind,
+      title: title.isEmpty ? Zh.systemNotice : title,
+      message: message,
+      version: raw['version']?.toString() ?? '',
+      severity: raw['severity']?.toString() ?? 'info',
+      enabled: enabled,
+    );
+  }
 }

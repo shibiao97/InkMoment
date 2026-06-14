@@ -1,5 +1,10 @@
 # InkMoment 桌面化高性能重构目标
 
+> 当前状态更新：本文记录的是早期 Tauri/Vue 桌面化目标，保留作 sidecar、缓存和旧壳发布链的历史参考。
+> 当前默认安装包入口已切到 `desktop_flutter/` Flutter Desktop 原生 Stitch 客户端；默认 release
+> 命令为 `npm run desktop:release:*`，产物位于 `dist/flutter-desktop/`。旧 Tauri 链路只通过
+> `desktop:release:tauri:*` 显式执行。
+
 ## 目标
 
 把 InkMoment 从“一个 Flask 大入口 + 前端页面”的本地工具，重构成可长期维护的桌面应用：
@@ -77,10 +82,11 @@ Windows EXE 必须在 Windows 环境构建，因为 PyInstaller 需要收集 Win
 
 - Python 回归：`.venv/bin/python -m unittest discover -s tests -p 'test_*.py'`，87 个 unittest 通过。
 - 前端构建：`npm run frontend:build` 通过。
-- macOS release DMG：`npm run desktop:release:mac -- --skip-sidecar --no-sign --ci` 通过。
-- 产物：`src-tauri/target/release/bundle/dmg/InkMoment_0.1.0_aarch64.dmg`。
+- macOS release DMG：当前默认执行 `npm run desktop:release:mac -- --skip-sidecar --ci`；
+  仅在平台 runner 已存在时追加 `--skip-create`。
+- 产物：`dist/flutter-desktop/macos/release/InkMoment_0.1.0_<arch>.dmg`。
 - sidecar smoke：`src-tauri/binaries/inkmoment-sidecar/inkmoment-sidecar --help` 通过。
-- DMG 信息校验：`hdiutil imageinfo src-tauri/target/release/bundle/dmg/InkMoment_0.1.0_aarch64.dmg` 通过。
+- DMG 信息校验：`python3 scripts/verify_desktop_release.py --bundle dmg --profile release`。
 - CI 构建链：`.github/workflows/desktop-release.yml` 定义 `macos-14` / `windows-2022`
   矩阵，支持 `codex/**` 临时分支与 `v*` tag 触发，并通过 `INKMOMENT_PYTHON`
   固定使用 CI 创建的 `.venv`。构建后调用
@@ -88,7 +94,7 @@ Windows EXE 必须在 Windows 环境构建，因为 PyInstaller 需要收集 Win
 - 目标审计：`python3 scripts/audit_desktop_goal.py` 会检查后端重构、SQLite 缓存、
   Tauri sidecar、DMG/EXE 构建链、文档和本地 DMG 证据。
 - 完成审计：`python3 scripts/audit_desktop_goal.py --completion` 额外要求 Windows
-  NSIS `.exe` artifact 已下载到本机，或通过 `INKMOMENT_WINDOWS_EXE` 指定并验证 PE 头。
+  Flutter `.zip` artifact 已下载到本机，或通过 `INKMOMENT_WINDOWS_FLUTTER_ZIP` 指定并验证包内 sidecar。
 - 远端 artifact 闭环：`python3 scripts/run_desktop_release_workflow.py --repo shibiao97/Pianke --ref <branch-or-tag>`
   可触发 GitHub Actions、等待完成、下载 Windows artifact 并运行 completion audit；
   该 ref 必须已包含 `.github/workflows/desktop-release.yml`。
@@ -105,6 +111,6 @@ Windows EXE 必须在 Windows 环境构建，因为 PyInstaller 需要收集 Win
 
 ## 下一步
 
-- 运行 `Desktop Release` GitHub Actions workflow，下载并验收 `InkMoment-Windows-nsis` artifact。
+- 运行 `Desktop Release` GitHub Actions workflow，下载并验收 `InkMoment-Windows-flutter` artifact。
 - 准备正式 macOS release 时移除 `--debug --no-sign`，接入签名和 notarization。
 - 增加真实小样本端到端验收：导入照片、自动预筛、确认分组、选择、反悔、导出 winners。

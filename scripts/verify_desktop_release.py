@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify desktop installer artifacts produced by build_desktop_release.py."""
+"""Verify Flutter Desktop release artifacts produced by build_desktop_release.py."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ import argparse
 import shutil
 import subprocess
 import sys
+import zipfile
 from pathlib import Path
 
 try:
@@ -34,6 +35,25 @@ def check_windows_exe(path: Path) -> None:
         raise SystemExit(f"Windows installer does not look like a PE executable: {path}")
 
 
+def check_zip(path: Path) -> None:
+    if not zipfile.is_zipfile(path):
+        raise SystemExit(f"Desktop artifact is not a valid zip archive: {path}")
+    with zipfile.ZipFile(path) as archive:
+        names = archive.namelist()
+    if not names:
+        raise SystemExit(f"Desktop zip artifact is empty: {path}")
+    if not any("inkmoment-runtime/binaries/inkmoment-sidecar/" in name for name in names):
+        raise SystemExit(f"Desktop zip artifact does not contain the bundled sidecar runtime: {path}")
+
+
+def check_flutter_bundle_dir(path: Path) -> None:
+    if not path.is_dir():
+        raise SystemExit(f"Flutter bundle artifact is not a directory: {path}")
+    runtime = path / "inkmoment-runtime" / "binaries" / "inkmoment-sidecar"
+    if not runtime.exists():
+        raise SystemExit(f"Flutter bundle does not contain the sidecar runtime: {runtime}")
+
+
 def check_macos_dmg(path: Path, *, skip_native_check: bool) -> None:
     if skip_native_check or sys.platform != "darwin":
         return
@@ -47,10 +67,14 @@ def verify_artifact(path: Path, bundle: str, *, min_bytes: int, skip_native_chec
     if not path.exists():
         raise SystemExit(f"Desktop artifact is missing: {path}")
     check_min_size(path, min_bytes)
-    if bundle == "nsis":
+    if bundle in {"nsis", "exe"}:
         check_windows_exe(path)
     elif bundle == "dmg":
         check_macos_dmg(path, skip_native_check=skip_native_check)
+    elif bundle == "zip":
+        check_zip(path)
+    elif bundle == "bundle":
+        check_flutter_bundle_dir(path)
 
 
 def parse_args() -> argparse.Namespace:
@@ -58,14 +82,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--bundle",
         default="auto",
-        choices=["auto", "app", "dmg", "nsis"],
+        choices=["auto", "app", "dmg", "zip", "bundle", "nsis"],
         help="Bundle target to verify. Defaults to the current platform installer.",
     )
     parser.add_argument(
         "--profile",
         default="release",
         choices=["debug", "release"],
-        help="Tauri profile containing the bundle artifact.",
+        help="Build profile containing the bundle artifact.",
     )
     parser.add_argument("--target", default="", help="Optional Rust target triple.")
     parser.add_argument(
@@ -107,7 +131,7 @@ def main() -> int:
     if not artifacts:
         raise SystemExit(
             "No desktop artifact found under "
-            f"{build_desktop_release.tauri_bundle_dir(bundle, debug=debug, target=target)}"
+            f"{build_desktop_release.artifact_dir(bundle, debug=debug, target=target)}"
         )
 
     for artifact in artifacts:

@@ -11,6 +11,7 @@ from scripts import (
     audit_desktop_goal,
     build_sidecar,
     build_desktop_release,
+    build_tauri_desktop_release,
     run_desktop_release_workflow,
     verify_desktop_release,
 )
@@ -22,12 +23,15 @@ class DesktopReleaseBuildTest(unittest.TestCase):
             self.assertEqual(build_desktop_release.resolve_bundle("auto"), "dmg")
 
         with patch.object(build_desktop_release.sys, "platform", "win32"):
-            self.assertEqual(build_desktop_release.resolve_bundle("auto"), "nsis")
+            self.assertEqual(build_desktop_release.resolve_bundle("auto"), "zip")
+
+        with patch.object(build_desktop_release.sys, "platform", "linux"):
+            self.assertEqual(build_desktop_release.resolve_bundle("auto"), "zip")
 
     def test_resolve_bundle_rejects_cross_platform_targets(self):
         with patch.object(build_desktop_release.sys, "platform", "darwin"):
             with self.assertRaises(SystemExit) as raised:
-                build_desktop_release.resolve_bundle("nsis")
+                build_desktop_release.resolve_bundle("zip")
             self.assertIn("not supported on darwin", str(raised.exception))
 
         with patch.object(build_desktop_release.sys, "platform", "win32"):
@@ -38,26 +42,78 @@ class DesktopReleaseBuildTest(unittest.TestCase):
     def test_find_artifacts_uses_debug_profile_and_suffix(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
-            tauri_dir = root / "src-tauri"
-            bundle_dir = tauri_dir / "target" / "debug" / "bundle" / "dmg"
+            dist_dir = root / "dist" / "flutter-desktop"
+            bundle_dir = dist_dir / "macos" / "release"
             bundle_dir.mkdir(parents=True)
             dmg = bundle_dir / "InkMoment.dmg"
             ignored = bundle_dir / "notes.txt"
             dmg.write_bytes(b"dmg")
             ignored.write_text("ignore", encoding="utf-8")
 
-            with patch.object(build_desktop_release, "TAURI_DIR", tauri_dir):
+            with patch.object(build_desktop_release, "DIST_DIR", dist_dir):
                 self.assertEqual(
-                    build_desktop_release.find_artifacts("dmg", debug=True, target=None),
+                    build_desktop_release.find_artifacts("dmg", platform_name="macos"),
                     [dmg],
                 )
 
+    def test_find_zip_artifacts_only_uses_platform_top_level_archives(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            dist_dir = root / "dist" / "flutter-desktop"
+            zip_dir = dist_dir / "linux"
+            nested_dir = zip_dir / "release" / "inkmoment-runtime" / "binaries" / "inkmoment-sidecar" / "_internal"
+            nested_dir.mkdir(parents=True)
+            release_zip = zip_dir / "InkMoment_0.1.0_linux_x64.zip"
+            nested_zip = nested_dir / "base_library.zip"
+            release_zip.write_bytes(b"zip")
+            nested_zip.write_bytes(b"nested")
+
+            with patch.object(build_desktop_release, "DIST_DIR", dist_dir):
+                self.assertEqual(
+                    build_desktop_release.find_artifacts("zip", platform_name="linux"),
+                    [release_zip],
+                )
+
     def test_console_path_escapes_non_console_characters(self):
-        path = Path("src-tauri/target/release/bundle/nsis/影刻_0.1.0_x64-setup.exe")
+        path = Path("dist/flutter-desktop/windows/影刻_0.1.0_windows_x64.zip")
         with patch.object(build_desktop_release.sys, "stdout", SimpleNamespace(encoding="cp1252")):
             self.assertIn("\\u5f71\\u523b", build_desktop_release.console_path(path))
 
-    def test_build_tauri_passes_sidecar_env_and_requested_flags(self):
+    def test_runtime_copy_uses_hardlinks_when_available(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            source = root / "src"
+            target = root / "bundle"
+            source.mkdir()
+            binary = source / "inkmoment-sidecar"
+            binary.write_bytes(b"sidecar")
+
+            with patch.object(build_desktop_release, "SIDECAR_RESOURCE_DIR", source):
+                with patch.object(build_desktop_release, "AUTH_CONFIG", root / "missing-auth.json"):
+                    build_desktop_release.copy_runtime_resources(target)
+
+            copied = target / "inkmoment-runtime" / "binaries" / "inkmoment-sidecar" / "inkmoment-sidecar"
+            self.assertEqual(copied.read_bytes(), b"sidecar")
+            if build_desktop_release.os.name != "nt":
+                self.assertEqual(binary.stat().st_ino, copied.stat().st_ino)
+
+    def test_zip_build_can_cleanup_generated_sidecar_staging(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            sidecar = root / "src-tauri" / "binaries" / "inkmoment-sidecar"
+            sidecar.mkdir(parents=True)
+            (sidecar / "inkmoment-sidecar").write_bytes(b"sidecar")
+            build_sidecar_dir = root / "build" / "inkmoment-sidecar"
+            build_sidecar_dir.mkdir(parents=True)
+
+            with patch.object(build_desktop_release, "ROOT", root):
+                with patch.object(build_desktop_release, "SIDECAR_RESOURCE_DIR", sidecar):
+                    build_desktop_release.cleanup_generated_sidecar_staging()
+
+            self.assertFalse(sidecar.exists())
+            self.assertFalse(build_sidecar_dir.exists())
+
+    def test_legacy_tauri_build_passes_sidecar_env_and_requested_flags(self):
         args = SimpleNamespace(
             target="aarch64-apple-darwin",
             debug=True,
@@ -70,9 +126,9 @@ class DesktopReleaseBuildTest(unittest.TestCase):
         def fake_run(cmd, *, env=None):
             calls.append((cmd, env))
 
-        with patch.object(build_desktop_release, "ensure_npx", return_value="npx"):
-            with patch.object(build_desktop_release, "run", side_effect=fake_run):
-                build_desktop_release.build_tauri(args, "dmg")
+        with patch.object(build_tauri_desktop_release, "ensure_npx", return_value="npx"):
+            with patch.object(build_tauri_desktop_release, "run", side_effect=fake_run):
+                build_tauri_desktop_release.build_tauri(args, "dmg")
 
         cmd, env = calls[0]
         self.assertEqual(cmd[:4], ["npx", "tauri", "build", "--config"])
@@ -86,20 +142,40 @@ class DesktopReleaseBuildTest(unittest.TestCase):
         self.assertIn("--skip-stapling", cmd)
         self.assertEqual(env["INKMOMENT_USE_BUNDLED_SIDECAR"], "1")
 
-    def test_workflow_builds_macos_and_windows_installers(self):
+    def test_workflow_builds_flutter_desktop_artifacts(self):
         workflow = Path(".github/workflows/desktop-release.yml").read_text(encoding="utf-8")
 
         self.assertIn("macos-14", workflow)
         self.assertIn("windows-2022", workflow)
         self.assertIn('"codex/**"', workflow)
+        self.assertIn("subosito/flutter-action@v2", workflow)
         self.assertIn("desktop:release:mac", workflow)
         self.assertIn("desktop:release:win", workflow)
         self.assertIn('INKMOMENT_PYTHON="$PY" npm run', workflow)
-        self.assertIn("rustup toolchain install 1.88.0", workflow)
+        self.assertNotIn("rustup toolchain install 1.88.0", workflow)
         self.assertIn("scripts/verify_desktop_release.py --bundle", workflow)
-        self.assertIn("src-tauri/target/release/bundle/dmg/*.dmg", workflow)
-        self.assertIn("src-tauri/target/release/bundle/nsis/*.exe", workflow)
+        self.assertIn("dist/flutter-desktop/macos/release/*.dmg", workflow)
+        self.assertIn("dist/flutter-desktop/windows/*.zip", workflow)
+        self.assertNotIn("src-tauri/target/release/bundle", workflow)
         self.assertIn("actions/upload-artifact@v4", workflow)
+
+    def test_default_desktop_release_scripts_point_to_flutter_builder(self):
+        package = json.loads(Path("package.json").read_text(encoding="utf-8"))
+        scripts = package["scripts"]
+
+        self.assertEqual(scripts["desktop:release"], "node scripts/build_desktop_release.mjs")
+        self.assertEqual(scripts["desktop:release:mac"], "node scripts/build_desktop_release.mjs --bundle dmg")
+        self.assertEqual(scripts["desktop:release:win"], "node scripts/build_desktop_release.mjs --bundle zip")
+        self.assertIn("build_tauri_desktop_release.mjs", scripts["desktop:release:tauri:mac"])
+        self.assertIn("build_tauri_desktop_release.mjs", scripts["desktop:release:tauri:win"])
+
+    def test_legacy_vue_auth_copy_is_demoted_to_compatibility(self):
+        dialog = Path("frontend/src/components/ClientDialogs.vue").read_text(encoding="utf-8")
+        auth_view = Path("frontend/src/views/AuthView.vue").read_text(encoding="utf-8")
+
+        self.assertNotIn("Local License Gate", dialog)
+        self.assertIn("InkMoment 授权", dialog)
+        self.assertIn("InkMoment 授权", auth_view)
 
     def test_tauri_config_declares_windows_icon(self):
         config = json.loads(Path("src-tauri/tauri.conf.json").read_text(encoding="utf-8"))
@@ -110,7 +186,7 @@ class DesktopReleaseBuildTest(unittest.TestCase):
         self.assertTrue(icon_path.exists())
         self.assertEqual(icon_path.read_bytes()[:4], b"\0\0\1\0")
 
-    def test_ensure_windows_icon_generates_ico_from_png(self):
+    def test_legacy_ensure_windows_icon_generates_ico_from_png(self):
         try:
             from PIL import Image
         except ImportError:
@@ -122,9 +198,9 @@ class DesktopReleaseBuildTest(unittest.TestCase):
             ico = root / "icon.ico"
             Image.new("RGBA", (32, 32), (255, 255, 255, 255)).save(png)
 
-            with patch.object(build_desktop_release, "ICON_PNG", png):
-                with patch.object(build_desktop_release, "ICON_ICO", ico):
-                    build_desktop_release.ensure_windows_icon("nsis")
+            with patch.object(build_tauri_desktop_release, "ICON_PNG", png):
+                with patch.object(build_tauri_desktop_release, "ICON_ICO", ico):
+                    build_tauri_desktop_release.ensure_windows_icon("nsis")
 
             self.assertEqual(ico.read_bytes()[:4], b"\0\0\1\0")
 
@@ -142,6 +218,18 @@ class DesktopReleaseBuildTest(unittest.TestCase):
         self.assertIn(f"{Path('/tmp/pyiqa')}{build_sidecar.os.pathsep}pyiqa", cmd)
         self.assertIn("--runtime-hook", cmd)
         self.assertIn(str(build_sidecar.PYIQA_RUNTIME_HOOK), cmd)
+        self.assertIn("--additional-hooks-dir", cmd)
+        self.assertIn(str(build_sidecar.PYINSTALLER_HOOKS_DIR), cmd)
+
+    def test_sidecar_uses_project_torch_hook_without_full_submodule_scan(self):
+        hook = Path("scripts/pyinstaller_hooks/hook-torch.py").read_text(encoding="utf-8")
+
+        self.assertIn("collect_dynamic_libs", hook)
+        self.assertNotIn('collect_submodules("torch")', hook)
+        self.assertNotIn("infer_hiddenimports_from_requirements", hook)
+        self.assertNotIn("torch.distributed.optim", hook)
+        self.assertIn('"torch.distributed"', hook)
+        self.assertIn('"triton"', hook)
 
     def test_sidecar_excludes_non_runtime_packaging_modules(self):
         cmd = ["python", "-m", "PyInstaller"]
@@ -155,8 +243,10 @@ class DesktopReleaseBuildTest(unittest.TestCase):
         self.assertIn("pyarrow", excluded)
         self.assertIn("pandas", excluded)
         self.assertIn("matplotlib", excluded)
-        self.assertNotIn("torch.distributed", excluded)
-        self.assertNotIn("torch.testing", excluded)
+        self.assertIn("bitsandbytes", excluded)
+        self.assertIn("triton", excluded)
+        self.assertIn("torch.distributed", excluded)
+        self.assertIn("torch.testing", excluded)
         self.assertIn("transformers.trainer", excluded)
 
     def test_pyiqa_runtime_hook_stubs_dataset_package(self):
@@ -259,8 +349,9 @@ class DesktopReleaseBuildTest(unittest.TestCase):
             copied_link = bin_dir / "inkmoment-sidecar" / "_internal" / "libtorch_cpu.dylib"
             self.assertTrue(copied_link.is_symlink())
             self.assertEqual(copied_link.readlink(), Path("torch/lib/libtorch_cpu.dylib"))
+            self.assertFalse((root / "dist" / "inkmoment-sidecar").exists())
 
-    def test_restore_macos_app_sidecar_symlinks_replaces_expanded_resource(self):
+    def test_copy_runtime_resources_preserves_sidecar_symlinks(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
             source_sidecar = root / "src-tauri" / "binaries" / "inkmoment-sidecar"
@@ -269,58 +360,69 @@ class DesktopReleaseBuildTest(unittest.TestCase):
             (source_sidecar / "inkmoment-sidecar").write_bytes(b"sidecar")
             (source_torch_lib / "libtorch_cpu.dylib").write_bytes(b"torch")
             (source_sidecar / "_internal" / "libtorch_cpu.dylib").symlink_to("torch/lib/libtorch_cpu.dylib")
-
-            app_sidecar = (
-                root
-                / "src-tauri"
-                / "target"
-                / "release"
-                / "bundle"
-                / "macos"
-                / "影刻.app"
-                / "Contents"
-                / "Resources"
-                / "binaries"
-                / "inkmoment-sidecar"
-            )
-            app_sidecar.mkdir(parents=True)
-            (app_sidecar / "inkmoment-sidecar").write_bytes(b"old")
-            (app_sidecar / "_internal").mkdir()
-            (app_sidecar / "_internal" / "libtorch_cpu.dylib").write_bytes(b"expanded")
-
+            bundle_root = root / "InkMoment.app" / "Contents" / "Resources"
+            bundle_root.mkdir(parents=True)
             with patch.object(build_desktop_release, "SIDECAR_RESOURCE_DIR", source_sidecar):
-                build_desktop_release.restore_macos_app_sidecar_symlinks(
-                    root / "src-tauri" / "target" / "release" / "bundle" / "macos" / "影刻.app"
-                )
+                build_desktop_release.copy_runtime_resources(bundle_root)
 
+            app_sidecar = bundle_root / "inkmoment-runtime" / "binaries" / "inkmoment-sidecar"
             copied_link = app_sidecar / "_internal" / "libtorch_cpu.dylib"
             self.assertTrue(copied_link.is_symlink())
             self.assertEqual(copied_link.readlink(), Path("torch/lib/libtorch_cpu.dylib"))
             self.assertEqual((app_sidecar / "inkmoment-sidecar").read_bytes(), b"sidecar")
 
-    def test_build_macos_dmg_restores_sidecar_before_codesigning(self):
+    def test_copy_artifact_adds_runtime_before_macos_dmg(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            flutter_dir = root / "desktop_flutter"
+            release_dir = flutter_dir / "build" / "macos" / "Build" / "Products" / "Release"
+            app_bundle = release_dir / "InkMoment.app"
+            resources = app_bundle / "Contents" / "Resources"
+            resources.mkdir(parents=True)
+            sidecar = root / "src-tauri" / "binaries" / "inkmoment-sidecar"
+            sidecar.mkdir(parents=True)
+            (sidecar / "inkmoment-sidecar").write_bytes(b"sidecar")
+
+            calls = []
+
+            def fake_dmg(app, out_dir):
+                calls.append((app, out_dir, (app / "Contents" / "Resources" / "inkmoment-runtime").exists()))
+                artifact = out_dir / "InkMoment.dmg"
+                artifact.write_bytes(b"dmg")
+                return artifact
+
+            with patch.object(build_desktop_release, "PLATFORM_BUILD_DIR", {"macos": release_dir}):
+                with patch.object(build_desktop_release, "DIST_DIR", root / "dist" / "flutter-desktop"):
+                    with patch.object(build_desktop_release, "SIDECAR_RESOURCE_DIR", sidecar):
+                        with patch.object(build_desktop_release, "build_macos_dmg", side_effect=fake_dmg):
+                            artifacts = build_desktop_release.copy_artifact("macos", "dmg")
+
+            self.assertEqual(len(artifacts), 1)
+            self.assertTrue(calls[0][2])
+
+    def test_legacy_build_macos_dmg_restores_sidecar_before_codesigning(self):
         args = SimpleNamespace(debug=False, target=None)
         app_bundle = Path("/tmp/影刻.app")
         calls = []
 
-        with patch.object(build_desktop_release, "build_tauri", side_effect=lambda _args, bundle: calls.append(bundle)):
-            with patch.object(build_desktop_release, "current_macos_app", return_value=app_bundle):
+        with patch.object(build_tauri_desktop_release, "build_tauri", side_effect=lambda _args, bundle: calls.append(bundle)):
+            with patch.object(build_tauri_desktop_release, "current_macos_app", return_value=app_bundle):
                 with patch.object(
-                    build_desktop_release,
+                    build_tauri_desktop_release,
                     "restore_macos_app_sidecar_symlinks",
                     side_effect=lambda _app: calls.append("restore"),
                 ):
                     with patch.object(
-                        build_desktop_release,
+                        build_tauri_desktop_release,
                         "ad_hoc_codesign_macos_app",
                         side_effect=lambda _app: calls.append("codesign"),
                     ):
                         with patch.object(
-                            build_desktop_release,
+                            build_tauri_desktop_release,
                             "build_macos_dmg_from_app",
                             side_effect=lambda _app, _args: calls.append("dmg"),
                         ):
-                            build_desktop_release.build_macos_dmg(args)
+                            build_tauri_desktop_release.build_macos_dmg(args)
 
         self.assertEqual(calls, ["app", "restore", "codesign", "dmg"])
 
@@ -364,6 +466,39 @@ class DesktopReleaseBuildTest(unittest.TestCase):
                 )
             self.assertIn("too small", str(raised.exception))
 
+    def test_verify_artifact_accepts_flutter_zip_with_sidecar_runtime(self):
+        import zipfile
+
+        with tempfile.TemporaryDirectory() as folder:
+            artifact = Path(folder) / "InkMoment.zip"
+            with zipfile.ZipFile(artifact, "w") as archive:
+                archive.writestr("inkmoment-runtime/binaries/inkmoment-sidecar/inkmoment-sidecar", "sidecar")
+                archive.writestr("inkmoment_desktop", "app")
+
+            verify_desktop_release.verify_artifact(
+                artifact,
+                "zip",
+                min_bytes=16,
+                skip_native_check=True,
+            )
+
+    def test_verify_artifact_rejects_flutter_zip_without_sidecar_runtime(self):
+        import zipfile
+
+        with tempfile.TemporaryDirectory() as folder:
+            artifact = Path(folder) / "InkMoment.zip"
+            with zipfile.ZipFile(artifact, "w") as archive:
+                archive.writestr("inkmoment_desktop", "app")
+
+            with self.assertRaises(SystemExit) as raised:
+                verify_desktop_release.verify_artifact(
+                    artifact,
+                    "zip",
+                    min_bytes=16,
+                    skip_native_check=True,
+                )
+            self.assertIn("does not contain the bundled sidecar runtime", str(raised.exception))
+
     def test_verify_main_accepts_explicit_nsis_artifact_on_any_host(self):
         with tempfile.TemporaryDirectory() as folder:
             exe = Path(folder) / "InkMoment.exe"
@@ -390,12 +525,16 @@ class DesktopReleaseBuildTest(unittest.TestCase):
 
         self.assertEqual(failed, [])
 
-    def test_completion_audit_can_verify_downloaded_windows_exe(self):
-        with tempfile.TemporaryDirectory() as folder:
-            exe = Path(folder) / "InkMoment.exe"
-            exe.write_bytes(b"MZ" + b"\0" * 1024)
+    def test_completion_audit_can_verify_downloaded_windows_flutter_zip(self):
+        import zipfile
 
-            with patch.dict(audit_desktop_goal.os.environ, {"INKMOMENT_WINDOWS_EXE": str(exe)}):
+        with tempfile.TemporaryDirectory() as folder:
+            zip_path = Path(folder) / "InkMoment.zip"
+            with zipfile.ZipFile(zip_path, "w") as archive:
+                archive.writestr("inkmoment-runtime/binaries/inkmoment-sidecar/inkmoment-sidecar.exe", "sidecar")
+                archive.writestr("inkmoment_desktop.exe", "MZ")
+
+            with patch.dict(audit_desktop_goal.os.environ, {"INKMOMENT_WINDOWS_FLUTTER_ZIP": str(zip_path)}):
                 checks = audit_desktop_goal.run_audit(
                     completion=True,
                     require_local_artifacts=False,
@@ -404,40 +543,44 @@ class DesktopReleaseBuildTest(unittest.TestCase):
         failed = [check.name for check in checks if not check.ok]
         self.assertEqual(failed, [])
 
-    def test_completion_audit_reports_missing_windows_exe(self):
+    def test_completion_audit_reports_missing_windows_flutter_zip(self):
         with patch.dict(audit_desktop_goal.os.environ, {}, clear=True):
-            if audit_desktop_goal.windows_exe_artifacts():
-                self.skipTest("a Windows EXE artifact is already present")
+            if audit_desktop_goal.windows_flutter_artifacts():
+                self.skipTest("a Windows Flutter artifact is already present")
             checks = audit_desktop_goal.run_audit(
                 completion=True,
                 require_local_artifacts=False,
             )
 
         failed = [check.name for check in checks if not check.ok]
-        self.assertIn("windows exe artifact verified", failed)
+        self.assertIn("windows flutter artifact verified", failed)
 
-    def test_workflow_runner_finds_and_verifies_downloaded_exe(self):
+    def test_workflow_runner_finds_and_verifies_downloaded_windows_zip(self):
+        import zipfile
+
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
-            exe = root / "InkMoment-Windows-nsis" / "InkMoment.exe"
-            exe.parent.mkdir()
-            exe.write_bytes(b"MZ" + b"\0" * 1024)
+            artifact = root / "InkMoment-Windows-flutter" / "InkMoment.zip"
+            artifact.parent.mkdir()
+            with zipfile.ZipFile(artifact, "w") as archive:
+                archive.writestr("inkmoment-runtime/binaries/inkmoment-sidecar/inkmoment-sidecar.exe", "sidecar")
+                archive.writestr("inkmoment_desktop.exe", "MZ")
 
             paths = run_desktop_release_workflow.verify_downloaded_windows_artifacts(
                 root,
                 min_size_mb=0.0001,
             )
 
-            self.assertEqual(paths, [exe])
+            self.assertEqual(paths, [artifact])
 
-    def test_workflow_runner_reports_missing_downloaded_exe(self):
+    def test_workflow_runner_reports_missing_downloaded_windows_zip(self):
         with tempfile.TemporaryDirectory() as folder:
             with self.assertRaises(SystemExit) as raised:
                 run_desktop_release_workflow.verify_downloaded_windows_artifacts(
                     Path(folder),
                     min_size_mb=0.0001,
                 )
-            self.assertIn("No Windows .exe artifact found", str(raised.exception))
+            self.assertIn("No Windows Flutter zip artifact found", str(raised.exception))
 
     def test_workflow_runner_uses_gh_commands_for_dispatch_and_download(self):
         calls = []
@@ -492,7 +635,7 @@ class DesktopReleaseBuildTest(unittest.TestCase):
                 "--repo",
                 "owner/repo",
                 "--name",
-                "InkMoment-Windows-nsis",
+                "InkMoment-Windows-flutter",
                 "--dir",
                 str(Path("/tmp/artifacts")),
             ],
@@ -539,8 +682,8 @@ class DesktopReleaseBuildTest(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
-            release_dir = root / "src-tauri" / "target" / "release" / "bundle" / "dmg"
-            debug_dir = root / "src-tauri" / "target" / "debug" / "bundle" / "dmg"
+            release_dir = root / "dist" / "flutter-desktop" / "macos" / "release"
+            debug_dir = root / "dist" / "flutter-desktop" / "macos" / "debug"
             release_dir.mkdir(parents=True)
             debug_dir.mkdir(parents=True)
             (release_dir / "InkMoment-release.dmg").write_bytes(b"dmg")

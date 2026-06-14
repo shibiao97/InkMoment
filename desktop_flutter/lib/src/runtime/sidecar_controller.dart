@@ -41,6 +41,15 @@ class SidecarController {
       return next;
     }
 
+    final bundledSidecar = _findBundledSidecarExecutable();
+    if (bundledSidecar != null) {
+      return _startProcess(
+        executable: bundledSidecar,
+        arguments: const ['--host', '127.0.0.1', '--port', '0', '--no-browser', '--json-ready'],
+        workingDirectory: bundledSidecar.parent,
+      );
+    }
+
     final python = _pythonExecutable();
     final appPath = _findAppPy();
     if (appPath == null) {
@@ -53,19 +62,23 @@ class SidecarController {
       return next;
     }
 
+    return _startProcess(
+      executable: File(python),
+      arguments: [appPath.path, '--host', '127.0.0.1', '--port', '0', '--no-browser', '--json-ready'],
+      workingDirectory: appPath.parent,
+    );
+  }
+
+  Future<RuntimeStatus> _startProcess({
+    required File executable,
+    required List<String> arguments,
+    required Directory workingDirectory,
+  }) async {
     try {
       _process = await Process.start(
-        python,
-        [
-          appPath.path,
-          '--host',
-          '127.0.0.1',
-          '--port',
-          '0',
-          '--no-browser',
-          '--json-ready',
-        ],
-        workingDirectory: appPath.parent.path,
+        executable.path,
+        arguments,
+        workingDirectory: workingDirectory.path,
         environment: _sidecarEnvironment(),
       );
     } catch (error) {
@@ -168,6 +181,21 @@ class SidecarController {
     final local = File('../.venv/bin/python');
     if (local.existsSync()) return local.path;
     return Platform.isWindows ? 'python' : 'python3';
+  }
+
+  File? _findBundledSidecarExecutable() {
+    final executableName = Platform.isWindows ? 'inkmoment-sidecar.exe' : 'inkmoment-sidecar';
+    final executable = File(Platform.resolvedExecutable).absolute;
+    final executableDir = executable.parent;
+    final candidates = <File>[
+      File('${executableDir.path}/inkmoment-runtime/binaries/inkmoment-sidecar/$executableName'),
+      File('${executableDir.parent.path}/Resources/inkmoment-runtime/binaries/inkmoment-sidecar/$executableName'),
+      File('${Directory.current.path}/inkmoment-runtime/binaries/inkmoment-sidecar/$executableName'),
+    ];
+    for (final candidate in candidates) {
+      if (candidate.existsSync()) return candidate.absolute;
+    }
+    return null;
   }
 
   File? _findAppPy() {

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -19,14 +20,14 @@ def run(cmd: list[str]) -> None:
 
 
 def has_local_dmg() -> bool:
-    return any((ROOT / "src-tauri" / "target").glob("**/bundle/dmg/*.dmg"))
+    return any((ROOT / "dist" / "flutter-desktop" / "macos" / "release").glob("*.dmg"))
 
 
 def local_dmg_profile() -> str | None:
-    target = ROOT / "src-tauri" / "target"
-    if any(target.glob("release/bundle/dmg/*.dmg")):
+    target = ROOT / "dist" / "flutter-desktop" / "macos"
+    if any((target / "release").glob("*.dmg")):
         return "release"
-    if any(target.glob("debug/bundle/dmg/*.dmg")):
+    if any((target / "debug").glob("*.dmg")):
         return "debug"
     return None
 
@@ -41,10 +42,20 @@ def python_executable() -> str:
     return sys.executable
 
 
+def flutter_platform() -> str:
+    if sys.platform == "darwin":
+        return "macos"
+    if sys.platform == "win32":
+        return "windows"
+    return "linux"
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Check the local desktop release path.")
     parser.add_argument("--skip-tests", action="store_true", help="Skip Python unittest discovery.")
-    parser.add_argument("--skip-frontend", action="store_true", help="Skip the Vue production build.")
+    parser.add_argument("--skip-flutter", action="store_true", help="Skip Flutter desktop source/build checks.")
+    parser.add_argument("--legacy-frontend", action="store_true", help="Also run the legacy Vue production build.")
+    parser.add_argument("--skip-frontend", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument(
         "--skip-artifact",
         action="store_true",
@@ -67,11 +78,17 @@ def main() -> int:
             "scripts/audit_desktop_goal.py",
             "scripts/check_desktop_release.py",
             "scripts/run_desktop_release_workflow.py",
+            "scripts/check_flutter_desktop.py",
         ]
     )
     if not args.skip_tests:
         run([python, "-m", "unittest", "discover", "-s", "tests", "-p", "test_*.py"])
-    if not args.skip_frontend:
+    if not args.skip_flutter:
+        if shutil.which("flutter"):
+            run([python, "scripts/check_flutter_desktop.py", "--platform", flutter_platform(), "--build"])
+        else:
+            print("flutter 命令不存在；跳过本机 Flutter 检查。请在京东云构建机运行 check_flutter_desktop.py。")
+    if args.legacy_frontend and not args.skip_frontend:
         run(["npm", "run", "frontend:build"])
 
     run([python, "scripts/audit_desktop_goal.py"])

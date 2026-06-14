@@ -253,8 +253,8 @@ function saveDismissedNotices(values) {
 
   <Teleport to="body">
     <div v-if="authOpen" class="client-dialog-backdrop" role="dialog" aria-modal="true">
-      <section class="client-dialog auth-dialog-panel">
-        <header class="client-dialog-head">
+      <section class="client-dialog auth-dialog-panel auth-gate-dialog">
+        <div class="auth-dialog-sidebar">
           <div class="auth-brand">
             <span class="brand-mark" aria-hidden="true"></span>
             <div>
@@ -262,32 +262,40 @@ function saveDismissedNotices(values) {
               <h2>{{ dialogTitle }}</h2>
             </div>
           </div>
-          <button
-            v-if="canCloseAuthDialog"
-            class="btn-ghost"
-            type="button"
-            @click="closeAuthDialog"
-          >
-            稍后再说
-          </button>
-        </header>
 
-        <div v-if="!auth.configured.value" class="auth-warning">
-          <strong>授权服务不可用</strong>
-          <span>请联系管理员检查客户端授权服务器配置。</span>
-        </div>
-
-        <div class="auth-flow-grid">
-          <div
-            v-for="item in authStageItems"
-            :key="item.label"
-            class="auth-flow-item"
-            :class="`is-${item.state}`"
-          >
-            <span>{{ item.label }}</span>
-            <strong>{{ item.value }}</strong>
+          <div class="auth-flow-grid auth-dialog-flow">
+            <div
+              v-for="item in authStageItems"
+              :key="item.label"
+              class="auth-flow-item"
+              :class="`is-${item.state}`"
+            >
+              <span>{{ item.label }}</span>
+              <strong>{{ item.value }}</strong>
+            </div>
           </div>
         </div>
+
+        <div class="auth-dialog-main">
+          <header class="client-dialog-head">
+            <div>
+              <p class="eyebrow">InkMoment 授权</p>
+              <h2>{{ dialogTitle }}</h2>
+            </div>
+            <button
+              v-if="canCloseAuthDialog"
+              class="btn-ghost"
+              type="button"
+              @click="closeAuthDialog"
+            >
+              稍后再说
+            </button>
+          </header>
+
+          <div v-if="!auth.configured.value" class="auth-warning">
+            <strong>授权服务不可用</strong>
+            <span>请联系管理员检查客户端授权服务器配置。</span>
+          </div>
 
         <form v-if="authPanel === 'account'" class="auth-form" @submit.prevent="submitAccount">
           <div class="auth-tabs">
@@ -444,8 +452,31 @@ function saveDismissedNotices(values) {
           </div>
         </section>
 
-        <p v-if="auth.message.value" class="start-note">{{ auth.message.value }}</p>
-        <p v-if="auth.error.value" class="form-error">{{ auth.error.value }}</p>
+          <p v-if="auth.message.value" class="start-note">{{ auth.message.value }}</p>
+          <p v-if="auth.error.value" class="form-error">{{ auth.error.value }}</p>
+        </div>
+
+        <aside class="auth-dialog-inspector">
+          <section class="inspector-card inspector-status-card">
+            <p class="eyebrow">会话状态</p>
+            <h2>{{ auth.reasonText.value }}</h2>
+            <p>{{ auth.connectionText.value }}</p>
+          </section>
+          <section class="inspector-card auth-meta-grid auth-inspector-meta">
+            <div>
+              <span>到期时间</span>
+              <strong>{{ expiresText }}</strong>
+            </div>
+            <div>
+              <span>本机设备</span>
+              <strong>{{ deviceName }}</strong>
+            </div>
+            <div>
+              <span>最近检查</span>
+              <strong>{{ lastCheckedText }}</strong>
+            </div>
+          </section>
+        </aside>
       </section>
     </div>
 

@@ -181,113 +181,123 @@ onBeforeUnmount(() => {
       :summary-detail="status?.folder || '等待分组'"
     />
 
-    <section class="studio-main flow-main">
+    <section class="studio-main flow-main flow-main-stack">
       <StatusBadge :label="statusLabel" :state="statusState" />
 
-      <header class="arena-topbar">
-      <div>
-        <p class="eyebrow">人工选片</p>
-        <h1>{{ title }}</h1>
-        <p class="arena-folder">{{ status?.folder }}</p>
-      </div>
-      <div class="arena-actions">
+      <header class="arena-topbar flow-hero">
+        <div>
+          <p class="eyebrow">Compare Arena</p>
+          <h1>{{ title }}</h1>
+          <p class="arena-folder">{{ status?.folder }}</p>
+        </div>
+      </header>
+
+      <ErrorPanel title="选片操作失败" :message="error" />
+
+      <section v-if="done" class="arena-empty">
+        <span>选片已经完成。</span>
+        <button class="btn-primary" type="button" @click="emit('done')">查看结果</button>
+      </section>
+      <LoadingState
+        v-else-if="loading"
+        title="正在读取当前组"
+        description="正在准备下一组需要人工判断的照片。"
+      />
+      <section v-else-if="!group" class="arena-empty">
+        暂时没有可选的分组。
+      </section>
+      <ArenaStage
+        v-else
+        :group="group"
+        :left-meta="leftMeta"
+        :right-meta="rightMeta"
+        :disable-actions="disableActions"
+        :is-single-review="isSingleReview"
+        @choose-left="chooseLeft"
+        @choose-right="chooseRight"
+        @zoom="openZoom"
+      />
+
+      <section v-if="group?.members?.length" class="arena-strip">
+        <article
+          v-for="member in group.members"
+          :key="member.path"
+          class="strip-cell"
+          :class="`strip-${member.status}`"
+          :title="member.name"
+        >
+          <img :src="imageUrl(member.path, 160)" :alt="member.name" loading="lazy">
+        </article>
+      </section>
+
+      <Teleport to="body">
+        <ArenaZoomOverlay
+          v-if="zoomTarget && zoomedPath"
+          :target="zoomTarget"
+          :path="zoomedPath"
+          :name="zoomedName"
+          :scale="zoomScale"
+          @close="closeZoom"
+          @set-scale="setZoom"
+        />
+      </Teleport>
+    </section>
+
+    <aside class="studio-inspector flow-inspector arena-inspector">
+      <section class="inspector-card inspector-status-card">
+        <p class="eyebrow">当前擂台</p>
+        <h2>{{ statusLabel }}</h2>
+        <p>{{ status?.folder || '等待分组' }}</p>
+      </section>
+
+      <ArenaProgress
+        class="inspector-card"
+        :status="status"
+        :group="group"
+        :overall-percent="overallPercent"
+        :group-percent="groupPercent"
+      />
+
+      <section v-if="group && !done" class="inspector-card arena-command-bar inspector-actions">
+        <button class="btn-ghost" type="button" :disabled="disableActions || (!isSingleReview && !group.right)" @click="choose('neither')">
+          {{ isSingleReview ? "保留这张" : "都保留" }}
+        </button>
+        <button class="btn-ghost" type="button" :disabled="disableActions" @click="choose('both')">
+          {{ isSingleReview ? "放手这张" : "都放手" }}
+        </button>
+        <button class="btn-ghost" type="button" :disabled="disableActions || !canSkip" @click="skip">
+          {{ skipHint }}
+        </button>
+        <button class="btn-ghost" type="button" :disabled="disableActions || !canUndo" @click="undo">
+          撤销
+        </button>
+      </section>
+
+      <section class="inspector-card inspector-actions">
         <button class="btn-ghost" type="button" :disabled="returningHome" @click="emit('back-home')">
           {{ returningHome ? "返回中" : "回首页" }}
         </button>
         <button class="btn-ghost" type="button" :disabled="loading || busy" @click="load">刷新</button>
-      </div>
-    </header>
+      </section>
 
-    <ArenaProgress
-      :status="status"
-      :group="group"
-      :overall-percent="overallPercent"
-      :group-percent="groupPercent"
-    />
-
-    <ErrorPanel title="选片操作失败" :message="error" />
-
-    <section v-if="done" class="arena-empty">
-      <span>选片已经完成。</span>
-      <button class="btn-primary" type="button" @click="emit('done')">查看结果</button>
-    </section>
-    <LoadingState
-      v-else-if="loading"
-      title="正在读取当前组"
-      description="正在准备下一组需要人工判断的照片。"
-    />
-    <section v-else-if="!group" class="arena-empty">
-      暂时没有可选的分组。
-    </section>
-    <ArenaStage
-      v-else
-      :group="group"
-      :left-meta="leftMeta"
-      :right-meta="rightMeta"
-      :disable-actions="disableActions"
-      :is-single-review="isSingleReview"
-      @choose-left="chooseLeft"
-      @choose-right="chooseRight"
-      @zoom="openZoom"
-    />
-
-    <section v-if="group && !done" class="arena-command-bar">
-      <button class="btn-ghost" type="button" :disabled="disableActions || (!isSingleReview && !group.right)" @click="choose('neither')">
-        {{ isSingleReview ? "保留这张" : "都保留" }}
-      </button>
-      <button class="btn-ghost" type="button" :disabled="disableActions" @click="choose('both')">
-        {{ isSingleReview ? "放手这张" : "都放手" }}
-      </button>
-      <button class="btn-ghost" type="button" :disabled="disableActions || !canSkip" @click="skip">
-        {{ skipHint }}
-      </button>
-      <button class="btn-ghost" type="button" :disabled="disableActions || !canUndo" @click="undo">
-        撤销
-      </button>
-    </section>
-
-    <section v-if="group && !done" class="arena-shortcuts">
-      <template v-if="isSingleReview">
-        <span>←/→ 保留</span>
-        <span>B/N 放手</span>
-        <span>S 稍后</span>
-        <span>U 撤销</span>
-        <span>1 放大</span>
-      </template>
-      <template v-else>
-        <span>←/L 留左</span>
-        <span>→/R 留右</span>
-        <span>B 都保留</span>
-        <span>N 都放手</span>
-        <span>S 稍后</span>
-        <span>U 撤销</span>
-        <span>1/2 放大</span>
-      </template>
-    </section>
-
-    <section v-if="group?.members?.length" class="arena-strip">
-      <article
-        v-for="member in group.members"
-        :key="member.path"
-        class="strip-cell"
-        :class="`strip-${member.status}`"
-        :title="member.name"
-      >
-        <img :src="imageUrl(member.path, 160)" :alt="member.name" loading="lazy">
-      </article>
-    </section>
-
-    <Teleport to="body">
-      <ArenaZoomOverlay
-        v-if="zoomTarget && zoomedPath"
-        :target="zoomTarget"
-        :path="zoomedPath"
-        :name="zoomedName"
-        :scale="zoomScale"
-        @close="closeZoom"
-        @set-scale="setZoom"
-      />
-      </Teleport>
-    </section>
+      <section v-if="group && !done" class="inspector-card arena-shortcuts">
+        <template v-if="isSingleReview">
+          <span>←/→ 保留</span>
+          <span>B/N 放手</span>
+          <span>S 稍后</span>
+          <span>U 撤销</span>
+          <span>1 放大</span>
+        </template>
+        <template v-else>
+          <span>←/L 留左</span>
+          <span>→/R 留右</span>
+          <span>B 都保留</span>
+          <span>N 都放手</span>
+          <span>S 稍后</span>
+          <span>U 撤销</span>
+          <span>1/2 放大</span>
+        </template>
+      </section>
+    </aside>
   </main>
 </template>

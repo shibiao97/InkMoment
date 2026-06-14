@@ -85,16 +85,97 @@ onMounted(loadPage);
       :summary-detail="status?.folder || '等待结果'"
     />
 
-    <section class="studio-main flow-main">
+    <section class="studio-main flow-main flow-main-stack">
       <StatusBadge :label="statusLabel" :state="statusState" />
 
-      <header class="done-topbar">
-      <div>
-        <p class="eyebrow">完成</p>
-        <h1>这些是你留下的。</h1>
-        <p class="done-subtitle">{{ subtitle }}</p>
-      </div>
-      <div class="done-actions">
+      <header class="done-topbar flow-hero">
+        <div>
+          <p class="eyebrow">Export Winners</p>
+          <h1>这些是你留下的。</h1>
+          <p class="done-subtitle">{{ subtitle }}</p>
+        </div>
+      </header>
+
+      <section class="done-hero-panel">
+        <strong>{{ total.toLocaleString() }}</strong>
+        <span>→</span>
+        <strong class="accent">{{ kept.toLocaleString() }}</strong>
+      </section>
+
+      <section class="done-stats-grid">
+        <div>
+          <strong>{{ kept.toLocaleString() }}</strong>
+          <span>胜出</span>
+        </div>
+        <div>
+          <strong>{{ rejected.toLocaleString() }}</strong>
+          <span>放手</span>
+        </div>
+        <div>
+          <strong>{{ status?.multi_groups || 0 }}</strong>
+          <span>连拍组</span>
+        </div>
+        <div>
+          <strong>{{ skipped.length }}</strong>
+          <span>无法读取</span>
+        </div>
+      </section>
+
+      <ErrorPanel title="结果读取失败" :message="error" />
+
+      <DoneWatermarkPanel :watermark="watermark" :can-watermark="canWatermark" />
+
+      <LoadingState
+        v-if="loading"
+        title="正在读取完成结果"
+        description="正在汇总胜出照片、跳过记录和水印状态。"
+      />
+      <section v-else-if="!winners.length" class="done-empty">
+        暂时没有胜出的照片。
+      </section>
+      <DoneWinnersGrid
+        v-else
+        :winners="winners"
+        :sections="sections"
+        :reopening-group-id="reopeningGroupId"
+        @reopen="reopenGroupFromWinner"
+      />
+
+      <details v-if="skipped.length" class="done-skipped">
+        <summary>无法读取的照片（{{ skipped.length }}）</summary>
+        <ul>
+          <li v-for="item in skipped.slice(-50).reverse()" :key="`${item.path}-${item.reason}`">
+            <span>{{ item.path.split(/[\\/]/).pop() }}</span>
+            <code>{{ item.reason }}</code>
+          </li>
+        </ul>
+      </details>
+    </section>
+
+    <aside class="studio-inspector flow-inspector done-inspector">
+      <section class="inspector-card inspector-status-card">
+        <p class="eyebrow">导出状态</p>
+        <h2>{{ statusLabel }}</h2>
+        <p>{{ subtitle }}</p>
+      </section>
+
+      <section class="inspector-card done-paths-vue compact-paths">
+        <div>
+          <span>胜出</span>
+          <code>{{ winnersPath }}</code>
+        </div>
+        <div>
+          <span>淘汰</span>
+          <code>{{ losersPath }}</code>
+        </div>
+      </section>
+
+      <section v-if="hasUnfinished" class="inspector-card unfinished-notice-vue">
+        <span>{{ status.unfinished_groups }} 组之前跳过了。</span>
+        <button class="btn-primary" type="button" @click="emit('continue-arena')">回去处理</button>
+      </section>
+
+      <section class="inspector-card inspector-actions">
         <button class="btn-ghost" type="button" :disabled="opening" @click="openOutputFolder">
           {{ opening ? "打开中" : "打开文件夹" }}
         </button>
@@ -117,79 +198,13 @@ onMounted(loadPage);
         <button class="btn-ghost" type="button" :disabled="returningHome" @click="emit('back-home')">
           {{ returningHome ? "返回中" : "回首页" }}
         </button>
-      </div>
-    </header>
+      </section>
 
-    <section class="done-hero-panel">
-      <strong>{{ total.toLocaleString() }}</strong>
-      <span>→</span>
-      <strong class="accent">{{ kept.toLocaleString() }}</strong>
-    </section>
-
-    <section class="done-stats-grid">
-      <div>
-        <strong>{{ kept.toLocaleString() }}</strong>
-        <span>胜出</span>
-      </div>
-      <div>
-        <strong>{{ rejected.toLocaleString() }}</strong>
-        <span>放手</span>
-      </div>
-      <div>
-        <strong>{{ status?.multi_groups || 0 }}</strong>
-        <span>连拍组</span>
-      </div>
-      <div>
-        <strong>{{ skipped.length }}</strong>
-        <span>无法读取</span>
-      </div>
-    </section>
-
-    <ErrorPanel title="结果读取失败" :message="error" />
-
-    <section class="done-paths-vue">
-      <div>
-        <span>胜出</span>
-        <code>{{ winnersPath }}</code>
-      </div>
-      <div>
-        <span>淘汰</span>
-        <code>{{ losersPath }}</code>
-      </div>
-    </section>
-
-    <section v-if="hasUnfinished" class="unfinished-notice-vue">
-      <span>{{ status.unfinished_groups }} 组之前跳过了。</span>
-      <button class="btn-primary" type="button" @click="emit('continue-arena')">回去处理</button>
-    </section>
-
-    <DoneWatermarkPanel :watermark="watermark" :can-watermark="canWatermark" />
-
-    <LoadingState
-      v-if="loading"
-      title="正在读取完成结果"
-      description="正在汇总胜出照片、跳过记录和水印状态。"
-    />
-    <section v-else-if="!winners.length" class="done-empty">
-      暂时没有胜出的照片。
-    </section>
-    <DoneWinnersGrid
-      v-else
-      :winners="winners"
-      :sections="sections"
-      :reopening-group-id="reopeningGroupId"
-      @reopen="reopenGroupFromWinner"
-    />
-
-    <details v-if="skipped.length" class="done-skipped">
-      <summary>无法读取的照片（{{ skipped.length }}）</summary>
-      <ul>
-        <li v-for="item in skipped.slice(-50).reverse()" :key="`${item.path}-${item.reason}`">
-          <span>{{ item.path.split(/[\\/]/).pop() }}</span>
-          <code>{{ item.reason }}</code>
-        </li>
-      </ul>
-      </details>
-    </section>
+      <section class="inspector-card inspector-note">
+        <p class="eyebrow">水印能力</p>
+        <strong>{{ canWatermark ? '可生成水印预览' : '当前不可用' }}</strong>
+        <span>{{ status?.dry_run ? '试运行结果不能导出水印。' : '水印工作区保留在中间结果区。' }}</span>
+      </section>
+    </aside>
   </main>
 </template>

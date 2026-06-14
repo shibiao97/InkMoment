@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import os
+import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -41,22 +42,25 @@ def any_artifact(pattern: str) -> bool:
     return any(ROOT.glob(pattern))
 
 
-def windows_exe_artifacts() -> list[Path]:
-    artifacts = list(ROOT.glob("src-tauri/target/release/bundle/nsis/*.exe"))
-    artifacts.extend(ROOT.glob("dist/desktop-artifacts/**/*.exe"))
-    configured = os.environ.get("INKMOMENT_WINDOWS_EXE")
+def windows_flutter_artifacts() -> list[Path]:
+    artifacts = list(ROOT.glob("dist/flutter-desktop/windows/*.zip"))
+    artifacts.extend(ROOT.glob("dist/desktop-artifacts/**/*.zip"))
+    configured = os.environ.get("INKMOMENT_WINDOWS_FLUTTER_ZIP")
     if configured:
         artifacts.append(Path(configured).expanduser())
     return [path for path in artifacts if path.exists()]
 
 
-def windows_exe_artifact_verified() -> bool:
-    for artifact in windows_exe_artifacts():
+def windows_flutter_artifact_verified() -> bool:
+    for artifact in windows_flutter_artifacts():
         try:
-            with artifact.open("rb") as handle:
-                if handle.read(2) == b"MZ":
-                    return True
-        except OSError:
+            if not zipfile.is_zipfile(artifact):
+                continue
+            with zipfile.ZipFile(artifact) as archive:
+                names = archive.namelist()
+            if any("inkmoment-runtime/binaries/inkmoment-sidecar/" in name for name in names):
+                return True
+        except (OSError, zipfile.BadZipFile):
             pass
     return False
 
@@ -122,20 +126,25 @@ def run_audit(*, completion: bool = False, require_local_artifacts: bool = True)
             "desktop release scripts present",
             exists("scripts/build_desktop_release.py")
             and exists("scripts/build_desktop_release.mjs")
+            and exists("scripts/build_tauri_desktop_release.py")
             and package_script("desktop:release:mac")
             and package_script("desktop:release:win"),
-            "npm scripts wrap the Python release builder.",
+            "npm scripts wrap the Flutter release builder; legacy Tauri builder is explicit.",
         ),
         Check(
-            "sidecar release config present",
-            exists("src-tauri/tauri.sidecar.conf.json")
-            and contains("src-tauri/tauri.sidecar.conf.json", "inkmoment-sidecar"),
-            "Tauri bundles the Python sidecar resource.",
+            "flutter desktop release is default",
+            contains("scripts/build_desktop_release.py", "desktop_flutter", "inkmoment-runtime", '"build"')
+            and contains("package.json", '"desktop:release:mac"', '"desktop:release:win"', '"desktop:release:tauri:mac"'),
+            "Default desktop release builds desktop_flutter and injects the sidecar runtime.",
         ),
         Check(
-            "windows icon resource present",
-            exists("src-tauri/icons/icon.ico") and contains("src-tauri/tauri.conf.json", "icons/icon.ico"),
-            "Windows NSIS builds have the required .ico resource for Tauri.",
+            "flutter runtime starts bundled sidecar",
+            contains(
+                "desktop_flutter/lib/src/runtime/sidecar_controller.dart",
+                "_findBundledSidecarExecutable",
+                "inkmoment-runtime/binaries/inkmoment-sidecar",
+            ),
+            "Flutter app prefers packaged sidecar before falling back to source app.py.",
         ),
         Check(
             "pyiqa package data collected",
@@ -157,7 +166,7 @@ def run_audit(*, completion: bool = False, require_local_artifacts: bool = True)
         Check(
             "workflow artifact runner present",
             exists("scripts/run_desktop_release_workflow.py")
-            and contains("scripts/run_desktop_release_workflow.py", "gh", "InkMoment-Windows-nsis"),
+            and contains("scripts/run_desktop_release_workflow.py", "gh", "InkMoment-Windows-flutter"),
             "GitHub CLI can trigger/download/verify desktop release artifacts.",
         ),
         Check(
@@ -166,21 +175,22 @@ def run_audit(*, completion: bool = False, require_local_artifacts: bool = True)
                 ".github/workflows/desktop-release.yml",
                 '"codex/**"',
                 "macos-14",
+                "subosito/flutter-action",
                 "desktop:release:mac",
-                "src-tauri/target/release/bundle/dmg/*.dmg",
+                "dist/flutter-desktop/macos/release/*.dmg",
             ),
-            "GitHub Actions can build and upload the macOS DMG.",
+            "GitHub Actions can build and upload the Flutter macOS DMG.",
         ),
         Check(
-            "windows exe build chain present",
+            "windows flutter build chain present",
             contains(
                 ".github/workflows/desktop-release.yml",
                 "windows-2022",
                 "desktop:release:win",
-                "src-tauri/target/release/bundle/nsis/*.exe",
+                "dist/flutter-desktop/windows/*.zip",
                 'INKMOMENT_PYTHON="$PY" npm run',
             ),
-            "GitHub Actions can build and upload the Windows NSIS EXE with the CI venv.",
+            "GitHub Actions can build and upload the Windows Flutter bundle with the CI venv.",
         ),
         Check(
             "refactor target documented",
@@ -193,16 +203,16 @@ def run_audit(*, completion: bool = False, require_local_artifacts: bool = True)
         checks.append(
             Check(
                 "mac release dmg artifact verified locally",
-                any_artifact("src-tauri/target/release/bundle/dmg/*.dmg"),
+                any_artifact("dist/flutter-desktop/macos/release/*.dmg"),
                 "A local release DMG artifact exists for verification.",
             )
         )
     if completion:
         checks.append(
             Check(
-                "windows exe artifact verified",
-                windows_exe_artifact_verified(),
-                "A Windows NSIS .exe artifact exists locally or via INKMOMENT_WINDOWS_EXE and has a PE header.",
+                "windows flutter artifact verified",
+                windows_flutter_artifact_verified(),
+                "A Windows Flutter zip artifact exists locally or via INKMOMENT_WINDOWS_FLUTTER_ZIP and contains sidecar runtime.",
             )
         )
     return checks

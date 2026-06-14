@@ -83,140 +83,144 @@ onMounted(load);
       :summary-detail="`${stats.restored.toLocaleString()} 张已恢复`"
     />
 
-    <section class="studio-main flow-main">
+    <section class="studio-main flow-main flow-main-stack">
       <StatusBadge :label="statusLabel" :state="statusState" />
 
-      <header class="prescreen-topbar">
-      <div>
-        <p class="eyebrow">初筛复核</p>
-        <h1>先把明显误伤的照片捞回来</h1>
-        <p class="prescreen-subtitle">
-          自动初筛只负责拦下失焦、闭眼、过曝等明显问题。你可以把想保留的照片恢复到后续分组。
-        </p>
-      </div>
-      <div class="prescreen-actions">
-        <button class="btn-ghost" type="button" :disabled="returningHome" @click="emit('back-home')">
-          {{ returningHome ? "返回中" : "回首页" }}
-        </button>
-        <button
-          class="btn-ghost"
-          type="button"
-          :disabled="loading || confirming"
-          @click="load"
+      <header class="prescreen-topbar flow-hero">
+        <div>
+          <p class="eyebrow">AI 初筛复核</p>
+          <h1>先把明显误伤的照片捞回来</h1>
+          <p class="prescreen-subtitle">
+            自动初筛只负责拦下失焦、闭眼、过曝等明显问题。你可以把想保留的照片恢复到后续分组。
+          </p>
+        </div>
+      </header>
+
+      <ErrorPanel title="读取或操作失败" :message="error" />
+
+      <LoadingState
+        v-if="loading"
+        title="正在读取初筛结果"
+        description="稍等片刻，正在整理自动放手的照片。"
+      />
+      <section v-else-if="!filteredItems.length" class="prescreen-empty">
+        当前没有需要复核的自动放手照片。
+      </section>
+      <section v-else class="prescreen-grid">
+        <article
+          v-for="item in filteredItems"
+          :key="item.key"
+          class="prescreen-card"
+          :class="{ restored: item.restored }"
         >
-          刷新
-        </button>
-      </div>
-    </header>
-
-    <section class="prescreen-summary">
-      <div>
-        <strong>{{ stats.totalPhotos.toLocaleString() }}</strong>
-        <span>本轮照片</span>
-      </div>
-      <div>
-        <strong>{{ stats.rejected.toLocaleString() }}</strong>
-        <span>初筛放手</span>
-      </div>
-      <div>
-        <strong>{{ stats.restored.toLocaleString() }}</strong>
-        <span>已恢复</span>
-      </div>
-      <div>
-        <strong>{{ stats.pending.toLocaleString() }}</strong>
-        <span>仍待确认</span>
-      </div>
-    </section>
-
-    <ErrorPanel title="读取或操作失败" :message="error" />
-
-    <section class="prescreen-confirm">
-      <div>
-        <span class="step-kind">continue</span>
-        <h2>{{ confirmTitle }}</h2>
-        <p>{{ confirmDescription }}</p>
-      </div>
-      <div v-if="grouping?.groups?.length" class="grouping-samples">
-        <article v-for="group in grouping.groups.slice(0, 4)" :key="group.id">
-          <strong>{{ group.size }}</strong>
-          <span>张 / {{ group.id }}</span>
-        </article>
-      </div>
-      <div class="prescreen-confirm-actions">
-        <button
-          class="btn-ghost"
-          type="button"
-          :disabled="!hasPending || loading || confirming"
-          @click="restoreAllPending"
-        >
-          全部保留
-        </button>
-        <button
-          v-if="grouping?.status === 'done' || (confirmResult && !confirmResult.async)"
-          class="btn-primary"
-          type="button"
-          @click="emit('continue-preview')"
-        >
-          进入分组预览
-        </button>
-        <button
-          v-else
-          class="btn-primary"
-          type="button"
-          :disabled="loading || confirming || grouping?.status === 'running'"
-          @click="confirmReview"
-        >
-          {{ confirming ? "确认中" : "确认并继续" }}
-        </button>
-      </div>
-    </section>
-
-    <nav v-if="reasonFilters.length > 1" class="reason-filters" aria-label="初筛原因">
-      <button
-        v-for="filter in reasonFilters"
-        :key="filter.id"
-        type="button"
-        class="reason-chip"
-        :class="{ active: activeReason === filter.id }"
-        @click="activeReason = filter.id"
-      >
-        <span>{{ filter.label }}</span>
-        <strong>{{ filter.count }}</strong>
-      </button>
-    </nav>
-
-    <LoadingState
-      v-if="loading"
-      title="正在读取初筛结果"
-      description="稍等片刻，正在整理自动放手的照片。"
-    />
-    <section v-else-if="!filteredItems.length" class="prescreen-empty">
-      当前没有需要复核的自动放手照片。
-    </section>
-    <section v-else class="prescreen-grid">
-      <article
-        v-for="item in filteredItems"
-        :key="item.key"
-        class="prescreen-card"
-        :class="{ restored: item.restored }"
-      >
-        <img :src="imageUrl(item.path, 520)" :alt="item.name" loading="lazy">
-        <div class="prescreen-card-body">
-          <div>
-            <h2>{{ item.name }}</h2>
-            <p>{{ item.reason }}</p>
+          <img :src="imageUrl(item.path, 520)" :alt="item.name" loading="lazy">
+          <div class="prescreen-card-body">
+            <div>
+              <h2>{{ item.name }}</h2>
+              <p>{{ item.reason }}</p>
+            </div>
+            <button
+              class="btn-ghost"
+              type="button"
+              :disabled="item.restored || isRestoring(item) || confirming"
+              @click="restoreOne(item)"
+            >
+              {{ item.restored ? "已恢复" : isRestoring(item) ? "恢复中" : "保留" }}
+            </button>
           </div>
+        </article>
+      </section>
+    </section>
+
+    <aside class="studio-inspector flow-inspector prescreen-inspector">
+      <section class="inspector-card inspector-status-card">
+        <p class="eyebrow">复核状态</p>
+        <h2>{{ statusLabel }}</h2>
+        <p>{{ confirmDescription }}</p>
+      </section>
+
+      <section class="inspector-card inspector-stat-grid">
+        <div>
+          <strong>{{ stats.totalPhotos.toLocaleString() }}</strong>
+          <span>本轮照片</span>
+        </div>
+        <div>
+          <strong>{{ stats.rejected.toLocaleString() }}</strong>
+          <span>初筛放手</span>
+        </div>
+        <div>
+          <strong>{{ stats.restored.toLocaleString() }}</strong>
+          <span>已恢复</span>
+        </div>
+        <div>
+          <strong>{{ stats.pending.toLocaleString() }}</strong>
+          <span>仍待确认</span>
+        </div>
+      </section>
+
+      <section class="inspector-card prescreen-confirm compact-confirm-card">
+        <div>
+          <span class="step-kind">continue</span>
+          <h2>{{ confirmTitle }}</h2>
+          <p>{{ confirmDescription }}</p>
+        </div>
+        <div v-if="grouping?.groups?.length" class="grouping-samples">
+          <article v-for="group in grouping.groups.slice(0, 4)" :key="group.id">
+            <strong>{{ group.size }}</strong>
+            <span>张 / {{ group.id }}</span>
+          </article>
+        </div>
+        <div class="prescreen-confirm-actions inspector-actions">
           <button
             class="btn-ghost"
             type="button"
-            :disabled="item.restored || isRestoring(item) || confirming"
-            @click="restoreOne(item)"
+            :disabled="!hasPending || loading || confirming"
+            @click="restoreAllPending"
           >
-            {{ item.restored ? "已恢复" : isRestoring(item) ? "恢复中" : "保留" }}
+            全部保留
+          </button>
+          <button
+            v-if="grouping?.status === 'done' || (confirmResult && !confirmResult.async)"
+            class="btn-primary"
+            type="button"
+            @click="emit('continue-preview')"
+          >
+            进入分组预览
+          </button>
+          <button
+            v-else
+            class="btn-primary"
+            type="button"
+            :disabled="loading || confirming || grouping?.status === 'running'"
+            @click="confirmReview"
+          >
+            {{ confirming ? "确认中" : "确认并继续" }}
           </button>
         </div>
-      </article>
       </section>
-    </section>
+
+      <nav v-if="reasonFilters.length > 1" class="inspector-card reason-filters" aria-label="初筛原因">
+        <button
+          v-for="filter in reasonFilters"
+          :key="filter.id"
+          type="button"
+          class="reason-chip"
+          :class="{ active: activeReason === filter.id }"
+          @click="activeReason = filter.id"
+        >
+          <span>{{ filter.label }}</span>
+          <strong>{{ filter.count }}</strong>
+        </button>
+      </nav>
+
+      <section class="inspector-card inspector-actions">
+        <button class="btn-ghost" type="button" :disabled="returningHome" @click="emit('back-home')">
+          {{ returningHome ? "返回中" : "回首页" }}
+        </button>
+        <button class="btn-ghost" type="button" :disabled="loading || confirming" @click="load">
+          刷新
+        </button>
+      </section>
+    </aside>
   </main>
 </template>

@@ -56,6 +56,7 @@ class InkMomentApi {
 
   Future<Map<String, dynamic>> authStatus({bool force = false}) =>
       getJson('/api/auth/status${force ? '?force=1' : ''}');
+  Future<Map<String, dynamic>> clientNotices() => getJson('/api/client_notices');
   Future<Map<String, dynamic>> login(String email, String password) =>
       postJson('/api/auth/login', {'email': email, 'password': password});
   Future<Map<String, dynamic>> register(
