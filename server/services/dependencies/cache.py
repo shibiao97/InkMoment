@@ -25,7 +25,10 @@ def bundled_resource_cache_dir() -> Path | None:
     executable = Path(sys.executable).expanduser()
     if not executable.name:
         return None
-    return executable.parent / "models"
+    parent = executable.parent
+    if not os.access(parent, os.W_OK):
+        return None
+    return parent / "models"
 
 
 def resolve_model_cache_dir(store: LocalStateStore, requested_dir: str | None = None) -> Path:

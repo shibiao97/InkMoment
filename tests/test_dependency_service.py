@@ -10,6 +10,7 @@ from server.services.dependency_service import (
     EXPERT_RUNTIME_READY_SETTING,
     DEFAULT_DOWNLOAD_CONCURRENCY,
     MODEL_CACHE_SETTING,
+    default_model_cache_dir,
     download_dependencies_payload,
     preflight_dependencies_payload,
 )
@@ -41,6 +42,28 @@ class DependencyServiceTest(unittest.TestCase):
         self.assertTrue(payload["ok"])
         self.assertFalse(payload["download_required"])
         self.assertFalse(payload["manual_required"])
+
+    def test_frozen_default_model_cache_uses_bundled_dir_when_writable(self):
+        executable = self.root / "InkMoment.app" / "Contents" / "Resources" / "inkmoment-sidecar"
+        executable.parent.mkdir(parents=True)
+        executable.write_bytes(b"sidecar")
+
+        with patch("server.services.dependencies.cache.sys.frozen", True, create=True):
+            with patch("server.services.dependencies.cache.sys.executable", str(executable)):
+                with patch("server.services.dependencies.cache.os.access", return_value=True):
+                    self.assertEqual(default_model_cache_dir(), executable.parent / "models")
+
+    def test_frozen_default_model_cache_avoids_read_only_bundled_dir(self):
+        executable = self.root / "Readonly.app" / "Contents" / "Resources" / "inkmoment-sidecar"
+        executable.parent.mkdir(parents=True)
+        executable.write_bytes(b"sidecar")
+        state_dir = self.root / "state-dir"
+
+        with patch("server.services.dependencies.cache.sys.frozen", True, create=True):
+            with patch("server.services.dependencies.cache.sys.executable", str(executable)):
+                with patch("server.services.dependencies.cache.os.access", return_value=False):
+                    with patch("server.services.dependencies.cache.default_state_dir", return_value=state_dir):
+                        self.assertEqual(default_model_cache_dir(), state_dir / "models")
 
     @patch("server.services.dependency_service._opencv_orb_error", return_value="")
     @patch("server.services.dependency_service._module_import_error", return_value="")
