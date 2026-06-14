@@ -164,6 +164,15 @@ def copy_runtime_resources(bundle_root: Path) -> None:
         executable.chmod(0o755)
 
 
+def ad_hoc_codesign_macos_app(app_bundle: Path) -> None:
+    if sys.platform != "darwin":
+        return
+    codesign = shutil.which("codesign")
+    if not codesign:
+        raise SystemExit("Cannot find codesign to seal the macOS .app after injecting runtime resources.")
+    run([codesign, "--force", "--deep", "--sign", "-", str(app_bundle)])
+
+
 def cleanup_generated_sidecar_staging() -> None:
     shutil.rmtree(SIDECAR_RESOURCE_DIR, ignore_errors=True)
     shutil.rmtree(ROOT / "build" / "inkmoment-sidecar", ignore_errors=True)
@@ -193,6 +202,7 @@ def copy_artifact(platform_name: str, bundle: str, *, cleanup_sidecar_staging: b
     if platform_name == "macos":
         app = find_macos_app()
         copy_runtime_resources(app / "Contents" / "Resources")
+        ad_hoc_codesign_macos_app(app)
         copied_app = out_dir / app.name
         shutil.copytree(app, copied_app, symlinks=True)
         if bundle == "dmg":

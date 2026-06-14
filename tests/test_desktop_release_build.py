@@ -394,11 +394,69 @@ class DesktopReleaseBuildTest(unittest.TestCase):
             with patch.object(build_desktop_release, "PLATFORM_BUILD_DIR", {"macos": release_dir}):
                 with patch.object(build_desktop_release, "DIST_DIR", root / "dist" / "flutter-desktop"):
                     with patch.object(build_desktop_release, "SIDECAR_RESOURCE_DIR", sidecar):
-                        with patch.object(build_desktop_release, "build_macos_dmg", side_effect=fake_dmg):
-                            artifacts = build_desktop_release.copy_artifact("macos", "dmg")
+                        with patch.object(build_desktop_release, "ad_hoc_codesign_macos_app"):
+                            with patch.object(build_desktop_release, "build_macos_dmg", side_effect=fake_dmg):
+                                artifacts = build_desktop_release.copy_artifact("macos", "dmg")
 
             self.assertEqual(len(artifacts), 1)
             self.assertTrue(calls[0][2])
+
+    def test_copy_artifact_codesigns_macos_app_after_runtime_injection(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            release_dir = root / "desktop_flutter" / "build" / "macos" / "Build" / "Products" / "Release"
+            app_bundle = release_dir / "InkMoment.app"
+            resources = app_bundle / "Contents" / "Resources"
+            resources.mkdir(parents=True)
+            sidecar = root / "src-tauri" / "binaries" / "inkmoment-sidecar"
+            sidecar.mkdir(parents=True)
+            (sidecar / "inkmoment-sidecar").write_bytes(b"sidecar")
+            calls = []
+
+            def fake_codesign(app):
+                runtime = app / "Contents" / "Resources" / "inkmoment-runtime"
+                calls.append(("codesign", runtime.exists()))
+
+            def fake_dmg(app, out_dir):
+                calls.append(("dmg", app.name, out_dir.name))
+                artifact = out_dir / "InkMoment.dmg"
+                artifact.write_bytes(b"dmg")
+                return artifact
+
+            with patch.object(build_desktop_release, "PLATFORM_BUILD_DIR", {"macos": release_dir}):
+                with patch.object(build_desktop_release, "DIST_DIR", root / "dist" / "flutter-desktop"):
+                    with patch.object(build_desktop_release, "SIDECAR_RESOURCE_DIR", sidecar):
+                        with patch.object(
+                            build_desktop_release,
+                            "ad_hoc_codesign_macos_app",
+                            side_effect=fake_codesign,
+                        ):
+                            with patch.object(build_desktop_release, "build_macos_dmg", side_effect=fake_dmg):
+                                artifacts = build_desktop_release.copy_artifact("macos", "dmg")
+
+            self.assertEqual(len(artifacts), 1)
+            self.assertEqual(calls[0], ("codesign", True))
+            self.assertEqual(calls[1][0], "dmg")
+
+    def test_ad_hoc_codesign_macos_app_invokes_codesign_on_darwin(self):
+        calls = []
+
+        with patch.object(build_desktop_release.sys, "platform", "darwin"):
+            with patch.object(build_desktop_release.shutil, "which", return_value="/usr/bin/codesign"):
+                with patch.object(build_desktop_release, "run", side_effect=lambda cmd: calls.append(cmd)):
+                    build_desktop_release.ad_hoc_codesign_macos_app(Path("/tmp/InkMoment.app"))
+
+        self.assertEqual(
+            calls,
+            [["/usr/bin/codesign", "--force", "--deep", "--sign", "-", "/tmp/InkMoment.app"]],
+        )
+
+    def test_ad_hoc_codesign_macos_app_skips_non_darwin(self):
+        with patch.object(build_desktop_release.sys, "platform", "linux"):
+            with patch.object(build_desktop_release, "run") as run_mock:
+                build_desktop_release.ad_hoc_codesign_macos_app(Path("/tmp/InkMoment.app"))
+
+        run_mock.assert_not_called()
 
     def test_legacy_build_macos_dmg_restores_sidecar_before_codesigning(self):
         args = SimpleNamespace(debug=False, target=None)
@@ -498,6 +556,65 @@ class DesktopReleaseBuildTest(unittest.TestCase):
                     skip_native_check=True,
                 )
             self.assertIn("does not contain the bundled sidecar runtime", str(raised.exception))
+
+    def test_verify_macos_app_bundle_accepts_flutter_app_with_sidecar(self):
+        with tempfile.TemporaryDirectory() as folder:
+            app = Path(folder) / "InkMoment.app"
+            (app / "Contents" / "MacOS").mkdir(parents=True)
+            (app / "Contents" / "MacOS" / "InkMoment").write_bytes(b"app")
+            (app / "Contents" / "Frameworks" / "FlutterMacOS.framework").mkdir(parents=True)
+            (app / "Contents" / "Frameworks" / "App.framework").mkdir(parents=True)
+            (app / "Contents" / "Resources" / "inkmoment-runtime" / "binaries" / "inkmoment-sidecar").mkdir(
+                parents=True
+            )
+
+            verify_desktop_release.check_macos_app_bundle(app)
+
+    def test_verify_macos_app_bundle_rejects_missing_flutter_framework(self):
+        with tempfile.TemporaryDirectory() as folder:
+            app = Path(folder) / "InkMoment.app"
+            (app / "Contents" / "MacOS").mkdir(parents=True)
+            (app / "Contents" / "MacOS" / "InkMoment").write_bytes(b"app")
+
+            with self.assertRaises(SystemExit) as raised:
+                verify_desktop_release.check_macos_app_bundle(app)
+
+            self.assertIn("does not look like Flutter Desktop", str(raised.exception))
+
+    def test_check_macos_dmg_mounts_and_verifies_app_signature(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            dmg = root / "InkMoment.dmg"
+            dmg.write_bytes(b"dmg")
+            calls = []
+
+            def fake_run(cmd, **kwargs):
+                calls.append(cmd)
+                if cmd[1] == "attach":
+                    mount_point = Path(cmd[cmd.index("-mountpoint") + 1])
+                    app = mount_point / "InkMoment.app"
+                    (app / "Contents" / "MacOS").mkdir(parents=True)
+                    (app / "Contents" / "MacOS" / "InkMoment").write_bytes(b"app")
+                    (app / "Contents" / "Frameworks" / "FlutterMacOS.framework").mkdir(parents=True)
+                    (app / "Contents" / "Frameworks" / "App.framework").mkdir(parents=True)
+                    (
+                        app
+                        / "Contents"
+                        / "Resources"
+                        / "inkmoment-runtime"
+                        / "binaries"
+                        / "inkmoment-sidecar"
+                    ).mkdir(parents=True)
+
+            with patch.object(verify_desktop_release.sys, "platform", "darwin"):
+                with patch.object(verify_desktop_release.shutil, "which", side_effect=["/usr/bin/hdiutil", "/usr/bin/codesign"]):
+                    with patch.object(verify_desktop_release.subprocess, "run", side_effect=fake_run):
+                        verify_desktop_release.check_macos_dmg(dmg, skip_native_check=False)
+
+            self.assertEqual(calls[0][:2], ["/usr/bin/hdiutil", "imageinfo"])
+            self.assertEqual(calls[1][:2], ["/usr/bin/hdiutil", "attach"])
+            self.assertEqual(calls[2][:2], ["/usr/bin/codesign", "--verify"])
+            self.assertEqual(calls[3][:2], ["/usr/bin/hdiutil", "detach"])
 
     def test_verify_main_accepts_explicit_nsis_artifact_on_any_host(self):
         with tempfile.TemporaryDirectory() as folder:

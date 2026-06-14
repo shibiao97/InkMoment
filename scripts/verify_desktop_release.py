@@ -7,6 +7,7 @@ import argparse
 import shutil
 import subprocess
 import sys
+import tempfile
 import zipfile
 from pathlib import Path
 
@@ -54,6 +55,28 @@ def check_flutter_bundle_dir(path: Path) -> None:
         raise SystemExit(f"Flutter bundle does not contain the sidecar runtime: {runtime}")
 
 
+def check_macos_app_bundle(path: Path) -> None:
+    if not path.is_dir():
+        raise SystemExit(f"macOS artifact does not contain an .app bundle: {path}")
+    executable_dir = path / "Contents" / "MacOS"
+    if not executable_dir.is_dir() or not any(executable_dir.iterdir()):
+        raise SystemExit(f"macOS .app bundle does not contain an executable: {executable_dir}")
+    flutter_framework = path / "Contents" / "Frameworks" / "FlutterMacOS.framework"
+    app_framework = path / "Contents" / "Frameworks" / "App.framework"
+    if not flutter_framework.exists() or not app_framework.exists():
+        raise SystemExit(f"macOS .app bundle does not look like Flutter Desktop: {path}")
+    runtime = path / "Contents" / "Resources" / "inkmoment-runtime" / "binaries" / "inkmoment-sidecar"
+    if not runtime.exists():
+        raise SystemExit(f"macOS .app bundle does not contain the sidecar runtime: {runtime}")
+
+
+def verify_macos_app_signature(path: Path) -> None:
+    codesign = shutil.which("codesign")
+    if not codesign:
+        raise SystemExit("Cannot find codesign to verify the macOS .app.")
+    subprocess.run([codesign, "--verify", "--deep", "--strict", "--verbose=2", str(path)], check=True)
+
+
 def check_macos_dmg(path: Path, *, skip_native_check: bool) -> None:
     if skip_native_check or sys.platform != "darwin":
         return
@@ -61,6 +84,33 @@ def check_macos_dmg(path: Path, *, skip_native_check: bool) -> None:
     if not hdiutil:
         raise SystemExit("Cannot find hdiutil to verify the macOS DMG.")
     subprocess.run([hdiutil, "imageinfo", str(path)], check=True, stdout=subprocess.DEVNULL)
+    with tempfile.TemporaryDirectory(prefix="inkmoment-dmg-verify-") as folder:
+        mount_point = Path(folder) / "mount"
+        mount_point.mkdir()
+        attached = False
+        try:
+            subprocess.run(
+                [
+                    hdiutil,
+                    "attach",
+                    "-nobrowse",
+                    "-readonly",
+                    "-mountpoint",
+                    str(mount_point),
+                    str(path),
+                ],
+                check=True,
+                stdout=subprocess.DEVNULL,
+            )
+            attached = True
+            apps = sorted(mount_point.glob("*.app"))
+            if not apps:
+                raise SystemExit(f"macOS DMG does not contain an .app bundle: {path}")
+            check_macos_app_bundle(apps[0])
+            verify_macos_app_signature(apps[0])
+        finally:
+            if attached:
+                subprocess.run([hdiutil, "detach", str(mount_point)], check=False, stdout=subprocess.DEVNULL)
 
 
 def verify_artifact(path: Path, bundle: str, *, min_bytes: int, skip_native_check: bool) -> None:
