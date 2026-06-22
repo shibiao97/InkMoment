@@ -1,5 +1,6 @@
 import json
 import importlib.util
+import plistlib
 import sys
 import tempfile
 import unittest
@@ -18,6 +19,20 @@ from scripts import (
 
 
 class DesktopReleaseBuildTest(unittest.TestCase):
+    def _write_macos_info_plist(self, app: Path, *, bundle_id: str | None = None, name: str | None = None) -> None:
+        plist = app / "Contents" / "Info.plist"
+        plist.parent.mkdir(parents=True, exist_ok=True)
+        plist.write_bytes(
+            plistlib.dumps(
+                {
+                    "CFBundleExecutable": "InkMoment",
+                    "CFBundleIdentifier": bundle_id or build_desktop_release.MACOS_BUNDLE_IDENTIFIER,
+                    "CFBundleName": name or build_desktop_release.MACOS_DISPLAY_NAME,
+                    "CFBundleDisplayName": name or build_desktop_release.MACOS_DISPLAY_NAME,
+                }
+            )
+        )
+
     def test_resolve_bundle_uses_platform_defaults(self):
         with patch.object(build_desktop_release.sys, "platform", "darwin"):
             self.assertEqual(build_desktop_release.resolve_bundle("auto"), "dmg")
@@ -379,6 +394,7 @@ class DesktopReleaseBuildTest(unittest.TestCase):
             app_bundle = release_dir / "InkMoment.app"
             resources = app_bundle / "Contents" / "Resources"
             resources.mkdir(parents=True)
+            self._write_macos_info_plist(app_bundle, bundle_id="com.example.inkmomentDesktop", name="inkmoment_desktop")
             sidecar = root / "src-tauri" / "binaries" / "inkmoment-sidecar"
             sidecar.mkdir(parents=True)
             (sidecar / "inkmoment-sidecar").write_bytes(b"sidecar")
@@ -400,6 +416,10 @@ class DesktopReleaseBuildTest(unittest.TestCase):
 
             self.assertEqual(len(artifacts), 1)
             self.assertTrue(calls[0][2])
+            self.assertEqual(calls[0][0].name, build_desktop_release.MACOS_APP_BUNDLE_NAME)
+            info = plistlib.loads((calls[0][0] / "Contents" / "Info.plist").read_bytes())
+            self.assertEqual(info["CFBundleIdentifier"], build_desktop_release.MACOS_BUNDLE_IDENTIFIER)
+            self.assertEqual(info["CFBundleName"], build_desktop_release.MACOS_DISPLAY_NAME)
 
     def test_copy_artifact_codesigns_macos_app_after_runtime_injection(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -408,6 +428,7 @@ class DesktopReleaseBuildTest(unittest.TestCase):
             app_bundle = release_dir / "InkMoment.app"
             resources = app_bundle / "Contents" / "Resources"
             resources.mkdir(parents=True)
+            self._write_macos_info_plist(app_bundle, bundle_id="com.example.inkmomentDesktop", name="inkmoment_desktop")
             sidecar = root / "src-tauri" / "binaries" / "inkmoment-sidecar"
             sidecar.mkdir(parents=True)
             (sidecar / "inkmoment-sidecar").write_bytes(b"sidecar")
@@ -436,7 +457,7 @@ class DesktopReleaseBuildTest(unittest.TestCase):
 
             self.assertEqual(len(artifacts), 1)
             self.assertEqual(calls[0], ("codesign", True))
-            self.assertEqual(calls[1][0], "dmg")
+            self.assertEqual(calls[1], ("dmg", build_desktop_release.MACOS_APP_BUNDLE_NAME, "release"))
 
     def test_ad_hoc_codesign_macos_app_invokes_codesign_on_darwin(self):
         calls = []
@@ -559,7 +580,8 @@ class DesktopReleaseBuildTest(unittest.TestCase):
 
     def test_verify_macos_app_bundle_accepts_flutter_app_with_sidecar(self):
         with tempfile.TemporaryDirectory() as folder:
-            app = Path(folder) / "InkMoment.app"
+            app = Path(folder) / build_desktop_release.MACOS_APP_BUNDLE_NAME
+            self._write_macos_info_plist(app)
             (app / "Contents" / "MacOS").mkdir(parents=True)
             (app / "Contents" / "MacOS" / "InkMoment").write_bytes(b"app")
             (app / "Contents" / "Frameworks" / "FlutterMacOS.framework").mkdir(parents=True)
@@ -570,9 +592,32 @@ class DesktopReleaseBuildTest(unittest.TestCase):
 
             verify_desktop_release.check_macos_app_bundle(app)
 
+    def test_verify_macos_app_bundle_rejects_wrong_install_identity(self):
+        with tempfile.TemporaryDirectory() as folder:
+            app = Path(folder) / "inkmoment_desktop.app"
+            self._write_macos_info_plist(app, bundle_id="com.example.inkmomentDesktop", name="inkmoment_desktop")
+            (app / "Contents" / "MacOS").mkdir(parents=True)
+            (app / "Contents" / "MacOS" / "InkMoment").write_bytes(b"app")
+            (app / "Contents" / "Frameworks" / "FlutterMacOS.framework").mkdir(parents=True)
+            (app / "Contents" / "Frameworks" / "App.framework").mkdir(parents=True)
+            (app / "Contents" / "Resources" / "inkmoment-runtime" / "binaries" / "inkmoment-sidecar").mkdir(
+                parents=True
+            )
+
+            with self.assertRaises(SystemExit) as raised:
+                verify_desktop_release.verify_artifact(
+                    app,
+                    "app",
+                    min_bytes=16,
+                    skip_native_check=True,
+                )
+
+            self.assertIn("wrong install name", str(raised.exception))
+
     def test_verify_macos_app_bundle_rejects_missing_flutter_framework(self):
         with tempfile.TemporaryDirectory() as folder:
-            app = Path(folder) / "InkMoment.app"
+            app = Path(folder) / build_desktop_release.MACOS_APP_BUNDLE_NAME
+            self._write_macos_info_plist(app)
             (app / "Contents" / "MacOS").mkdir(parents=True)
             (app / "Contents" / "MacOS" / "InkMoment").write_bytes(b"app")
 
@@ -592,7 +637,8 @@ class DesktopReleaseBuildTest(unittest.TestCase):
                 calls.append(cmd)
                 if cmd[1] == "attach":
                     mount_point = Path(cmd[cmd.index("-mountpoint") + 1])
-                    app = mount_point / "InkMoment.app"
+                    app = mount_point / build_desktop_release.MACOS_APP_BUNDLE_NAME
+                    self._write_macos_info_plist(app)
                     (app / "Contents" / "MacOS").mkdir(parents=True)
                     (app / "Contents" / "MacOS" / "InkMoment").write_bytes(b"app")
                     (app / "Contents" / "Frameworks" / "FlutterMacOS.framework").mkdir(parents=True)

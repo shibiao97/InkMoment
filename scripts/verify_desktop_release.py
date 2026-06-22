@@ -58,6 +58,31 @@ def check_flutter_bundle_dir(path: Path) -> None:
 def check_macos_app_bundle(path: Path) -> None:
     if not path.is_dir():
         raise SystemExit(f"macOS artifact does not contain an .app bundle: {path}")
+    if path.name != build_desktop_release.MACOS_APP_BUNDLE_NAME:
+        raise SystemExit(
+            "macOS Flutter app bundle has the wrong install name: "
+            f"{path.name} != {build_desktop_release.MACOS_APP_BUNDLE_NAME}"
+        )
+    plist_path = path / "Contents" / "Info.plist"
+    if not plist_path.exists():
+        raise SystemExit(f"macOS .app bundle does not contain Info.plist: {plist_path}")
+    try:
+        import plistlib
+
+        with plist_path.open("rb") as handle:
+            info = plistlib.load(handle)
+    except Exception as exc:
+        raise SystemExit(f"macOS .app Info.plist cannot be parsed: {plist_path}: {exc}") from exc
+    if info.get("CFBundleIdentifier") != build_desktop_release.MACOS_BUNDLE_IDENTIFIER:
+        raise SystemExit(
+            "macOS Flutter app bundle has the wrong bundle identifier: "
+            f"{info.get('CFBundleIdentifier')} != {build_desktop_release.MACOS_BUNDLE_IDENTIFIER}"
+        )
+    if info.get("CFBundleName") != build_desktop_release.MACOS_DISPLAY_NAME:
+        raise SystemExit(
+            "macOS Flutter app bundle has the wrong bundle name: "
+            f"{info.get('CFBundleName')} != {build_desktop_release.MACOS_DISPLAY_NAME}"
+        )
     executable_dir = path / "Contents" / "MacOS"
     if not executable_dir.is_dir() or not any(executable_dir.iterdir()):
         raise SystemExit(f"macOS .app bundle does not contain an executable: {executable_dir}")
@@ -121,6 +146,10 @@ def verify_artifact(path: Path, bundle: str, *, min_bytes: int, skip_native_chec
         check_windows_exe(path)
     elif bundle == "dmg":
         check_macos_dmg(path, skip_native_check=skip_native_check)
+    elif bundle == "app":
+        check_macos_app_bundle(path)
+        if not skip_native_check and sys.platform == "darwin":
+            verify_macos_app_signature(path)
     elif bundle == "zip":
         check_zip(path)
     elif bundle == "bundle":

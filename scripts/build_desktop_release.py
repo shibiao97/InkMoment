@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import plistlib
 import platform
 import shutil
 import subprocess
@@ -51,6 +52,9 @@ PLATFORM_BUILD_DIR = {
     "macos": FLUTTER_DIR / "build" / "macos" / "Build" / "Products" / "Release",
     "windows": FLUTTER_DIR / "build" / "windows" / "x64" / "runner" / "Release",
 }
+MACOS_APP_BUNDLE_NAME = "影刻.app"
+MACOS_BUNDLE_IDENTIFIER = "com.inkmoment.desktop"
+MACOS_DISPLAY_NAME = "影刻"
 
 
 def run(cmd: list[str], *, cwd: Path = ROOT, env: dict[str, str] | None = None) -> None:
@@ -130,6 +134,20 @@ def find_macos_app() -> Path:
     return apps[-1]
 
 
+def normalize_macos_app_identity(app_bundle: Path) -> None:
+    """Give the Flutter app the same installed identity as the legacy app it replaces."""
+    plist_path = app_bundle / "Contents" / "Info.plist"
+    if not plist_path.exists():
+        raise SystemExit(f"macOS .app bundle is missing Info.plist: {plist_path}")
+    with plist_path.open("rb") as handle:
+        info = plistlib.load(handle)
+    info["CFBundleIdentifier"] = MACOS_BUNDLE_IDENTIFIER
+    info["CFBundleName"] = MACOS_DISPLAY_NAME
+    info["CFBundleDisplayName"] = MACOS_DISPLAY_NAME
+    with plist_path.open("wb") as handle:
+        plistlib.dump(info, handle)
+
+
 def macos_arch_label() -> str:
     value = platform.machine().lower()
     if "aarch64" in value or "arm64" in value:
@@ -202,8 +220,9 @@ def copy_artifact(platform_name: str, bundle: str, *, cleanup_sidecar_staging: b
     if platform_name == "macos":
         app = find_macos_app()
         copy_runtime_resources(app / "Contents" / "Resources")
+        normalize_macos_app_identity(app)
         ad_hoc_codesign_macos_app(app)
-        copied_app = out_dir / app.name
+        copied_app = out_dir / MACOS_APP_BUNDLE_NAME
         shutil.copytree(app, copied_app, symlinks=True)
         if bundle == "dmg":
             return [build_macos_dmg(copied_app, out_dir)]
