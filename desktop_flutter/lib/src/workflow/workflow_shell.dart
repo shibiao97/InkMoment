@@ -37,6 +37,8 @@ class WorkflowShell extends StatefulWidget {
 class _WorkflowShellState extends State<WorkflowShell> {
   WorkflowStep _step = WorkflowStep.modeFolder;
   String _summary = Zh.quickSelection;
+  String _engineValue = 'fast';   // 实际 engine 字符串
+  String _folder = '';             // 已选照片文件夹
   String _message = '';
   bool _checking = false;
 
@@ -60,17 +62,28 @@ class _WorkflowShellState extends State<WorkflowShell> {
     if (_checking) return;
     setState(() { _checking = true; _message = '检查中…'; });
     try {
-      final auth = await widget.api.authStatus(force: true);
-      if (!mounted) return;
-      widget.onAuthChanged(auth);
-      final authorized = auth['authorized'] == true;
-      final account = auth['account']?['email']?.toString() ?? '';
-      final reason = auth['reason']?.toString() ?? '';
-      setState(() {
-        _message = authorized
-            ? '模式：$_summary\n账号：$account\n授权：有效'
-            : '模式：$_summary\n授权状态：$reason';
+      final result = await widget.api.depPreflight({
+        'engine': _engineValue,
+        'folder': _folder,
+        'include_folder': false,
       });
+      if (!mounted) return;
+      final missing = (result['missing'] as List?) ?? [];
+      final warnings = (result['warnings'] as List?) ?? [];
+      if (missing.isEmpty) {
+        setState(() => _message = '模式：$_summary\n依赖：全部就绪 ✓');
+      } else {
+        final items = missing.map((m) {
+          final label = m['label']?.toString() ?? '';
+          final detail = m['detail']?.toString() ?? '';
+          return '$label：$detail';
+        }).join('\n');
+        setState(() => _message = '模式：$_summary\n缺失依赖：\n$items');
+      }
+      if (warnings.isNotEmpty) {
+        final w = warnings.map((e) => e.toString()).join('\n');
+        setState(() => _message = '$_message\n警告：$w');
+      }
     } catch (error) {
       _handleWorkflowError(error);
     } finally {
@@ -80,18 +93,36 @@ class _WorkflowShellState extends State<WorkflowShell> {
 
   Future<void> _checkResource() async {
     if (_checking) return;
-    setState(() { _checking = true; _message = '检查中…'; });
+    setState(() { _checking = true; _message = '检查资源中…'; });
     try {
-      final status = await widget.api.getStatus();
+      // 先 preflight 看有没有缺失
+      final result = await widget.api.depPreflight({
+        'engine': _engineValue,
+        'folder': _folder,
+        'include_folder': false,
+      });
       if (!mounted) return;
-      final job = status['job'];
-      final jobStatus = job?['status']?.toString() ?? 'idle';
-      final sidecar = widget.runtime.apiBaseUrl.isNotEmpty ? '已连接 ${widget.runtime.apiBaseUrl}' : '待启动';
-      setState(() => _message = '后端：$sidecar\n任务状态：$jobStatus');
+      final missing = (result['missing'] as List?) ?? [];
+      final downloadable = missing.where((m) => m['downloadable'] == true).toList();
+
+      if (missing.isEmpty) {
+        setState(() => _message = '资源检查：全部就绪 ✓\n无需下载');
+        return;
+      }
+
+      if (downloadable.isEmpty) {
+        final items = missing.map((m) => m['label']?.toString() ?? '').join('、');
+        setState(() => _message = '缺失：$items\n需手动处理，无法自动下载');
+        return;
+      }
+
+      // 有可下载的依赖，触发下载
+      setState(() => _message = '发现 ${downloadable.length} 项可下载依赖，正在启动下载…');
+      await widget.api.depDownload({'engine': _engineValue});
+      if (!mounted) return;
+      setState(() => _message = '下载已启动，可关闭此面板等待完成后再检查');
     } catch (error) {
-      if (!mounted) return;
-      final sidecar = widget.runtime.apiBaseUrl.isNotEmpty ? '已连接' : '未启动';
-      setState(() { _message = '后端：$sidecar\n资源检查失败：${error.toString()}'; });
+      _handleWorkflowError(error);
     } finally {
       if (mounted) setState(() => _checking = false);
     }
@@ -202,10 +233,16 @@ class _WorkflowShellState extends State<WorkflowShell> {
   Widget _screen() => switch (_step) {
     WorkflowStep.modeFolder => TaskSetupScreen(
       api: widget.api,
-      onStarted: (payload) => _go(
-        WorkflowStep.analyze,
-        payload['engine_label']?.toString() ?? Zh.quickSelection,
-      ),
+      onStarted: (payload) {
+        setState(() {
+          _engineValue = payload['engine']?.toString() ?? 'fast';
+          _folder = payload['folder']?.toString() ?? '';
+        });
+        _go(
+          WorkflowStep.analyze,
+          payload['engine_label']?.toString() ?? Zh.quickSelection,
+        );
+      },
       onAuthInvalid: widget.onAuthInvalid,
     ),
     WorkflowStep.analyze => AnalysisScreen(

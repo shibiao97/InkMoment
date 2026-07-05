@@ -99,7 +99,7 @@ class _TaskSetupScreenState extends State<TaskSetupScreen> {
       };
       final payload = await widget.api.startJob(jobPayload);
       if (!mounted) return;
-      widget.onStarted({...payload, 'folder': _folder, 'engine_label': _engineLabel});
+      widget.onStarted({...payload, 'folder': _folder, 'engine_label': _engineLabel, 'engine': _engine});
     } catch (error) {
       if (!mounted) return;
       if (InkMomentApi.isAuthorizationFailure(error)) {

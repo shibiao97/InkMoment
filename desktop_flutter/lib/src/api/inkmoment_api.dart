@@ -75,6 +75,13 @@ class InkMomentApi {
     '/api/auth/device/unbind',
     {'confirm_penalty': true, 'reason': reason},
   );
+  Future<Map<String, dynamic>> depPreflight(Map<String, dynamic> payload) =>
+      postJson('/api/dependencies/preflight', payload);
+  Future<Map<String, dynamic>> depDownload(Map<String, dynamic> payload) =>
+      postJson('/api/dependencies/download', payload);
+  Future<Map<String, dynamic>> depDownloadStatus() =>
+      getJson('/api/dependencies/download/status');
+
   Future<Map<String, dynamic>> peekFolder(String folder) =>
       postJson('/api/peek_folder', {'folder': folder});
   Future<Map<String, dynamic>> startJob(Map<String, dynamic> payload) =>
