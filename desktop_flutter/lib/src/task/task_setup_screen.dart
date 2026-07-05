@@ -101,7 +101,6 @@ class _TaskSetupScreenState extends State<TaskSetupScreen> {
       if (!mounted) return;
       widget.onStarted({...payload, 'folder': _folder, 'engine_label': _engineLabel});
     } catch (error) {
-    } catch (error) {
       if (!mounted) return;
       if (InkMomentApi.isAuthorizationFailure(error)) {
         widget.onAuthInvalid(error);
