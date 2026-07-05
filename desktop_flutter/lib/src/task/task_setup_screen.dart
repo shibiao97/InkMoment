@@ -276,19 +276,46 @@ class _TaskSetupScreenState extends State<TaskSetupScreen> {
       onTap: _busy ? null : () => setState(() => _engine = value),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
-        constraints: const BoxConstraints(minHeight: 170),
-        padding: const EdgeInsets.all(24),
+        constraints: const BoxConstraints(minHeight: 140),
+        padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color: selected ? StitchColors.cardGlow : StitchColors.cardGlow,
-          border: Border.all(color: selected ? StitchColors.accentDeep : StitchColors.borderSoft, width: selected ? 2 : 1),
+          color: selected ? StitchColors.accentSoft : StitchColors.card,
+          border: Border.all(
+            color: selected ? StitchColors.accentDeep : StitchColors.borderSoft,
+            width: selected ? 2 : 1,
+          ),
           borderRadius: BorderRadius.circular(StitchRadius.sm),
+          boxShadow: selected ? StitchShadow.soft : const [],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(title, style: StitchTextStyles.sectionTitle.copyWith(fontSize: 21)),
-            const SizedBox(height: 14),
-            Text(description, style: StitchTextStyles.body.copyWith(fontSize: 16, height: 1.5)),
+            Row(
+              children: [
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
+                  width: 10,
+                  height: 10,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: selected ? StitchColors.accentDeep : StitchColors.borderSoft,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  title,
+                  style: StitchTextStyles.sectionTitle.copyWith(
+                    fontSize: 18,
+                    color: selected ? StitchColors.accentDeep : StitchColors.textPrimary,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Text(
+              description,
+              style: StitchTextStyles.body.copyWith(fontSize: 14, height: 1.5),
+            ),
           ],
         ),
       ),

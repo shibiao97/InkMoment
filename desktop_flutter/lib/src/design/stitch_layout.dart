@@ -5,8 +5,8 @@ import 'stitch_tokens.dart';
 abstract final class StitchLayout {
   static const minDesktopWidth = 980.0;
   static const maxContentWidth = 1440.0;
-  static const leftRailWidth = 238.0;
-  static const rightInspectorWidth = 294.0;
+  static const leftRailWidth = 210.0;
+  static const rightInspectorWidth = 264.0;
   static const statusBarHeight = 42.0;
   static const headerHeight = 94.0;
 
