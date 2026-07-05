@@ -274,7 +274,10 @@ def _horizon_tilt_degrees(arr: np.ndarray) -> Optional[float]:
     angles = []
     weights = []
     for ln in lines[:200]:
-        x1, y1, x2, y2 = ln[0]
+        # HoughLinesP returns (N,1,4) in older OpenCV and (N,4) in newer ones;
+        # flatten to a 1-D sequence so unpacking is version-agnostic.
+        coords = np.asarray(ln).flatten()
+        x1, y1, x2, y2 = int(coords[0]), int(coords[1]), int(coords[2]), int(coords[3])
         dx = x2 - x1
         dy = y2 - y1
         length = math.hypot(dx, dy)

@@ -188,7 +188,7 @@ def ad_hoc_codesign_macos_app(app_bundle: Path) -> None:
     codesign = shutil.which("codesign")
     if not codesign:
         raise SystemExit("Cannot find codesign to seal the macOS .app after injecting runtime resources.")
-    run([codesign, "--force", "--deep", "--sign", "-", str(app_bundle)])
+    run([codesign, "--force", "--deep", "--sign", "-", app_bundle.as_posix()])
 
 
 def cleanup_generated_sidecar_staging() -> None:
