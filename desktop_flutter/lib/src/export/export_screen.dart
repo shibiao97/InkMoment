@@ -255,7 +255,6 @@ class _ExportScreenState extends State<ExportScreen> {
           StitchSectionHeader(
             eyebrow: Zh.export,
             title: Zh.exportWinners,
-            description: Zh.operationHintText,
           ),
           const SizedBox(height: 18),
           Container(
@@ -347,7 +346,6 @@ class _ExportScreenState extends State<ExportScreen> {
           StitchSectionHeader(
             eyebrow: Zh.previewExport,
             title: Zh.previewWatermarkHint,
-            description: Zh.operationHintText,
           ),
           const SizedBox(height: 18),
           AspectRatio(

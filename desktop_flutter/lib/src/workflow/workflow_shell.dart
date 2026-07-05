@@ -202,7 +202,10 @@ class _WorkflowShellState extends State<WorkflowShell> {
   Widget _screen() => switch (_step) {
     WorkflowStep.modeFolder => TaskSetupScreen(
       api: widget.api,
-      onStarted: (payload) => _go(WorkflowStep.analyze, payload['folder']?.toString()),
+      onStarted: (payload) => _go(
+        WorkflowStep.analyze,
+        payload['engine_label']?.toString() ?? Zh.quickSelection,
+      ),
       onAuthInvalid: widget.onAuthInvalid,
     ),
     WorkflowStep.analyze => AnalysisScreen(
