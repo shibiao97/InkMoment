@@ -211,9 +211,36 @@ class SidecarController {
 
   Map<String, String> _sidecarEnvironment() {
     final env = Map<String, String>.from(Platform.environment);
+    // Forward explicit override as-is.
     final authUrl = env['INKMOMENT_AUTH_SERVER_URL'];
     if (authUrl != null && authUrl.trim().isNotEmpty) {
       env['INKMOMENT_AUTH_SERVER_URL'] = authUrl.trim();
+      return env;
+    }
+    // Fall back to the bundled inkmoment-auth.json placed next to the sidecar
+    // runtime directory.  Mirror the same candidate paths used by
+    // _findBundledSidecarExecutable() so we always find the file that belongs
+    // to the running bundle.
+    final executableDir = File(Platform.resolvedExecutable).absolute.parent;
+    final authJsonCandidates = [
+      File('${executableDir.path}/inkmoment-runtime/inkmoment-auth.json'),
+      File('${executableDir.parent.path}/Resources/inkmoment-runtime/inkmoment-auth.json'),
+      File('${Directory.current.path}/inkmoment-runtime/inkmoment-auth.json'),
+    ];
+    for (final candidate in authJsonCandidates) {
+      if (!candidate.existsSync()) continue;
+      try {
+        final raw = jsonDecode(candidate.readAsStringSync());
+        if (raw is Map<String, dynamic>) {
+          final url = raw['auth_server_url'];
+          if (url is String && url.trim().isNotEmpty) {
+            env['INKMOMENT_AUTH_SERVER_URL'] = url.trim();
+          }
+        }
+      } catch (_) {
+        // Malformed JSON – skip and leave the variable unset.
+      }
+      break;
     }
     return env;
   }
