@@ -18,11 +18,13 @@ class TaskSetupScreen extends StatefulWidget {
     super.key,
     required this.api,
     required this.onStarted,
+    required this.onSelectionChanged,
     required this.onAuthInvalid,
   });
 
   final InkMomentApi api;
   final ValueChanged<Map<String, dynamic>> onStarted;
+  final ValueChanged<Map<String, dynamic>> onSelectionChanged;
   final ValueChanged<Object> onAuthInvalid;
 
   @override
@@ -59,6 +61,20 @@ class _TaskSetupScreenState extends State<TaskSetupScreen> {
   String get _engineLabel =>
       _kModes.firstWhere((m) => m.$1 == _engine, orElse: () => _kModes[0]).$2;
 
+  String get _engineApiValue => switch (_engine) {
+    'cloud' => 'tycoon',
+    'expert' => 'expert',
+    _ => 'fast',
+  };
+
+  void _notifySelection() {
+    widget.onSelectionChanged({
+      'engine': _engineApiValue,
+      'engine_label': _engineLabel,
+      'folder': _folder,
+    });
+  }
+
   Future<void> _loadCloudConfig() async {
     try {
       final status = await widget.api.arkKeyStatus();
@@ -86,6 +102,7 @@ class _TaskSetupScreenState extends State<TaskSetupScreen> {
       _busy = true;
       _error = '';
     });
+    _notifySelection();
     try {
       final peek = await widget.api.peekFolder(path);
       if (!mounted) return;
@@ -134,7 +151,7 @@ class _TaskSetupScreenState extends State<TaskSetupScreen> {
       final jobPayload = {
         'folder': _folder,
         'mode': 'copy',
-        'engine': _engine == 'fast' ? 'fast' : 'expert',
+        'engine': _engineApiValue,
         'prescreen_enabled': true,
       };
       final payload = await widget.api.startJob(jobPayload);
@@ -143,7 +160,7 @@ class _TaskSetupScreenState extends State<TaskSetupScreen> {
         ...payload,
         'folder': _folder,
         'engine_label': _engineLabel,
-        'engine': _engine,
+        'engine': _engineApiValue,
       });
     } catch (error) {
       if (!mounted) return;
@@ -344,7 +361,12 @@ class _TaskSetupScreenState extends State<TaskSetupScreen> {
   Widget _modeCard(BuildContext context, String value, String label, String resourceHint) {
     final selected = _engine == value;
     return GestureDetector(
-      onTap: _busy ? null : () => setState(() => _engine = value),
+      onTap: _busy
+          ? null
+          : () {
+              setState(() => _engine = value);
+              _notifySelection();
+            },
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
         constraints: const BoxConstraints(minHeight: 130),

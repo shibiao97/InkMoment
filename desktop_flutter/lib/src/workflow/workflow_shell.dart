@@ -245,6 +245,14 @@ class _WorkflowShellState extends State<WorkflowShell> {
   Widget _screen() => switch (_step) {
     WorkflowStep.modeFolder => TaskSetupScreen(
       api: widget.api,
+      onSelectionChanged: (payload) {
+        setState(() {
+          _engineValue = payload['engine']?.toString() ?? 'fast';
+          _summary = payload['engine_label']?.toString() ?? Zh.quickSelection;
+          _folder = payload['folder']?.toString() ?? _folder;
+          _message = '';
+        });
+      },
       onStarted: (payload) {
         setState(() {
           _engineValue = payload['engine']?.toString() ?? 'fast';

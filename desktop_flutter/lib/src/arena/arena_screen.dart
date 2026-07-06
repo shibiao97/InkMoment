@@ -26,6 +26,8 @@ class ArenaScreen extends StatefulWidget {
 class _ArenaScreenState extends State<ArenaScreen> {
   Map<String, dynamic>? _group;
   String _error = '';
+  bool _loading = true;
+  bool _done = false;
 
   @override
   void initState() {
@@ -34,14 +36,26 @@ class _ArenaScreenState extends State<ArenaScreen> {
   }
 
   Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = '';
+    });
     try {
       final payload = await widget.api.getGroup();
       if (!mounted) return;
       if (payload['done'] == true) {
-        widget.onExport();
+        setState(() {
+          _done = true;
+          _group = null;
+          _loading = false;
+        });
         return;
       }
-      setState(() => _group = asStringMap(payload['group']));
+      setState(() {
+        _done = false;
+        _group = asStringMap(payload['group']);
+        _loading = false;
+      });
     } catch (error) {
       _handleError(error);
     }
@@ -52,9 +66,15 @@ class _ArenaScreenState extends State<ArenaScreen> {
       final payload = await widget.api.choose(loser);
       if (!mounted) return;
       if (payload['done'] == true) {
-        widget.onExport();
+        setState(() {
+          _done = true;
+          _group = null;
+        });
       } else {
-        setState(() => _group = asStringMap(payload['group']));
+        setState(() {
+          _done = false;
+          _group = asStringMap(payload['group']);
+        });
       }
     } catch (error) {
       _handleError(error);
@@ -76,7 +96,10 @@ class _ArenaScreenState extends State<ArenaScreen> {
       widget.onAuthInvalid(error);
       return;
     }
-    setState(() => _error = error.toString());
+    setState(() {
+      _loading = false;
+      _error = error.toString();
+    });
   }
 
   @override
@@ -94,9 +117,14 @@ class _ArenaScreenState extends State<ArenaScreen> {
               children: [
                 _hero(context),
                 const SizedBox(height: 20),
-                compact
-                    ? _compactPhotos(context, group)
-                    : Row(
+                if (_loading)
+                  _stateCard(context, '正在读取待选照片…', Icons.hourglass_top_rounded)
+                else if (_done || group == null)
+                  _stateCard(context, '已没有待对比照片，可以进入导出。', Icons.check_circle_outline_rounded)
+                else if (compact)
+                  _compactPhotos(context, group)
+                else
+                  Row(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           Expanded(
@@ -125,7 +153,7 @@ class _ArenaScreenState extends State<ArenaScreen> {
                   StitchWarning(message: _error),
                   const SizedBox(height: 18),
                 ],
-                _actionBar(context),
+                _done || group == null || _loading ? _stateActionBar(context) : _actionBar(context),
               ],
             ),
           ),
@@ -194,6 +222,20 @@ class _ArenaScreenState extends State<ArenaScreen> {
         const SizedBox(height: 14),
         _photoPane(context, Zh.rightPhoto, group?['right'], group?['right_signals']),
       ],
+    );
+  }
+
+  Widget _stateCard(BuildContext context, String message, IconData icon) {
+    return StitchCard(
+      padding: const EdgeInsets.all(28),
+      backgroundColor: StitchColors.card,
+      borderColor: StitchColors.borderSoft,
+      radius: StitchRadius.md,
+      shadows: const [],
+      child: SizedBox(
+        height: 360,
+        child: StitchEmptyState(message: message, icon: icon),
+      ),
     );
   }
 
@@ -317,6 +359,31 @@ class _ArenaScreenState extends State<ArenaScreen> {
           OutlinedButton(
             onPressed: () => _reloadAfter(widget.api.undo()),
             child: const Text(Zh.undo),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _stateActionBar(BuildContext context) {
+    return StitchCard(
+      padding: const EdgeInsets.all(16),
+      backgroundColor: StitchColors.cardGlow,
+      borderColor: StitchColors.borderSoft,
+      radius: StitchRadius.xl,
+      shadows: const [],
+      child: Wrap(
+        spacing: 10,
+        runSpacing: 10,
+        alignment: WrapAlignment.end,
+        children: [
+          OutlinedButton(
+            onPressed: _loading ? null : _load,
+            child: const Text('刷新选片状态'),
+          ),
+          FilledButton(
+            onPressed: _loading ? null : widget.onExport,
+            child: const Text('去导出'),
           ),
         ],
       ),
