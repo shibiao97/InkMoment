@@ -26,8 +26,6 @@ datas = collect_data_files(
         "**/*.cpp",
         "**/*.pyi",
         "**/*.cmake",
-        "**/testing/**",
-        "**/distributed/**",
     ],
 )
 binaries = collect_dynamic_libs("torch", search_patterns=PY_DYLIB_PATTERNS + ["*.so.*"])
@@ -37,8 +35,6 @@ excludedimports = [
     "triton",
     "torch._dynamo",
     "torch._inductor",
-    "torch.distributed",
-    "torch.testing",
     "torch.utils.tensorboard",
 ]
 

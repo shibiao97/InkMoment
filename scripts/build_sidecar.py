@@ -51,8 +51,6 @@ PYINSTALLER_EXCLUDE_MODULES = [
     "triton",
     "torch._dynamo",
     "torch._inductor",
-    "torch.distributed",
-    "torch.testing",
     "torch.utils.tensorboard",
     "transformers.trainer",
     "transformers.trainer_seq2seq",
