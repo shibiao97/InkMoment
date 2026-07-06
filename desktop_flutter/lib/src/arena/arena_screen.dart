@@ -212,7 +212,7 @@ class _ArenaScreenState extends State<ArenaScreen> {
       );
   }
 
-  Widget _compactPhotos(BuildContext context, Map<String, dynamic>? group) {
+  Widget _compactPhotos(BuildContext context, Map<String, dynamic> group) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
