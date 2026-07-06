@@ -49,8 +49,6 @@ PYINSTALLER_EXCLUDE_MODULES = [
     "tensorboard",
     "bitsandbytes",
     "triton",
-    "torch._dynamo",
-    "torch._inductor",
     "torch.utils.tensorboard",
     "transformers.trainer",
     "transformers.trainer_seq2seq",

@@ -244,6 +244,8 @@ class DesktopReleaseBuildTest(unittest.TestCase):
         self.assertNotIn("infer_hiddenimports_from_requirements", hook)
         self.assertNotIn("torch.distributed.optim", hook)
         self.assertNotIn('"torch.distributed"', hook)
+        self.assertNotIn('"torch._dynamo"', hook)
+        self.assertNotIn('"torch._inductor"', hook)
         self.assertIn('"triton"', hook)
 
     def test_sidecar_excludes_non_runtime_packaging_modules(self):
@@ -262,6 +264,8 @@ class DesktopReleaseBuildTest(unittest.TestCase):
         self.assertIn("triton", excluded)
         self.assertNotIn("torch.distributed", excluded)
         self.assertNotIn("torch.testing", excluded)
+        self.assertNotIn("torch._dynamo", excluded)
+        self.assertNotIn("torch._inductor", excluded)
         self.assertIn("transformers.trainer", excluded)
 
     def test_pyiqa_runtime_hook_stubs_dataset_package(self):

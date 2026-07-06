@@ -1,7 +1,7 @@
 """Keep the desktop sidecar torch hook focused on inference.
 
 The upstream PyInstaller torch hook walks every torch submodule, including
-distributed, testing, and training packages. That scan is slow and has crashed
+distributed, testing, compiler, and training packages. That scan is slow and has crashed
 on the JD Cloud Linux packaging host while collecting distributed optimizer
 modules. InkMoment uses torch through pyiqa/torchvision inference paths, so
 analysis of real imports plus torch/NVIDIA dynamic libraries is enough for the
@@ -33,8 +33,6 @@ hiddenimports: list[str] = []
 excludedimports = [
     "bitsandbytes",
     "triton",
-    "torch._dynamo",
-    "torch._inductor",
     "torch.utils.tensorboard",
 ]
 
