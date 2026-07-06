@@ -131,8 +131,8 @@ class _ArenaScreenState extends State<ArenaScreen> {
                             child: _photoPane(
                               context,
                               Zh.leftPhoto,
-                              group?['left'],
-                              group?['left_signals'],
+                              group['left'],
+                              group['left_signals'],
                             ),
                           ),
                           const SizedBox(width: 14),
@@ -142,8 +142,8 @@ class _ArenaScreenState extends State<ArenaScreen> {
                             child: _photoPane(
                               context,
                               Zh.rightPhoto,
-                              group?['right'],
-                              group?['right_signals'],
+                              group['right'],
+                              group['right_signals'],
                             ),
                           ),
                         ],
@@ -216,11 +216,11 @@ class _ArenaScreenState extends State<ArenaScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _photoPane(context, Zh.leftPhoto, group?['left'], group?['left_signals']),
+        _photoPane(context, Zh.leftPhoto, group['left'], group['left_signals']),
         const SizedBox(height: 14),
         _vsBadge(context),
         const SizedBox(height: 14),
-        _photoPane(context, Zh.rightPhoto, group?['right'], group?['right_signals']),
+        _photoPane(context, Zh.rightPhoto, group['right'], group['right_signals']),
       ],
     );
   }
