@@ -231,6 +231,13 @@ class _AuthGateState extends State<AuthGate> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            if (!_authenticated) ...[
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: StitchPill(label: Zh.authBrand, selected: true),
+              ),
+              const SizedBox(height: 18),
+            ],
             Row(
               children: [
                 Expanded(
