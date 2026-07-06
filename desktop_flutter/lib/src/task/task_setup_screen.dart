@@ -154,6 +154,22 @@ class _TaskSetupScreenState extends State<TaskSetupScreen> {
         'engine': _engineApiValue,
         'prescreen_enabled': true,
       };
+      final preflight = await widget.api.depPreflight({
+        'engine': _engineApiValue,
+        'folder': _folder,
+        'include_folder': true,
+      });
+      final missing = (preflight['missing'] as List?) ?? [];
+      if (missing.isNotEmpty) {
+        final items = missing.map((m) {
+          final label = m['label']?.toString() ?? '';
+          final detail = m['detail']?.toString() ?? '';
+          return detail.isEmpty ? label : '$label：$detail';
+        }).join('\n');
+        if (!mounted) return;
+        setState(() => _error = '运行资源未就绪：\n$items\n请先在右侧「检查并处理资源」处理。');
+        return;
+      }
       final payload = await widget.api.startJob(jobPayload);
       if (!mounted) return;
       widget.onStarted({

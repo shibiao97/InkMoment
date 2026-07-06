@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -105,7 +107,6 @@ class _WorkflowShellState extends State<WorkflowShell> {
     if (_checking) return;
     setState(() { _checking = true; _message = '检查资源中…'; });
     try {
-      // 先 preflight 看有没有缺失
       final result = await widget.api.depPreflight({
         'engine': _engineValue,
         'folder': _folder,
@@ -113,29 +114,60 @@ class _WorkflowShellState extends State<WorkflowShell> {
       });
       if (!mounted) return;
       final missing = (result['missing'] as List?) ?? [];
-      final downloadable = missing.where((m) => m['downloadable'] == true).toList();
+      final autoFixable = missing.where((m) => m['downloadable'] == true || m['repairable'] == true).toList();
 
       if (missing.isEmpty) {
         setState(() => _message = '资源检查：全部就绪 ✓\n无需下载');
         return;
       }
 
-      if (downloadable.isEmpty) {
-        final items = missing.map((m) => m['label']?.toString() ?? '').join('、');
-        setState(() => _message = '缺失：$items\n需手动处理，无法自动下载');
+      if (autoFixable.isEmpty) {
+        setState(() => _message = '缺失依赖：\n${_formatMissing(missing)}\n需重新打包完整依赖或手动处理，无法自动下载。');
         return;
       }
 
-      // 有可下载的依赖，触发下载
-      setState(() => _message = '发现 ${downloadable.length} 项可下载依赖，正在启动下载…');
+      setState(() => _message = '发现 ${autoFixable.length} 项可处理依赖，正在启动下载…');
       await widget.api.depDownload({'engine': _engineValue});
       if (!mounted) return;
-      setState(() => _message = '下载已启动，可关闭此面板等待完成后再检查');
+      final status = await showDialog<Map<String, dynamic>>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => _DependencyDownloadDialog(api: widget.api),
+      );
+      if (!mounted) return;
+      if (status?['status'] == 'cancelled') {
+        setState(() => _message = status?['message']?.toString() ?? '已停止资源下载');
+        return;
+      }
+      if (status?['status'] == 'error') {
+        setState(() => _message = '资源下载失败：${status?['error'] ?? status?['message'] ?? ''}');
+        return;
+      }
+      final after = await widget.api.depPreflight({
+        'engine': _engineValue,
+        'folder': _folder,
+        'include_folder': false,
+      });
+      if (!mounted) return;
+      final remaining = (after['missing'] as List?) ?? [];
+      setState(() {
+        _message = remaining.isEmpty
+            ? '资源检查：全部就绪 ✓'
+            : '下载完成，但仍缺失：\n${_formatMissing(remaining)}\n这些不是模型下载能解决的资源。';
+      });
     } catch (error) {
       _handleWorkflowError(error);
     } finally {
       if (mounted) setState(() => _checking = false);
     }
+  }
+
+  String _formatMissing(List missing) {
+    return missing.map((m) {
+      final label = m['label']?.toString() ?? '';
+      final detail = m['detail']?.toString() ?? '';
+      return detail.isEmpty ? label : '$label：$detail';
+    }).join('\n');
   }
 
   Future<void> _copyCheckResult() async {
@@ -614,6 +646,95 @@ class _RightInspector extends StatelessWidget {
     return SizedBox(
       width: compact ? double.infinity : StitchLayout.rightInspectorWidth,
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: children),
+    );
+  }
+}
+
+class _DependencyDownloadDialog extends StatefulWidget {
+  const _DependencyDownloadDialog({required this.api});
+
+  final InkMomentApi api;
+
+  @override
+  State<_DependencyDownloadDialog> createState() => _DependencyDownloadDialogState();
+}
+
+class _DependencyDownloadDialogState extends State<_DependencyDownloadDialog> {
+  Timer? _timer;
+  Map<String, dynamic> _status = const {'status': 'pending', 'progress': 0, 'message': '正在读取下载进度…'};
+  bool _cancelling = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _poll();
+    _timer = Timer.periodic(const Duration(milliseconds: 700), (_) => _poll());
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  bool get _terminal => const {'done', 'error', 'cancelled', 'idle'}.contains(_status['status']);
+
+  Future<void> _poll() async {
+    try {
+      final status = await widget.api.depDownloadStatus();
+      if (!mounted) return;
+      setState(() => _status = status);
+      if (_terminal) _timer?.cancel();
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _status = {'status': 'error', 'error': error.toString(), 'progress': 0});
+      _timer?.cancel();
+    }
+  }
+
+  Future<void> _cancel() async {
+    setState(() => _cancelling = true);
+    try {
+      final status = await widget.api.depDownloadCancel();
+      if (!mounted) return;
+      setState(() => _status = status);
+    } finally {
+      if (mounted) setState(() => _cancelling = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final rawProgress = _status['progress'];
+    final progress = rawProgress is num ? rawProgress.clamp(0, 100).toDouble() : 0.0;
+    final message = (_status['error'] ?? _status['message'] ?? '').toString();
+    final cancelable = _status['cancelable'] == true && !_cancelling && !_terminal;
+    return AlertDialog(
+      title: const Text('资源下载进度'),
+      content: SizedBox(
+        width: 460,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            LinearProgressIndicator(value: progress <= 0 ? null : progress / 100),
+            const SizedBox(height: 14),
+            Text('${progress.toInt()}% · ${_status['status'] ?? ''}'),
+            const SizedBox(height: 8),
+            SelectableText(message.isEmpty ? '正在处理资源…' : message),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: cancelable ? _cancel : null,
+          child: Text(_cancelling ? '正在终止…' : '终止下载'),
+        ),
+        TextButton(
+          onPressed: _terminal ? () => Navigator.pop(context, _status) : null,
+          child: const Text('关闭'),
+        ),
+      ],
     );
   }
 }
