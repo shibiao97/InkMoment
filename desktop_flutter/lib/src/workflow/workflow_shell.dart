@@ -49,6 +49,16 @@ class _WorkflowShellState extends State<WorkflowShell> {
     });
   }
 
+  void _resetTask() {
+    setState(() {
+      _step = WorkflowStep.modeFolder;
+      _summary = Zh.quickSelection;
+      _engineValue = 'fast';
+      _folder = '';
+      _message = '';
+    });
+  }
+
   void _handleWorkflowError(Object error) {
     if (!mounted) return;
     if (InkMomentApi.isAuthorizationFailure(error)) {
@@ -179,7 +189,7 @@ class _WorkflowShellState extends State<WorkflowShell> {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _LeftRail(summary: _summary, step: _step),
+        _LeftRail(summary: _summary, folder: _folder, step: _step, onReset: _resetTask),
         const SizedBox(width: 24),
         Expanded(child: _screen()),
         const SizedBox(width: 24),
@@ -191,6 +201,7 @@ class _WorkflowShellState extends State<WorkflowShell> {
           checking: _checking,
           authorized: _authorized,
           summary: _summary,
+          folder: _folder,
           onCheckMode: _checkMode,
           onCheckResource: _checkResource,
           onCopyResult: _copyCheckResult,
@@ -206,7 +217,7 @@ class _WorkflowShellState extends State<WorkflowShell> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _LeftRail(summary: _summary, step: _step, compact: true),
+          _LeftRail(summary: _summary, folder: _folder, step: _step, onReset: _resetTask, compact: true),
           const SizedBox(height: 18),
           _screen(),
           const SizedBox(height: 18),
@@ -218,6 +229,7 @@ class _WorkflowShellState extends State<WorkflowShell> {
             checking: _checking,
             authorized: _authorized,
             summary: _summary,
+            folder: _folder,
             onCheckMode: _checkMode,
             onCheckResource: _checkResource,
             onCopyResult: _copyCheckResult,
@@ -262,17 +274,26 @@ class _WorkflowShellState extends State<WorkflowShell> {
     ),
     WorkflowStep.export => ExportScreen(
       api: widget.api,
-      onNewTask: () => _go(WorkflowStep.modeFolder, Zh.quickSelection),
+      onBackToSelect: () => _go(WorkflowStep.select),
+      onNewTask: _resetTask,
       onAuthInvalid: widget.onAuthInvalid,
     ),
   };
 }
 
 class _LeftRail extends StatelessWidget {
-  const _LeftRail({required this.summary, required this.step, this.compact = false});
+  const _LeftRail({
+    required this.summary,
+    required this.folder,
+    required this.step,
+    required this.onReset,
+    this.compact = false,
+  });
 
   final String summary;
+  final String folder;
   final WorkflowStep step;
+  final VoidCallback onReset;
   final bool compact;
 
   @override
@@ -291,11 +312,26 @@ class _LeftRail extends StatelessWidget {
             _BrandBlock(compact: compact),
             const SizedBox(height: 42),
             if (compact)
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  for (final item in WorkflowStep.values) _CompactStepChip(step: item, selected: item == step),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final item in WorkflowStep.values) _CompactStepChip(step: item, selected: item == step),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Text('$summary · ${folder.isEmpty ? Zh.folderNotSelected : folder}', style: StitchTextStyles.muted),
+                  if (step != WorkflowStep.modeFolder) ...[
+                    const SizedBox(height: 10),
+                    OutlinedButton.icon(
+                      onPressed: onReset,
+                      icon: const Icon(Icons.arrow_back_rounded, size: 16),
+                      label: const Text('重新选择模式/文件夹'),
+                    ),
+                  ],
                 ],
               )
             else
@@ -314,7 +350,20 @@ class _LeftRail extends StatelessWidget {
                     const SizedBox(height: 8),
                     Text(summary, style: StitchTextStyles.sectionTitle),
                     const SizedBox(height: 8),
-                    Text(Zh.folderNotSelected, style: StitchTextStyles.muted),
+                    Text(
+                      folder.isEmpty ? Zh.folderNotSelected : folder,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: StitchTextStyles.muted,
+                    ),
+                    if (step != WorkflowStep.modeFolder) ...[
+                      const SizedBox(height: 14),
+                      OutlinedButton.icon(
+                        onPressed: onReset,
+                        icon: const Icon(Icons.arrow_back_rounded, size: 16),
+                        label: const Text('重新选择模式/文件夹'),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -410,6 +459,7 @@ class _RightInspector extends StatelessWidget {
     required this.checking,
     required this.authorized,
     required this.summary,
+    required this.folder,
     required this.onCheckMode,
     required this.onCheckResource,
     required this.onCopyResult,
@@ -425,6 +475,7 @@ class _RightInspector extends StatelessWidget {
   final bool checking;
   final bool authorized;
   final String summary;
+  final String folder;
   final VoidCallback onCheckMode;
   final VoidCallback onCheckResource;
   final VoidCallback onCopyResult;
@@ -475,6 +526,10 @@ class _RightInspector extends StatelessWidget {
       ),
       const SizedBox(height: 18),
       _InspectorCard(label: Zh.mode, value: summary, highlighted: true),
+      if (folder.isNotEmpty) ...[
+        const SizedBox(height: 12),
+        _InspectorCard(label: Zh.photoFolder, value: folder),
+      ],
       const SizedBox(height: 12),
       _InspectorCard(
         label: Zh.runtimeResource,

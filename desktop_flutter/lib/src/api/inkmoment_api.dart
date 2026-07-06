@@ -81,6 +81,9 @@ class InkMomentApi {
       postJson('/api/dependencies/download', payload);
   Future<Map<String, dynamic>> depDownloadStatus() =>
       getJson('/api/dependencies/download/status');
+  Future<Map<String, dynamic>> arkKeyStatus() => getJson('/api/ark_key');
+  Future<Map<String, dynamic>> saveArkKey(String key, String baseUrl) =>
+      postJson('/api/ark_key', {'key': key, 'base_url': baseUrl});
 
   Future<Map<String, dynamic>> peekFolder(String folder) =>
       postJson('/api/peek_folder', {'folder': folder});

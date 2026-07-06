@@ -13,11 +13,13 @@ class ExportScreen extends StatefulWidget {
   const ExportScreen({
     super.key,
     required this.api,
+    required this.onBackToSelect,
     required this.onNewTask,
     required this.onAuthInvalid,
   });
 
   final InkMomentApi api;
+  final VoidCallback onBackToSelect;
   final VoidCallback onNewTask;
   final ValueChanged<Object> onAuthInvalid;
 
@@ -30,8 +32,17 @@ class _ExportScreenState extends State<ExportScreen> {
   double _quality = 92;
   Map<String, dynamic>? _preview;
   Map<String, dynamic>? _status;
+  int? _winnerCount;
   String _error = '';
   Timer? _timer;
+
+  bool get _hasWinners => (_winnerCount ?? 0) > 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadWinners();
+  }
 
   @override
   void dispose() {
@@ -39,7 +50,21 @@ class _ExportScreenState extends State<ExportScreen> {
     super.dispose();
   }
 
+  Future<void> _loadWinners() async {
+    try {
+      final payload = await widget.api.getWinners();
+      if (!mounted) return;
+      setState(() {
+        _winnerCount = ((payload['winners'] as List?) ?? const []).length;
+        _error = '';
+      });
+    } catch (error) {
+      _handleError(error);
+    }
+  }
+
   Future<void> _previewExport() async {
+    if (!_hasWinners) return;
     try {
       final payload = await widget.api.previewExport(_payload());
       if (!mounted) return;
@@ -53,6 +78,7 @@ class _ExportScreenState extends State<ExportScreen> {
   }
 
   Future<void> _startExport() async {
+    if (!_hasWinners) return;
     try {
       await widget.api.startExport(_payload());
       await _pollStatus();
@@ -191,6 +217,7 @@ class _ExportScreenState extends State<ExportScreen> {
                   children: [
                     StitchPill(label: Zh.formatLabel, value: _formatText(_format)),
                     StitchPill(label: Zh.quality, value: _quality.round().toString()),
+                    StitchPill(label: '胜出照片', value: _winnerCount == null ? '读取中' : '$_winnerCount 张'),
                     StitchPill(
                       label: Zh.status,
                       value: Zh.statusLabel(status),
@@ -327,7 +354,9 @@ class _ExportScreenState extends State<ExportScreen> {
             ),
           ),
           const SizedBox(height: 16),
-          StitchWarning(message: Zh.previewWatermarkHint),
+          StitchWarning(
+            message: _hasWinners ? Zh.previewWatermarkHint : '还没有胜出照片。请返回选片页完成选择后再导出。',
+          ),
         ],
       ),
     );
@@ -345,7 +374,7 @@ class _ExportScreenState extends State<ExportScreen> {
         children: [
           StitchSectionHeader(
             eyebrow: Zh.previewExport,
-            title: Zh.previewWatermarkHint,
+            title: _hasWinners ? Zh.previewWatermarkHint : '没有可导出的胜出照片',
           ),
           const SizedBox(height: 18),
           AspectRatio(
@@ -358,7 +387,9 @@ class _ExportScreenState extends State<ExportScreen> {
               ),
               child: Center(
                 child: preview == null
-                    ? const StitchEmptyState(message: Zh.previewWatermarkHint)
+                    ? StitchEmptyState(
+                        message: _hasWinners ? Zh.previewWatermarkHint : '先回到选片页，至少保留 1 张胜出照片。',
+                      )
                     : ClipRRect(
                         borderRadius: BorderRadius.circular(StitchRadius.lg),
                         child: Image.memory(base64Decode(preview), fit: BoxFit.contain),
@@ -373,6 +404,25 @@ class _ExportScreenState extends State<ExportScreen> {
 
   Widget _statusCard(BuildContext context) {
     final status = _status?['status'];
+    if (!_hasWinners) {
+      return StitchCard(
+        padding: const EdgeInsets.all(22),
+        backgroundColor: StitchColors.cardGlow,
+        borderColor: StitchColors.borderSoft,
+        radius: StitchRadius.md,
+        shadows: const [],
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('下一步', style: StitchTextStyles.eyebrow),
+            const SizedBox(height: 8),
+            Text('返回选片页选择照片', style: StitchTextStyles.sectionTitle),
+            const SizedBox(height: 8),
+            Text('当前没有胜出照片，导出预览和批量导出会保持禁用。', style: StitchTextStyles.muted),
+          ],
+        ),
+      );
+    }
     return StitchCard(
       padding: const EdgeInsets.all(22),
       backgroundColor: StitchColors.cardGlow,
@@ -429,12 +479,16 @@ class _ExportScreenState extends State<ExportScreen> {
         alignment: WrapAlignment.end,
         children: [
           OutlinedButton(
-            onPressed: _previewExport,
+            onPressed: _hasWinners ? _previewExport : null,
             child: const Text(Zh.previewExport),
           ),
           FilledButton(
-            onPressed: _startExport,
+            onPressed: _hasWinners ? _startExport : null,
             child: const Text(Zh.startExport),
+          ),
+          OutlinedButton(
+            onPressed: widget.onBackToSelect,
+            child: const Text('返回选片'),
           ),
           OutlinedButton(
             onPressed: _cancelExport,

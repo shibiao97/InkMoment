@@ -8,9 +8,9 @@ import '../l10n/strings.dart';
 
 // engine value → (label, 依赖说明, 是否需要云端配置)
 const _kModes = [
-  ('fast',   '快速选片',   '依赖：OpenCV · imagehash（内置，无需下载）',     false),
-  ('expert', '质感优选',   '依赖：PyTorch · DINO 模型（首次运行需下载）',    false),
-  ('cloud',  '云端精评',   '依赖：ARK API Key · 需配置访问地址',             true),
+  ('fast', '快速选片', '依赖：OpenCV · imagehash（内置，无需下载）', false),
+  ('expert', '质感优选', '依赖：PyTorch · DINO 模型（首次运行需下载）', false),
+  ('cloud', '云端精评', '依赖：ARK API Key · 需配置访问地址', true),
 ];
 
 class TaskSetupScreen extends StatefulWidget {
@@ -35,10 +35,19 @@ class _TaskSetupScreenState extends State<TaskSetupScreen> {
   Map<String, dynamic>? _peek;
   String _error = '';
   bool _busy = false;
+  bool _cloudConfigured = false;
+  String _cloudMasked = '';
+  String _savedCloudUrl = '';
 
   // 云端模式配置
-  final _cloudUrlCtrl  = TextEditingController();
-  final _cloudKeyCtrl  = TextEditingController();
+  final _cloudUrlCtrl = TextEditingController();
+  final _cloudKeyCtrl = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCloudConfig();
+  }
 
   @override
   void dispose() {
@@ -49,6 +58,24 @@ class _TaskSetupScreenState extends State<TaskSetupScreen> {
 
   String get _engineLabel =>
       _kModes.firstWhere((m) => m.$1 == _engine, orElse: () => _kModes[0]).$2;
+
+  Future<void> _loadCloudConfig() async {
+    try {
+      final status = await widget.api.arkKeyStatus();
+      if (!mounted) return;
+      final baseUrl = status['base_url']?.toString() ?? '';
+      setState(() {
+        _cloudConfigured = status['configured'] == true;
+        _cloudMasked = status['masked']?.toString() ?? '';
+        _savedCloudUrl = baseUrl;
+        if (_cloudUrlCtrl.text.trim().isEmpty) _cloudUrlCtrl.text = baseUrl;
+      });
+    } catch (error) {
+      if (InkMomentApi.isAuthorizationFailure(error)) {
+        widget.onAuthInvalid(error);
+      }
+    }
+  }
 
   Future<void> _pickFolder() async {
     final path = await getDirectoryPath(confirmButtonText: Zh.chooseFolder);
@@ -76,30 +103,48 @@ class _TaskSetupScreenState extends State<TaskSetupScreen> {
   }
 
   Future<void> _start() async {
-    // 云端模式必须填写配置
+    final cloudUrl = _cloudUrlCtrl.text.trim();
+    final cloudKey = _cloudKeyCtrl.text.trim();
     if (_engine == 'cloud') {
-      final url = _cloudUrlCtrl.text.trim();
-      final key = _cloudKeyCtrl.text.trim();
-      if (url.isEmpty || key.isEmpty) {
+      if (cloudUrl.isEmpty || (!_cloudConfigured && cloudKey.isEmpty)) {
         setState(() => _error = '云端精评模式需要填写 API 地址和 API Key');
         return;
       }
+      if (cloudKey.isEmpty && cloudUrl != _savedCloudUrl) {
+        setState(() => _error = '修改 API 地址需要重新粘贴 API Key 保存');
+        return;
+      }
     }
-    setState(() { _busy = true; _error = ''; });
+    setState(() {
+      _busy = true;
+      _error = '';
+    });
     try {
+      if (_engine == 'cloud' && cloudKey.isNotEmpty) {
+        final saved = await widget.api.saveArkKey(cloudKey, cloudUrl);
+        if (!mounted) return;
+        setState(() {
+          _cloudConfigured = true;
+          _cloudMasked = saved['masked']?.toString() ?? '';
+          _savedCloudUrl = saved['base_url']?.toString() ?? cloudUrl;
+          _cloudUrlCtrl.text = _savedCloudUrl;
+          _cloudKeyCtrl.clear();
+        });
+      }
       final jobPayload = {
         'folder': _folder,
         'mode': 'copy',
         'engine': _engine == 'fast' ? 'fast' : 'expert',
         'prescreen_enabled': true,
-        if (_engine == 'cloud') ...{
-          'ark_base_url': _cloudUrlCtrl.text.trim(),
-          'ark_api_key':  _cloudKeyCtrl.text.trim(),
-        },
       };
       final payload = await widget.api.startJob(jobPayload);
       if (!mounted) return;
-      widget.onStarted({...payload, 'folder': _folder, 'engine_label': _engineLabel, 'engine': _engine});
+      widget.onStarted({
+        ...payload,
+        'folder': _folder,
+        'engine_label': _engineLabel,
+        'engine': _engine,
+      });
     } catch (error) {
       if (!mounted) return;
       if (InkMomentApi.isAuthorizationFailure(error)) {
@@ -369,11 +414,29 @@ class _TaskSetupScreenState extends State<TaskSetupScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('云端精评配置', style: StitchTextStyles.eyebrow),
+          if (_cloudConfigured) ...[
+            const SizedBox(height: 8),
+            Text(
+              '已保存：${_cloudMasked.isEmpty ? 'API Key' : _cloudMasked}，可留空继续使用',
+              style: StitchTextStyles.muted,
+            ),
+          ],
           const SizedBox(height: 12),
-          _configField(context, 'API 地址', 'https://ark.cn-beijing.volces.com/api/v3',
-              _cloudUrlCtrl, false),
+          _configField(
+            context,
+            'API 地址',
+            'https://ark.cn-beijing.volces.com/api/v3',
+            _cloudUrlCtrl,
+            false,
+          ),
           const SizedBox(height: 10),
-          _configField(context, 'API Key', '粘贴你的 ARK API Key', _cloudKeyCtrl, true),
+          _configField(
+            context,
+            'API Key',
+            _cloudConfigured ? '已保存，可留空；修改地址需重新粘贴' : '粘贴你的 ARK API Key',
+            _cloudKeyCtrl,
+            true,
+          ),
         ],
       ),
     );

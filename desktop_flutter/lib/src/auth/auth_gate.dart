@@ -106,15 +106,17 @@ class _AuthGateState extends State<AuthGate> {
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(StitchRadius.xl),
-                child: compact
-                    ? _compactLayout(context)
-                    : Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(flex: 5, child: _brandPanel(context)),
-                          Expanded(flex: 6, child: _formPanel(context)),
-                        ],
-                      ),
+                child: !_authenticated
+                    ? _formPanel(context)
+                    : (compact
+                          ? _compactLayout(context)
+                          : Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(flex: 5, child: _brandPanel(context)),
+                                Expanded(flex: 6, child: _formPanel(context)),
+                              ],
+                            )),
               ),
             ),
           ),
@@ -260,14 +262,24 @@ class _AuthGateState extends State<AuthGate> {
                   ),
             ),
             const SizedBox(height: 22),
-            _statusRow(context),
-            const SizedBox(height: 16),
-            _noticePanel(context),
-            const SizedBox(height: 22),
-            if (!_authenticated) _accountForm(context) else _authorizedPanel(context),
+            if (!_authenticated)
+              _accountForm(context)
+            else ...[
+              _statusRow(context),
+              const SizedBox(height: 16),
+              _noticePanel(context),
+              const SizedBox(height: 22),
+              _authorizedPanel(context),
+            ],
             if (_message.isNotEmpty || widget.error.isNotEmpty) ...[
               const SizedBox(height: 18),
               StitchWarning(message: _message.isNotEmpty ? _message : widget.error),
+            ],
+            if (!_authenticated) ...[
+              const SizedBox(height: 22),
+              Text('当前诊断', style: StitchTextStyles.muted),
+              const SizedBox(height: 10),
+              _statusRow(context),
             ],
           ],
         ),
