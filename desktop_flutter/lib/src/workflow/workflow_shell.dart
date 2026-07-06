@@ -121,6 +121,12 @@ class _WorkflowShellState extends State<WorkflowShell> {
         return;
       }
 
+      final blockingManual = missing.where((m) => m['downloadable'] != true && m['repairable'] != true).toList();
+      if (blockingManual.isNotEmpty) {
+        setState(() => _message = '缺失依赖：\n${_formatMissing(blockingManual)}\n需重新打包完整依赖或手动处理，无法自动下载。');
+        return;
+      }
+
       if (autoFixable.isEmpty) {
         setState(() => _message = '缺失依赖：\n${_formatMissing(missing)}\n需重新打包完整依赖或手动处理，无法自动下载。');
         return;
