@@ -240,6 +240,7 @@ class DesktopReleaseBuildTest(unittest.TestCase):
         hook = Path("scripts/pyinstaller_hooks/hook-torch.py").read_text(encoding="utf-8")
 
         self.assertIn("collect_dynamic_libs", hook)
+        self.assertIn('collect_submodules("torch._dynamo.polyfills")', hook)
         self.assertNotIn('collect_submodules("torch")', hook)
         self.assertNotIn("infer_hiddenimports_from_requirements", hook)
         self.assertNotIn("torch.distributed.optim", hook)

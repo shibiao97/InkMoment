@@ -11,7 +11,7 @@ sidecar bundle.
 from __future__ import annotations
 
 from PyInstaller import compat
-from PyInstaller.utils.hooks import PY_DYLIB_PATTERNS, collect_data_files, collect_dynamic_libs
+from PyInstaller.utils.hooks import PY_DYLIB_PATTERNS, collect_data_files, collect_dynamic_libs, collect_submodules
 
 module_collection_mode = "pyz+py"
 warn_on_missing_hiddenimports = False
@@ -29,7 +29,7 @@ datas = collect_data_files(
     ],
 )
 binaries = collect_dynamic_libs("torch", search_patterns=PY_DYLIB_PATTERNS + ["*.so.*"])
-hiddenimports: list[str] = []
+hiddenimports = collect_submodules("torch._dynamo.polyfills")
 excludedimports = [
     "bitsandbytes",
     "triton",
